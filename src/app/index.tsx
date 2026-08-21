@@ -1,98 +1,62 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { PlaceholderScreen } from '@/components/placeholder-screen';
+import MindSetup from '@/components/onboarding/mind-setup';
+import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
+import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
+export default function TodayScreen() {
+  const { mindSetupComplete, markComplete } = useMindSetupStatus();
+  const [showMindSetup, setShowMindSetup] = useState(false);
+
+  if (mindSetupComplete === undefined) return <PulseLoadingScreen />;
+
+  if (showMindSetup) {
     return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
+      <MindSetup
+        onSetupComplete={() => {
+          markComplete();
+          setShowMindSetup(false);
+        }}
+      />
     );
   }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
 
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
+  if (!mindSetupComplete) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <View style={styles.setupPrompt}>
+          <Text style={styles.setupHeading}>Set up Mind tracking</Text>
+          <Text style={styles.setupBody}>
+            Pick the domains you want to track, answer a few baseline questions, and choose when check-ins should
+            happen — takes about two minutes.
+          </Text>
+          <Pressable onPress={() => setShowMindSetup(true)} style={({ pressed }) => [styles.setupButton, pressed && styles.pressed]}>
+            <Text style={styles.setupButtonText}>Get started</Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
-    </ThemedView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+      <PlaceholderScreen
+        title="Today"
+        note="Daily check-in form — mind domains, body domains, sleep. Ports the logic from CheckInForm.tsx / MorningBodyCheckIn.tsx / BodyCheckIn.tsx; UI rebuilt against react-native-svg for the body map."
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  root: { flex: 1, backgroundColor: '#0a0c12' },
+  setupPrompt: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, gap: 16 },
+  setupHeading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0' },
+  setupBody: { fontSize: 15, color: '#8892a4', lineHeight: 22 },
+  setupButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4f46e5', alignItems: 'center' },
+  setupButtonText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
+  pressed: { opacity: 0.85 },
 });

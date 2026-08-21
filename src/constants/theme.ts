@@ -7,20 +7,29 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+// Ported from the web app's src/index.css / src/utils/domainColors.ts — Symetric
+// has no light theme today (body{} is hard-coded dark), so `light` here is a
+// placeholder for Expo web/tooling, not a real supported mode. userInterfaceStyle
+// is forced to "dark" in app.json for the same reason.
 export const Colors = {
   light: {
-    text: '#000000',
+    text: '#0a0c12',
     background: '#ffffff',
     backgroundElement: '#F0F0F3',
     backgroundSelected: '#E0E1E6',
     textSecondary: '#60646C',
+    border: '#d8dce3',
+    tint: '#BC812F',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#e2e8f0',
+    background: '#0a0c12',
+    backgroundElement: '#10131c',
+    backgroundSelected: '#1e2533',
+    textSecondary: '#8892a4',
+    border: '#1e2533',
+    /** BODY_COLOR from src/utils/domainColors.ts — the body-domain accent, reused as the app tint. */
+    tint: '#BC812F',
   },
 } as const;
 
