@@ -95,3 +95,23 @@ export const SLIDER_LABELS: Record<DomainType, { low: string; high: string }> = 
   sensory_sensitivity: { low: 'Not bothered', high: 'Overwhelmed' },
   motivation: { low: 'No drive at all', high: 'Fully motivated' },
 };
+
+// ── History/summary domain names ─────────────────────────────────────────────
+// Ported from the web app's src/lib/dailySummary.ts. Deliberately a separate
+// copy set from DOMAIN_COPY above, not a dedup — the web app itself uses
+// different wording for the same domains in different contexts (onboarding's
+// "Social depletion" vs History's "Social battery"), so collapsing them here
+// would be a real behavior change, not a cleanup.
+
+export const ALL_DOMAINS: DomainType[] = ['mood', 'energy', 'anxiety', 'concentration', 'irritability', 'social_battery', 'sensory_sensitivity', 'motivation'];
+
+export const DOMAIN_NAMES: Record<DomainType, string> = {
+  mood: 'Mood',
+  energy: 'Energy',
+  anxiety: 'Anxiety',
+  concentration: 'Concentration',
+  irritability: 'Irritability',
+  social_battery: 'Social battery',
+  sensory_sensitivity: 'Sensory sensitivity',
+  motivation: 'Motivation',
+};

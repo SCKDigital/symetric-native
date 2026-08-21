@@ -29,3 +29,12 @@ export function dateToString(d: Date): string {
 export function todayDateString(): string {
   return dateToString(new Date());
 }
+
+/** Postgres `timestamp` (no timezone) columns round-trip without a 'Z' suffix
+ *  — treated as local time by `new Date()` unless corrected. Appends 'Z' only
+ *  when the string doesn't already carry its own offset. */
+export function ensureUTC(isoString: string): Date {
+  if (!isoString) return new Date();
+  const hasTimezone = isoString.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(isoString);
+  return new Date(hasTimezone ? isoString : isoString + 'Z');
+}
