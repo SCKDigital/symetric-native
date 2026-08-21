@@ -1,0 +1,2 @@
+# symetric-native
+symetric app
