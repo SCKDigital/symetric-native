@@ -1,4 +1,4 @@
-import { DomainType } from '@/lib/supabase';
+import { DomainType, Profile } from '@/lib/supabase';
 
 // Scoped port of what MindSetup needs from the web app's src/utils/domainUtils.ts
 // (DOMAIN_ORDER, resolveActiveDomains) and src/content/copy.ts's checkIn.domains
@@ -50,3 +50,48 @@ export function resolveActiveDomains(
 
   return domainsWithData ?? [];
 }
+
+// ── Colors ────────────────────────────────────────────────────────────────────
+// Ported from the web app's src/utils/domainColors.ts. Body domain color
+// resolution (BODY_COLOR / BODY_DOMAINS check) is omitted until body check-in
+// is ported — falls back to BRAND_COLOR for anything not in DOMAIN_COLORS,
+// same as the web version's own fallback.
+
+export const DOMAIN_COLORS: Record<string, string> = {
+  mood: '#818cf8',
+  energy: '#34d399',
+  anxiety: '#fb923c',
+  concentration: '#38bdf8',
+  irritability: '#f472b6',
+  social_battery: '#a78bfa',
+  sensory_sensitivity: '#fbbf24',
+  motivation: '#c084fc',
+  sleep: '#7B9EB8',
+};
+
+export const BRAND_COLOR = '#818CF8';
+
+const SIMPLIFIED_COLOR = BRAND_COLOR;
+
+export function getDomainColor(domain: string, simplifiedMode = false): string {
+  if (simplifiedMode) return SIMPLIFIED_COLOR;
+  const normalized = domain.toLowerCase().replace(/ /g, '_');
+  return DOMAIN_COLORS[normalized] ?? BRAND_COLOR;
+}
+
+export function getDomainColorFromProfile(domain: string, profile: Profile | null | undefined): string {
+  return getDomainColor(domain, profile?.simplified_colors ?? false);
+}
+
+// ── Slider anchor copy ───────────────────────────────────────────────────────
+
+export const SLIDER_LABELS: Record<DomainType, { low: string; high: string }> = {
+  mood: { low: 'Very low spirits', high: 'Very high spirits' },
+  energy: { low: 'Completely drained', high: 'Fully energised' },
+  anxiety: { low: 'Calm', high: 'Extremely tense' },
+  concentration: { low: "Can't focus at all", high: 'Laser focused' },
+  irritability: { low: 'Completely calm', high: 'Extremely on edge' },
+  social_battery: { low: 'Fully recharged', high: 'Completely depleted' },
+  sensory_sensitivity: { low: 'Not bothered', high: 'Overwhelmed' },
+  motivation: { low: 'No drive at all', high: 'Fully motivated' },
+};

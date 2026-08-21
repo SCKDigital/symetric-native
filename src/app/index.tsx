@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PlaceholderScreen } from '@/components/placeholder-screen';
+import CheckInForm from '@/components/checkin/check-in-form';
 import MindSetup from '@/components/onboarding/mind-setup';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
+import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 
 export default function TodayScreen() {
   const { mindSetupComplete, markComplete } = useMindSetupStatus();
@@ -41,12 +42,46 @@ export default function TodayScreen() {
     );
   }
 
-  return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-      <PlaceholderScreen
-        title="Today"
-        note="Daily check-in form — mind domains, body domains, sleep. Ports the logic from CheckInForm.tsx / MorningBodyCheckIn.tsx / BodyCheckIn.tsx; UI rebuilt against react-native-svg for the body map."
+  return <TodayHome />;
+}
+
+// Deliberately scoped down from the web app's 999-line TodayScreen.tsx: just
+// "find the current pending check-in and let it be completed." Not ported —
+// separate work, not forgotten: expiring stale pending check-ins, rescue/
+// snooze windows, late-check-in handling, editing past check-ins, body
+// check-ins, sleep prompts, day summaries, milestones, appointment reminders.
+function TodayHome() {
+  const { loading, pendingCheckIn, activeDomains, baselines, completedCount, totalCount, nextScheduled, refresh } = useTodayCheckIns();
+
+  if (loading) return <PulseLoadingScreen />;
+
+  if (pendingCheckIn) {
+    return (
+      <CheckInForm
+        checkIn={pendingCheckIn}
+        activeDomains={activeDomains}
+        baselines={baselines}
+        completedCount={completedCount}
+        totalCount={totalCount}
+        onComplete={refresh}
       />
+    );
+  }
+
+  const allDone = totalCount > 0 && completedCount === totalCount;
+
+  return (
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <View style={styles.setupPrompt}>
+        <Text style={styles.setupHeading}>{allDone ? "You're all caught up" : 'Nothing due right now'}</Text>
+        <Text style={styles.setupBody}>
+          {allDone
+            ? `All ${totalCount} check-ins done for today.`
+            : nextScheduled
+              ? `Next check-in at ${new Date(nextScheduled.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
+              : "No check-ins scheduled for today yet — this should resolve shortly."}
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
