@@ -38,3 +38,11 @@ export function ensureUTC(isoString: string): Date {
   const hasTimezone = isoString.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(isoString);
   return new Date(hasTimezone ? isoString : isoString + 'Z');
 }
+
+/** Returns a 'YYYY-MM-DD' string that is `n` days after `dateStr`. Anchored
+ *  at local noon, same as parseDateString, to avoid DST off-by-one errors. */
+export function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toLocaleDateString('en-CA');
+}

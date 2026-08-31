@@ -6,10 +6,13 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { CircadianPattern, fetchCircadianPatterns, formatCircadianPattern } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
+import { buildDayScores } from '@/lib/day-scores';
 import { parseDateString } from '@/lib/date-utils';
-import { DOMAIN_NAMES } from '@/lib/domains';
+import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
+import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
+import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
-import { DetectedCluster, DomainType } from '@/lib/supabase';
+import { CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 
 const CLUSTER_TYPE_LABEL: Record<string, string> = {
   sustained_deviation: 'Sustained pattern',
@@ -32,18 +35,35 @@ function formatRange(cluster: DetectedCluster): string {
   return `${start} – ${end}`;
 }
 
+function formatDayOfWeekPattern(p: DayOfWeekPattern): string {
+  const label = domainLabel(p.domain);
+  const dir = p.direction === 'elevated' ? 'higher' : 'lower';
+  if (p.type === 'weekday_weekend') {
+    return `${label} tends to be ${dir} on weekends than weekdays`;
+  }
+  return `${label} tends to be ${dir} on ${p.dayName}s`;
+}
+
+function formatLagRelationship(r: LagRelationship): string {
+  const predictorLabel = domainLabel(r.predictor);
+  const outcomeLabel = domainLabel(r.outcome);
+  const relation = r.direction === 'positive' ? 'tends to come with' : 'tends to come with the opposite of';
+  const dayWord = r.lagDays === 1 ? 'the next day' : `${r.lagDays} days later`;
+  return `Higher ${predictorLabel.toLowerCase()} ${relation} ${outcomeLabel.toLowerCase()} ${dayWord}`;
+}
+
 function CircadianSection({ patterns }: { patterns: CircadianPattern[] }) {
   if (patterns.length === 0) return null;
   return (
-    <View style={styles.circadianSection}>
+    <View style={styles.section}>
       <Text style={styles.sectionLabel}>Time of day</Text>
-      <View style={styles.circadianList}>
+      <View style={styles.sectionList}>
         {patterns.map(p => {
           const formatted = formatCircadianPattern(p);
           return (
-            <View key={p.domain} style={styles.circadianCard}>
-              <Text style={styles.circadianDomain}>{formatted.domain}</Text>
-              <Text style={styles.circadianBody}>
+            <View key={p.domain} style={styles.smallCard}>
+              <Text style={styles.smallCardTitle}>{formatted.domain}</Text>
+              <Text style={styles.smallCardBody}>
                 Highest {p.highest_block}, lowest {p.lowest_block} · range {formatted.range}
               </Text>
             </View>
@@ -54,20 +74,53 @@ function CircadianSection({ patterns }: { patterns: CircadianPattern[] }) {
   );
 }
 
-// Chunk 1+2 of the multi-session Insights port: cluster detection (chunk 1)
-// + circadian pattern detection (chunk 2 — closes the gap chunk 1 left in
-// cluster-detection.ts, since the web app runs it inline from the same
-// detector pass). This screen is deliberately NOT the web app's
-// InsightsScreen.tsx — no RangeControl, WhatStandsOut, AreaIndex,
-// PinnedConnections, or area drill-downs, since those combine findings from
-// detector modules that aren't ported yet (day-of-week, lag relationships,
-// pattern evolution, rare events, body detectors, correlations). Just a
-// real, honest list of detected clusters and time-of-day patterns.
+function DayOfWeekSection({ patterns }: { patterns: DayOfWeekPattern[] }) {
+  if (patterns.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>Day of week</Text>
+      <View style={styles.sectionList}>
+        {patterns.slice(0, 5).map((p, i) => (
+          <View key={i} style={styles.smallCard}>
+            <Text style={styles.smallCardBody}>{formatDayOfWeekPattern(p)}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function LagRelationshipSection({ relationships }: { relationships: LagRelationship[] }) {
+  if (relationships.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>What tends to follow what</Text>
+      <View style={styles.sectionList}>
+        {relationships.map((r, i) => (
+          <View key={i} style={styles.smallCard}>
+            <Text style={styles.smallCardBody}>{formatLagRelationship(r)}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// Chunk 1–3 of the multi-session Insights port: cluster detection (1),
+// circadian detection (2), day-of-week + lag-relationship detection (3, this
+// pass — mind-only, body-day-score merging deferred until body check-ins are
+// ported). Deliberately NOT the web app's InsightsScreen.tsx — no
+// RangeControl, WhatStandsOut, AreaIndex, PinnedConnections, or area
+// drill-downs, since those combine findings from detector modules that
+// aren't ported yet (pattern evolution, rare events, body detectors,
+// domain/sleep correlations). Just real, honest sections per detector.
 export default function InsightsScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [clusters, setClusters] = useState<DetectedCluster[]>([]);
   const [circadianPatterns, setCircadianPatterns] = useState<CircadianPattern[]>([]);
+  const [dayOfWeekPatterns, setDayOfWeekPatterns] = useState<DayOfWeekPattern[]>([]);
+  const [lagRelationships, setLagRelationships] = useState<LagRelationship[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -80,16 +133,32 @@ export default function InsightsScreen() {
     }
 
     const to = new Date().toLocaleDateString('en-CA');
-    const from = (() => {
+    const from30 = (() => {
       const d = new Date();
       d.setDate(d.getDate() - 30);
       return d.toLocaleDateString('en-CA');
     })();
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const from90 = ninetyDaysAgo.toLocaleDateString('en-CA');
 
-    const [clusterData, circadianData] = await Promise.all([fetchClustersForDateRange(user.id, from, to), fetchCircadianPatterns(user.id, from)]);
+    const [clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }] = await Promise.all([
+      fetchClustersForDateRange(user.id, from30, to),
+      fetchCircadianPatterns(user.id, from30),
+      supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
+      supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', from90).lte('log_date', to).order('log_date', { ascending: true }),
+      supabase.from('check_in_settings').select('active_domains, quick_checkin_domains').eq('user_id', user.id).maybeSingle(),
+    ]);
+
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
     setClusters(sorted as DetectedCluster[]);
     setCircadianPatterns(circadianData);
+
+    const activeDomains = resolveActiveDomains(settings);
+    const days90d = buildDayScores(checkIns90d as CheckIn[] | null, sleepLogs90d as SleepLog[] | null);
+    setDayOfWeekPatterns(detectDayOfWeekPatterns(days90d, activeDomains));
+    setLagRelationships(detectLagRelationships(days90d, activeDomains));
+
     setLoading(false);
   }, [user]);
 
@@ -101,6 +170,8 @@ export default function InsightsScreen() {
 
   if (loading) return <PulseLoadingScreen />;
 
+  const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0 && lagRelationships.length === 0;
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <FlatList
@@ -111,6 +182,8 @@ export default function InsightsScreen() {
           <>
             <Text style={styles.heading}>Insights</Text>
             <CircadianSection patterns={circadianPatterns} />
+            <DayOfWeekSection patterns={dayOfWeekPatterns} />
+            <LagRelationshipSection relationships={lagRelationships} />
             {clusters.length > 0 && <Text style={styles.sectionLabel}>Patterns</Text>}
           </>
         }
@@ -130,12 +203,12 @@ export default function InsightsScreen() {
           );
         }}
         ListEmptyComponent={
-          circadianPatterns.length > 0 ? null : (
+          nothingDetected ? (
             <View style={styles.empty}>
               <Text style={styles.emptyHeading}>Not enough data yet</Text>
               <Text style={styles.emptyBody}>Patterns appear here once there’s enough check-in history to detect them.</Text>
             </View>
-          )
+          ) : null
         }
       />
     </SafeAreaView>
@@ -147,11 +220,11 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40, gap: 8 },
   heading: { fontSize: 26, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.6, marginBottom: 20 },
   sectionLabel: { fontSize: 11, color: '#818cf8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 10 },
-  circadianSection: { marginBottom: 24 },
-  circadianList: { gap: 8 },
-  circadianCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20 },
-  circadianDomain: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
-  circadianBody: { fontSize: 12.5, color: '#8892a4', textTransform: 'capitalize' },
+  section: { marginBottom: 24 },
+  sectionList: { gap: 8 },
+  smallCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20 },
+  smallCardTitle: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
+  smallCardBody: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 18, paddingHorizontal: 20, marginBottom: 8 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
   cardDomains: { fontSize: 15, fontWeight: '500', color: '#e2e8f0' },
