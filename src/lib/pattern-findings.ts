@@ -3,9 +3,9 @@
 // shared PatternFinding shape, which "What stands out" is built from.
 //
 // Only the functions for detectors already ported are here: clusterFindings,
-// dayOfWeekFindings, lagRelationshipFindings. NOT ported yet (each needs a
-// detector module not on native yet): sleepConnectionFindings,
-// patternEvolutionFindings, interventionImpactFindings, rareEventFindings,
+// dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings. NOT
+// ported yet (each needs a detector module not on native yet):
+// sleepConnectionFindings, interventionImpactFindings, rareEventFindings,
 // bodyMindConnectionFindings, bodyTimeOfDayFindings,
 // bodyEventFrequencyFindings, bodyEventImpactFindings — port each one
 // alongside its source detector, same pattern as this file's own history.
@@ -15,6 +15,7 @@
 
 import { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import { LagRelationship } from '@/lib/detection/lag-relationships';
+import { PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { parseDateString } from '@/lib/date-utils';
 import { DOMAIN_COPY } from '@/lib/domains';
 import { DetectedCluster, PatternSource } from '@/lib/supabase';
@@ -50,6 +51,10 @@ export const CONFIDENCE_COPY: Record<Grade, { short: string; full: string; barFr
 
 function today(): string {
   return new Date().toLocaleDateString('en-CA');
+}
+
+function fmtShort(d: string): string {
+  return parseDateString(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 /**
@@ -178,6 +183,36 @@ export function lagRelationshipFindings(rels: LagRelationship[]): PatternFinding
       sentence: `When ${predLabel} shifts, ${outLabel} tends to follow ${lagStr}, holding true in ${rel.instanceCount} of ${rel.totalPairs} instances.`,
       sentenceHighlights: highlights,
       evidenceLine: `Held in ${rel.instanceCount} of ${rel.totalPairs} instances checked`,
+    };
+  });
+}
+
+// ── Mind/body: first-month-vs-this-month evolution (What stands out only —
+// no dedicated detail-view section; the summary already covers this) ────────
+
+export function patternEvolutionFindings(evos: PatternEvolution[]): PatternFinding[] {
+  return evos.map(evo => {
+    const label = factorLabel(evo.domain);
+    const totalCheckIns = evo.first_period_count + evo.recent_period_count;
+    let sentence: string;
+    if (evo.evolution_type === 'baseline_shift') {
+      sentence = `${label} has shifted from around ${evo.first_period_avg.toFixed(1)} to around ${evo.recent_period_avg.toFixed(1)} since you started tracking.`;
+    } else if (evo.evolution_type === 'volatility_change') {
+      sentence = evo.direction === 'improving' ? `${label} has settled down day to day compared to when you started tracking.` : `${label} has been moving around more day to day compared to when you started tracking.`;
+    } else {
+      sentence = evo.direction === 'improving' ? `${label} has become more stable since you started tracking.` : `${label} has become less stable since you started tracking.`;
+    }
+    return {
+      id: `evo-${evo.domain}-${evo.evolution_type}`,
+      patternSource: null,
+      patternId: null,
+      areas: [isBodyDomain(evo.domain) ? 'body' : 'mind'] as Area[],
+      grade: evo.data_quality,
+      onsetDate: evo.recent_period_end,
+      effectSize: evo.change_magnitude,
+      sentence,
+      sentenceHighlights: [{ text: label, factor: evo.domain }],
+      evidenceLine: `${totalCheckIns} check-ins · ${fmtShort(evo.first_period_start)} to ${fmtShort(evo.first_period_end)} vs ${fmtShort(evo.recent_period_start)} to ${fmtShort(evo.recent_period_end)}`,
     };
   });
 }

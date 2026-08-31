@@ -10,11 +10,12 @@ import { buildDayScores } from '@/lib/day-scores';
 import { parseDateString } from '@/lib/date-utils';
 import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
+import { detectPatternEvolution, PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
-import { clusterFindings, dayOfWeekFindings, lagRelationshipFindings, PatternFinding } from '@/lib/pattern-findings';
+import { clusterFindings, dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings, PatternFinding } from '@/lib/pattern-findings';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
-import { CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
+import { Baseline, CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 
 const CLUSTER_TYPE_LABEL: Record<string, string> = {
   sustained_deviation: 'Sustained pattern',
@@ -125,16 +126,15 @@ function LagRelationshipSection({ relationships }: { relationships: LagRelations
   );
 }
 
-// Chunk 1–4 of the multi-session Insights port: cluster detection (1),
+// Chunk 1–5 of the multi-session Insights port: cluster detection (1),
 // circadian detection (2), day-of-week + lag-relationship detection (3),
-// and the pattern-findings translation layer + "What stands out" ranking (4,
-// this pass — mind-only throughout, body-day-score merging deferred until
-// body check-ins are ported). Deliberately NOT the web app's
-// InsightsScreen.tsx — no RangeControl, AreaIndex, PinnedConnections, or
-// area drill-downs, since those need findings from detector modules that
-// aren't ported yet (pattern evolution, rare events, body detectors,
-// domain/sleep correlations, intervention impact). "What stands out" here
-// only ever ranks findings from the three detectors above.
+// the pattern-findings translation layer + "What stands out" ranking (4),
+// and pattern evolution detection (5, this pass — mind-only throughout,
+// body-day-score merging deferred until body check-ins are ported).
+// Deliberately NOT the web app's InsightsScreen.tsx — no RangeControl,
+// AreaIndex, PinnedConnections, or area drill-downs, since those need
+// findings from detector modules that aren't ported yet (rare events, body
+// detectors, domain/sleep correlations, intervention impact).
 export default function InsightsScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -142,6 +142,7 @@ export default function InsightsScreen() {
   const [circadianPatterns, setCircadianPatterns] = useState<CircadianPattern[]>([]);
   const [dayOfWeekPatterns, setDayOfWeekPatterns] = useState<DayOfWeekPattern[]>([]);
   const [lagRelationships, setLagRelationships] = useState<LagRelationship[]>([]);
+  const [patternEvolutions, setPatternEvolutions] = useState<PatternEvolution[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -163,12 +164,13 @@ export default function InsightsScreen() {
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const from90 = ninetyDaysAgo.toLocaleDateString('en-CA');
 
-    const [clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }] = await Promise.all([
+    const [clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines }] = await Promise.all([
       fetchClustersForDateRange(user.id, from30, to),
       fetchCircadianPatterns(user.id, from30),
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
       supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', from90).lte('log_date', to).order('log_date', { ascending: true }),
       supabase.from('check_in_settings').select('active_domains, quick_checkin_domains').eq('user_id', user.id).maybeSingle(),
+      supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true),
     ]);
 
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
@@ -179,6 +181,12 @@ export default function InsightsScreen() {
     const days90d = buildDayScores(checkIns90d as CheckIn[] | null, sleepLogs90d as SleepLog[] | null);
     setDayOfWeekPatterns(detectDayOfWeekPatterns(days90d, activeDomains));
     setLagRelationships(detectLagRelationships(days90d, activeDomains));
+
+    const baselineMap: Partial<Record<DomainType, number>> = {};
+    (baselines as Baseline[] | null)?.forEach(b => {
+      baselineMap[b.domain] = b.baseline_score;
+    });
+    setPatternEvolutions(detectPatternEvolution(days90d, activeDomains, baselineMap));
 
     setLoading(false);
   }, [user]);
@@ -195,9 +203,12 @@ export default function InsightsScreen() {
 
   // Derived, pure, cheap — computed during render rather than stored in its
   // own state/effect. Only findings for detectors ported so far (clusters,
-  // day-of-week, lag relationships); sleep/body/evolution/rare-event/
+  // day-of-week, lag relationships, pattern evolution); sleep/body/rare-event/
   // intervention findings will join this list as their detectors are ported.
-  const mindFindings = [...clusterFindings(clusters), ...dayOfWeekFindings(dayOfWeekPatterns), ...lagRelationshipFindings(lagRelationships)];
+  // Pattern evolution is "What stands out" only, same as the web app — it
+  // has no dedicated section of its own (see patternEvolutionFindings' own
+  // comment for why).
+  const mindFindings = [...clusterFindings(clusters), ...dayOfWeekFindings(dayOfWeekPatterns), ...lagRelationshipFindings(lagRelationships), ...patternEvolutionFindings(patternEvolutions)];
   const standoutFindings = selectStandoutFindings(mindFindings, 3);
 
   return (
