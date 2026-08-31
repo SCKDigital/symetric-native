@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import DayCard from '@/components/history/day-card';
+import MarkerModal from '@/components/marker-modal';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
-import { parseDateString } from '@/lib/date-utils';
 import { DayData, useHistory } from '@/hooks/use-history';
+import { parseDateString } from '@/lib/date-utils';
+import { deleteMarker, updateMarker } from '@/lib/queries/markers';
+import type { InterventionMarker } from '@/types/marker';
 
 const todayStr = new Date().toLocaleDateString('en-CA');
 const yesterdayStr = new Date(Date.now() - 86400000).toLocaleDateString('en-CA');
@@ -21,13 +25,15 @@ function formatFullDate(dateStr: string): string {
 }
 
 // Scoped port of the web app's HistoryScreen.tsx — the Timeline (list) view
-// only. Not ported: the Calendar view (MonthViewCalendar), intervention
-// markers, body tracking columns, cluster/pattern highlighting, edit/delete
-// check-in actions, the info sheet. See use-history.ts and day-card.tsx for
-// the specific scoping notes.
+// only. Intervention markers ARE now included (tap a marker chip to edit,
+// same as the web app). Still not ported: the Calendar view
+// (MonthViewCalendar), body tracking columns, cluster/pattern highlighting,
+// edit/delete check-in actions, the info sheet. See use-history.ts and
+// day-card.tsx for the specific scoping notes.
 export default function HistoryScreen() {
   const { profile } = useAuth();
-  const { loading, days } = useHistory();
+  const { loading, days, refresh } = useHistory();
+  const [editingMarker, setEditingMarker] = useState<InterventionMarker | null>(null);
 
   if (loading) return <PulseLoadingScreen />;
 
@@ -39,7 +45,16 @@ export default function HistoryScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={<Text style={styles.heading}>History</Text>}
         renderItem={({ item }: { item: DayData }) => (
-          <DayCard date={item.date} dayLabel={formatDayLabel(item.date)} fullDateLabel={formatFullDate(item.date)} completedCheckIns={item.checkIns.filter(ci => ci.status === 'completed')} profile={profile} sleepLog={item.sleepLog} />
+          <DayCard
+            date={item.date}
+            dayLabel={formatDayLabel(item.date)}
+            fullDateLabel={formatFullDate(item.date)}
+            completedCheckIns={item.checkIns.filter(ci => ci.status === 'completed')}
+            profile={profile}
+            sleepLog={item.sleepLog}
+            dayMarkers={item.markers}
+            onEditMarker={setEditingMarker}
+          />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -47,6 +62,22 @@ export default function HistoryScreen() {
           </View>
         }
       />
+
+      {editingMarker && (
+        <MarkerModal
+          marker={editingMarker}
+          onSave={async input => {
+            await updateMarker({ id: editingMarker.id, ...input });
+            await refresh();
+          }}
+          onDelete={async id => {
+            await deleteMarker(id);
+            await refresh();
+          }}
+          onClose={() => setEditingMarker(null)}
+          cycleTrackingEnabled={profile?.cycle_tracking_enabled ?? false}
+        />
+      )}
     </SafeAreaView>
   );
 }

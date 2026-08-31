@@ -3,8 +3,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import MindSection from '@/components/history/mind-section';
+import { CalendarIcon, MoonIcon, NoteIcon, PillIcon, PinIcon } from '@/components/marker-icons';
 import { summariseDay, type DaySummaryCheckIn } from '@/lib/summarise-day';
 import { CheckIn, Profile, SleepLog } from '@/lib/supabase';
+import type { InterventionMarker } from '@/types/marker';
 
 function getSleepDescriptor(score: number | null): string {
   switch (score) {
@@ -23,23 +25,14 @@ function getSleepDescriptor(score: number | null): string {
   }
 }
 
-function MoonIcon() {
-  return (
-    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#8892a4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
-    </Svg>
-  );
-}
-
-function NoteIcon() {
-  return (
-    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#8892a4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" />
-      <Path d="M14 3v5h5" />
-      <Path d="M9 13h6M9 17h4" />
-    </Svg>
-  );
-}
+// Sleep is intentionally not in this table: it's handled inline below, not
+// as an InterventionMarker. Cycle-phase markers never appear in the marker
+// row at all (they're context for a future cycle Day-N view, not ported).
+const MARKER_ICON: Partial<Record<InterventionMarker['marker_type'], typeof PillIcon>> = {
+  medication: PillIcon,
+  therapy: CalendarIcon,
+  life_event: PinIcon,
+};
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   return (
@@ -56,15 +49,18 @@ export interface DayCardProps {
   completedCheckIns: CheckIn[];
   profile: Profile | null | undefined;
   sleepLog: SleepLog | null;
+  dayMarkers: InterventionMarker[];
+  onEditMarker: (marker: InterventionMarker) => void;
 }
 
 // Scoped port of the web app's DayCard.tsx — deliberately drops what depends
-// on features not ported yet: intervention markers, body tracking columns,
-// cycle day numbers, cluster/pattern highlighting, and the edit/delete menu
-// (CheckInMenu, EditCheckInModal). Keeps the part that's genuinely
+// on features not ported yet: body tracking columns, cycle day numbers,
+// cluster/pattern highlighting, and the edit/delete menu for check-ins
+// (CheckInMenu, EditCheckInModal). Intervention markers ARE now included
+// (ported alongside Settings' marker CRUD). Keeps the part that's genuinely
 // self-contained: the day header, the plain-language summary sentence, the
-// sleep/notes chips, and the expandable mind sparkline section.
-export default function DayCard({ date: _date, dayLabel, fullDateLabel, completedCheckIns, profile, sleepLog }: DayCardProps) {
+// sleep/marker/notes chips, and the expandable mind sparkline section.
+export default function DayCard({ date: _date, dayLabel, fullDateLabel, completedCheckIns, profile, sleepLog, dayMarkers, onEditMarker }: DayCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const mindCount = completedCheckIns.length;
@@ -90,12 +86,17 @@ export default function DayCard({ date: _date, dayLabel, fullDateLabel, complete
 
   const hasSleep = !!sleepLog && (sleepLog.skipped || sleepLog.score !== null);
   const hasNotes = completedCheckIns.some(ci => ci.notes);
+  const rowMarkers = dayMarkers.filter(m => m.marker_type !== 'cycle_phase');
 
-  const chips: { icon: React.ReactNode; label: string }[] = [];
+  const chips: { icon: React.ReactNode; label: string; onPress?: () => void }[] = [];
   if (hasSleep) {
     const hoursSuffix = sleepLog!.hours_slept != null ? ` · ${sleepLog!.hours_slept}h` : '';
     chips.push({ icon: <MoonIcon />, label: sleepLog!.skipped ? 'Sleep skipped' : `${getSleepDescriptor(sleepLog!.score)}${hoursSuffix}` });
   }
+  rowMarkers.forEach(m => {
+    const Icon = MARKER_ICON[m.marker_type] ?? PinIcon;
+    chips.push({ icon: <Icon />, label: m.label, onPress: () => onEditMarker(m) });
+  });
   if (hasNotes) chips.push({ icon: <NoteIcon />, label: 'Note' });
 
   const hasDetail = mindCount >= 2;
@@ -115,12 +116,19 @@ export default function DayCard({ date: _date, dayLabel, fullDateLabel, complete
 
         {chips.length > 0 && (
           <View style={styles.chipRow}>
-            {chips.map((chip, i) => (
-              <View key={i} style={styles.chip}>
-                {chip.icon}
-                <Text style={styles.chipLabel}>{chip.label}</Text>
-              </View>
-            ))}
+            {chips.slice(0, 4).map((chip, i) =>
+              chip.onPress ? (
+                <Pressable key={i} onPress={chip.onPress} style={styles.chip}>
+                  {chip.icon}
+                  <Text style={styles.chipLabel}>{chip.label}</Text>
+                </Pressable>
+              ) : (
+                <View key={i} style={styles.chip}>
+                  {chip.icon}
+                  <Text style={styles.chipLabel}>{chip.label}</Text>
+                </View>
+              ),
+            )}
           </View>
         )}
 
