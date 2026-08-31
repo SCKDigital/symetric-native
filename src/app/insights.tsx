@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
+import { AreaRow, buildAreaRows } from '@/lib/area-rows';
 import { CircadianPattern, fetchCircadianPatterns, formatCircadianPattern } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { buildDayScores } from '@/lib/day-scores';
 import { parseDateString } from '@/lib/date-utils';
 import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
-import { detectPatternEvolution, PatternEvolution } from '@/lib/detection/pattern-evolution';
+import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
 import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
 import { clusterFindings, dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings, PatternFinding, rareEventFindings } from '@/lib/pattern-findings';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
 import { Baseline, CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
+
+type RangeDays = 7 | 14 | 30 | 60 | 90;
+const RANGE_OPTIONS: RangeDays[] = [7, 14, 30, 60, 90];
 
 const CLUSTER_TYPE_LABEL: Record<string, string> = {
   sustained_deviation: 'Sustained pattern',
@@ -54,6 +58,54 @@ function formatLagRelationship(r: LagRelationship): string {
   const relation = r.direction === 'positive' ? 'tends to come with' : 'tends to come with the opposite of';
   const dayWord = r.lagDays === 1 ? 'the next day' : `${r.lagDays} days later`;
   return `Higher ${predictorLabel.toLowerCase()} ${relation} ${outcomeLabel.toLowerCase()} ${dayWord}`;
+}
+
+function fmtDate(dateStr: string): string {
+  return parseDateString(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+// A single dropdown, defaulting to 30 days — ported behavior from the web
+// app's RangeControl.tsx. Deliberately no completion percentage anywhere.
+function RangeControl({ range, onChange, fromDate, toDate, checkInCount, daysWithCheckIn }: { range: RangeDays; onChange: (r: RangeDays) => void; fromDate: string; toDate: string; checkInCount: number; daysWithCheckIn: number }) {
+  return (
+    <View style={styles.rangeControl}>
+      <View style={styles.rangePillRow}>
+        {RANGE_OPTIONS.map(r => (
+          <Pressable key={r} onPress={() => onChange(r)} style={[styles.rangePill, r === range && styles.rangePillActive]}>
+            <Text style={[styles.rangePillText, r === range && styles.rangePillTextActive]}>{r}d</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={styles.rangeStats}>
+        {fmtDate(fromDate)} to {fmtDate(toDate)} · {checkInCount} check-in{checkInCount !== 1 ? 's' : ''} · {daysWithCheckIn} day{daysWithCheckIn !== 1 ? 's' : ''} with a check-in
+      </Text>
+    </View>
+  );
+}
+
+// "The evidence" — one row per tracked area, ported from AreaIndex.tsx. The
+// web version is tappable (opens a per-area detail view with sparklines/
+// correlations/rare-day content); those detail screens aren't ported yet, so
+// this is informational-only for now rather than pretending to navigate
+// somewhere real.
+function AreaIndex({ rows }: { rows: AreaRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>The evidence</Text>
+      <View style={styles.sectionList}>
+        {rows.map(row => (
+          <View key={row.area} style={[styles.areaRow, row.state !== 'active' && styles.areaRowMuted]}>
+            <View style={styles.areaDot} />
+            <View style={styles.areaRowText}>
+              <Text style={styles.areaRowLabel}>{row.label}</Text>
+              <Text style={styles.areaRowSubtitle}>{row.subtitle}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
 }
 
 function WhatStandsOut({ findings }: { findings: PatternFinding[] }) {
@@ -144,24 +196,31 @@ function RareEventsSection({ events }: { events: RareEvent[] }) {
   );
 }
 
-// Chunk 1–6 of the multi-session Insights port: cluster detection (1),
+// Chunk 1–7 of the multi-session Insights port: cluster detection (1),
 // circadian detection (2), day-of-week + lag-relationship detection (3),
 // the pattern-findings translation layer + "What stands out" ranking (4),
-// pattern evolution detection (5), and rare-event detection (6, this pass —
-// mind-only throughout, body-day-score merging deferred until body
-// check-ins are ported). Deliberately NOT the web app's InsightsScreen.tsx —
-// no RangeControl, AreaIndex, PinnedConnections, or area drill-downs, since
-// those need findings from detector modules that aren't ported yet (body
-// detectors, domain/sleep correlations, intervention impact).
+// pattern evolution detection (5), rare-event detection (6), and this pass
+// (7) — a UI pass rather than another detector: a real RangeControl and
+// AreaIndex ("The evidence") built on top of the six detectors above,
+// including the mind/sleep finding partition the web app actually does
+// (lag-relationship findings that touch sleep move entirely into the sleep
+// bucket, not just mind) which earlier chunks hadn't replicated yet.
+// Mind-only throughout — body-day-score merging and intervention markers
+// (needed for the Body/Medication rows) are still deferred. Area rows are
+// informational-only for now (no tap-through) since the per-area detail
+// screens (MindAreaDetail etc.) aren't ported.
 export default function InsightsScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<RangeDays>(30);
   const [clusters, setClusters] = useState<DetectedCluster[]>([]);
   const [circadianPatterns, setCircadianPatterns] = useState<CircadianPattern[]>([]);
   const [dayOfWeekPatterns, setDayOfWeekPatterns] = useState<DayOfWeekPattern[]>([]);
   const [lagRelationships, setLagRelationships] = useState<LagRelationship[]>([]);
   const [patternEvolutions, setPatternEvolutions] = useState<PatternEvolution[]>([]);
   const [rareEvents, setRareEvents] = useState<RareEvent[]>([]);
+  const [activeDomains, setActiveDomains] = useState<DomainType[]>([]);
+  const [rangeStats, setRangeStats] = useState({ from: '', to: '', checkInCount: 0, daysWithCheckIn: 0 });
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -179,37 +238,48 @@ export default function InsightsScreen() {
       d.setDate(d.getDate() - 30);
       return d.toLocaleDateString('en-CA');
     })();
+    const fromRange = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - range + 1);
+      return d.toLocaleDateString('en-CA');
+    })();
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const from90 = ninetyDaysAgo.toLocaleDateString('en-CA');
 
-    const [clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines }] = await Promise.all([
+    const [clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines }, { data: rangeCheckIns }, { data: rangeSleepLogs }] = await Promise.all([
       fetchClustersForDateRange(user.id, from30, to),
       fetchCircadianPatterns(user.id, from30),
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
       supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', from90).lte('log_date', to).order('log_date', { ascending: true }),
       supabase.from('check_in_settings').select('active_domains, quick_checkin_domains').eq('user_id', user.id).maybeSingle(),
       supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true),
+      supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', `${fromRange}T00:00:00`).order('scheduled_at', { ascending: true }),
+      supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', fromRange).lte('log_date', to).order('log_date', { ascending: true }),
     ]);
 
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
     setClusters(sorted as DetectedCluster[]);
     setCircadianPatterns(circadianData);
 
-    const activeDomains = resolveActiveDomains(settings);
+    const resolvedDomains = resolveActiveDomains(settings);
+    setActiveDomains(resolvedDomains);
     const days90d = buildDayScores(checkIns90d as CheckIn[] | null, sleepLogs90d as SleepLog[] | null);
-    setDayOfWeekPatterns(detectDayOfWeekPatterns(days90d, activeDomains));
-    setLagRelationships(detectLagRelationships(days90d, activeDomains));
+    setDayOfWeekPatterns(detectDayOfWeekPatterns(days90d, resolvedDomains));
+    setLagRelationships(detectLagRelationships(days90d, resolvedDomains));
 
     const baselineMap: Partial<Record<DomainType, number>> = {};
     (baselines as Baseline[] | null)?.forEach(b => {
       baselineMap[b.domain] = b.baseline_score;
     });
-    setPatternEvolutions(detectPatternEvolution(days90d, activeDomains, baselineMap));
-    setRareEvents(detectRareEvents(days90d, activeDomains, baselineMap));
+    setPatternEvolutions(detectPatternEvolution(days90d, resolvedDomains, baselineMap));
+    setRareEvents(detectRareEvents(days90d, resolvedDomains, baselineMap));
+
+    const daysRange = buildDayScores(rangeCheckIns as CheckIn[] | null, rangeSleepLogs as SleepLog[] | null);
+    setRangeStats({ from: fromRange, to, checkInCount: rangeCheckIns?.length ?? 0, daysWithCheckIn: daysRange.length });
 
     setLoading(false);
-  }, [user]);
+  }, [user, range]);
 
   useEffect(() => {
     // See use-today-check-ins.ts for why this needs the disable comment.
@@ -222,14 +292,29 @@ export default function InsightsScreen() {
   const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0 && lagRelationships.length === 0 && rareEvents.length === 0;
 
   // Derived, pure, cheap — computed during render rather than stored in its
-  // own state/effect. Only findings for detectors ported so far (clusters,
-  // day-of-week, lag relationships, pattern evolution, rare events); sleep/
-  // body/intervention findings will join this list as their detectors are
-  // ported. Pattern evolution is "What stands out" only, same as the web
-  // app — it has no dedicated section of its own (see
-  // patternEvolutionFindings' own comment for why).
-  const mindFindings = [...clusterFindings(clusters), ...dayOfWeekFindings(dayOfWeekPatterns), ...lagRelationshipFindings(lagRelationships), ...patternEvolutionFindings(patternEvolutions), ...rareEventFindings(rareEvents, 'mind')];
-  const standoutFindings = selectStandoutFindings(mindFindings, 3);
+  // own state/effect. Mirrors the web app's InsightsScreen.tsx mind/sleep
+  // split: lag-relationship findings that touch 'sleep' move entirely into
+  // sleepFindings (not just mind), everything else stays in mindFindings
+  // regardless of any secondary area tag (e.g. a cluster's
+  // high_despite_poor_sleep case still counts as mind). Pattern evolution
+  // only counts once the selected range covers its own minimum span — same
+  // gate the web app applies.
+  const allLagFindings = lagRelationshipFindings(lagRelationships);
+  const mindFindings = [
+    ...clusterFindings(clusters),
+    ...dayOfWeekFindings(dayOfWeekPatterns),
+    ...allLagFindings.filter(f => f.areas.includes('mind') && !f.areas.includes('sleep')),
+    ...(range >= EVOLUTION_MIN_SPAN_DAYS ? patternEvolutionFindings(patternEvolutions) : []),
+    ...rareEventFindings(rareEvents, 'mind'),
+  ];
+  const sleepFindings = allLagFindings.filter(f => f.areas.includes('sleep'));
+  const standoutFindings = selectStandoutFindings([...mindFindings, ...sleepFindings], 3);
+  const areaRows = buildAreaRows({
+    mind: { findings: mindFindings, trackedDomainCount: activeDomains.length },
+    body: { tracked: false, daysLogged: 0, risingCount: 0 },
+    sleep: { findings: sleepFindings },
+    medication: { markerCount: 0, tooRecentLabel: null, findings: [] },
+  });
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -240,7 +325,9 @@ export default function InsightsScreen() {
         ListHeaderComponent={
           <>
             <Text style={styles.heading}>Insights</Text>
+            <RangeControl range={range} onChange={setRange} fromDate={rangeStats.from} toDate={rangeStats.to} checkInCount={rangeStats.checkInCount} daysWithCheckIn={rangeStats.daysWithCheckIn} />
             <WhatStandsOut findings={standoutFindings} />
+            <AreaIndex rows={areaRows} />
             <CircadianSection patterns={circadianPatterns} />
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
             <LagRelationshipSection relationships={lagRelationships} />
@@ -283,6 +370,19 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 11, color: '#818cf8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 10 },
   section: { marginBottom: 24 },
   sectionList: { gap: 8 },
+  rangeControl: { marginBottom: 24 },
+  rangePillRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  rangePill: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533' },
+  rangePillActive: { backgroundColor: 'rgba(129,140,248,0.15)', borderColor: 'rgba(129,140,248,0.4)' },
+  rangePillText: { fontSize: 13, fontWeight: '500', color: '#8892a4' },
+  rangePillTextActive: { color: '#e2e8f0' },
+  rangeStats: { fontSize: 12, color: '#6b7a99' },
+  areaRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 14, padding: 14, paddingHorizontal: 16 },
+  areaRowMuted: { opacity: 0.7 },
+  areaDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#818cf8', flexShrink: 0 },
+  areaRowText: { flex: 1 },
+  areaRowLabel: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
+  areaRowSubtitle: { fontSize: 12, color: '#8892a4' },
   smallCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20 },
   smallCardTitle: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   smallCardBody: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
