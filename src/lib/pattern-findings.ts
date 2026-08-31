@@ -3,9 +3,9 @@
 // shared PatternFinding shape, which "What stands out" is built from.
 //
 // Only the functions for detectors already ported are here: clusterFindings,
-// dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings. NOT
-// ported yet (each needs a detector module not on native yet):
-// sleepConnectionFindings, interventionImpactFindings, rareEventFindings,
+// dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings,
+// rareEventFindings. NOT ported yet (each needs a detector module not on
+// native yet): sleepConnectionFindings, interventionImpactFindings,
 // bodyMindConnectionFindings, bodyTimeOfDayFindings,
 // bodyEventFrequencyFindings, bodyEventImpactFindings — port each one
 // alongside its source detector, same pattern as this file's own history.
@@ -16,6 +16,7 @@
 import { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import { LagRelationship } from '@/lib/detection/lag-relationships';
 import { PatternEvolution } from '@/lib/detection/pattern-evolution';
+import { RareEvent } from '@/lib/detection/rare-events';
 import { parseDateString } from '@/lib/date-utils';
 import { DOMAIN_COPY } from '@/lib/domains';
 import { DetectedCluster, PatternSource } from '@/lib/supabase';
@@ -213,6 +214,43 @@ export function patternEvolutionFindings(evos: PatternEvolution[]): PatternFindi
       sentence,
       sentenceHighlights: [{ text: label, factor: evo.domain }],
       evidenceLine: `${totalCheckIns} check-ins · ${fmtShort(evo.first_period_start)} to ${fmtShort(evo.first_period_end)} vs ${fmtShort(evo.recent_period_start)} to ${fmtShort(evo.recent_period_end)}`,
+    };
+  });
+}
+
+// ── Mind/body: rare days (Insights-only) ──────────────────────────────────────
+
+const RARE_EVENT_SENTENCES: Record<RareEvent['event_type'], (n: number) => string> = {
+  consecutive_poor_sleep: n => `Sleep dropped to its lowest level for three or more nights in a row, ${n === 1 ? 'once' : `${n} times`}.`,
+  all_elevated: n => `Every tracked domain was elevated at the same time, ${n === 1 ? 'once' : `${n} times`}.`,
+  all_suppressed: n => `Every tracked domain was low at the same time, ${n === 1 ? 'once' : `${n} times`}.`,
+  extreme_spike: n => `One domain moved far from its usual baseline, ${n === 1 ? 'once' : `${n} times`}.`,
+  multi_crash: n => `Several domains dropped sharply within two days, ${n === 1 ? 'once' : `${n} times`}.`,
+};
+
+// Rare events don't carry their own area — mind-domain and body-domain rare
+// events are detected via two separate calls to detectRareEvents (they use
+// different active-domain sets and thresholds), so the caller already knows
+// which area context applies. Their sentence templates don't name a specific
+// domain (they describe a shape across "every tracked domain"), so there's
+// nothing to highlight.
+export function rareEventFindings(events: RareEvent[], area: Area = 'mind'): PatternFinding[] {
+  // Rare events carry no explicit confidence grade — grade heuristically by
+  // how many times the event recurred; a single occurrence is too little to
+  // lead with, so it's graded 'limited' and excluded from "What stands out".
+  return events.map(e => {
+    const grade: Grade = e.frequency >= 2 ? 'partial' : 'limited';
+    return {
+      id: `rare-${area}-${e.event_type}`,
+      patternSource: null,
+      patternId: null,
+      areas: [area] as Area[],
+      grade,
+      onsetDate: e.occurrence_dates[e.occurrence_dates.length - 1] ?? today(),
+      effectSize: e.frequency,
+      sentence: RARE_EVENT_SENTENCES[e.event_type](e.frequency),
+      sentenceHighlights: [],
+      evidenceLine: `${e.occurrence_dates.length} occurrence${e.occurrence_dates.length !== 1 ? 's' : ''}`,
     };
   });
 }

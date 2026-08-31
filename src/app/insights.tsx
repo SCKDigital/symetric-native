@@ -11,9 +11,10 @@ import { parseDateString } from '@/lib/date-utils';
 import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
 import { detectPatternEvolution, PatternEvolution } from '@/lib/detection/pattern-evolution';
+import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
 import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
-import { clusterFindings, dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings, PatternFinding } from '@/lib/pattern-findings';
+import { clusterFindings, dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings, PatternFinding, rareEventFindings } from '@/lib/pattern-findings';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
 import { Baseline, CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 
@@ -126,14 +127,31 @@ function LagRelationshipSection({ relationships }: { relationships: LagRelations
   );
 }
 
-// Chunk 1–5 of the multi-session Insights port: cluster detection (1),
+function RareEventsSection({ events }: { events: RareEvent[] }) {
+  if (events.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>Rare days</Text>
+      <View style={styles.sectionList}>
+        {events.map((e, i) => (
+          <View key={i} style={styles.smallCard}>
+            <Text style={styles.smallCardBody}>{e.clinical_note}</Text>
+            {e.consequence_pattern && <Text style={[styles.smallCardBody, styles.smallCardSubtext]}>{e.consequence_pattern}</Text>}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// Chunk 1–6 of the multi-session Insights port: cluster detection (1),
 // circadian detection (2), day-of-week + lag-relationship detection (3),
 // the pattern-findings translation layer + "What stands out" ranking (4),
-// and pattern evolution detection (5, this pass — mind-only throughout,
-// body-day-score merging deferred until body check-ins are ported).
-// Deliberately NOT the web app's InsightsScreen.tsx — no RangeControl,
-// AreaIndex, PinnedConnections, or area drill-downs, since those need
-// findings from detector modules that aren't ported yet (rare events, body
+// pattern evolution detection (5), and rare-event detection (6, this pass —
+// mind-only throughout, body-day-score merging deferred until body
+// check-ins are ported). Deliberately NOT the web app's InsightsScreen.tsx —
+// no RangeControl, AreaIndex, PinnedConnections, or area drill-downs, since
+// those need findings from detector modules that aren't ported yet (body
 // detectors, domain/sleep correlations, intervention impact).
 export default function InsightsScreen() {
   const { user } = useAuth();
@@ -143,6 +161,7 @@ export default function InsightsScreen() {
   const [dayOfWeekPatterns, setDayOfWeekPatterns] = useState<DayOfWeekPattern[]>([]);
   const [lagRelationships, setLagRelationships] = useState<LagRelationship[]>([]);
   const [patternEvolutions, setPatternEvolutions] = useState<PatternEvolution[]>([]);
+  const [rareEvents, setRareEvents] = useState<RareEvent[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -187,6 +206,7 @@ export default function InsightsScreen() {
       baselineMap[b.domain] = b.baseline_score;
     });
     setPatternEvolutions(detectPatternEvolution(days90d, activeDomains, baselineMap));
+    setRareEvents(detectRareEvents(days90d, activeDomains, baselineMap));
 
     setLoading(false);
   }, [user]);
@@ -199,16 +219,16 @@ export default function InsightsScreen() {
 
   if (loading) return <PulseLoadingScreen />;
 
-  const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0 && lagRelationships.length === 0;
+  const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0 && lagRelationships.length === 0 && rareEvents.length === 0;
 
   // Derived, pure, cheap — computed during render rather than stored in its
   // own state/effect. Only findings for detectors ported so far (clusters,
-  // day-of-week, lag relationships, pattern evolution); sleep/body/rare-event/
-  // intervention findings will join this list as their detectors are ported.
-  // Pattern evolution is "What stands out" only, same as the web app — it
-  // has no dedicated section of its own (see patternEvolutionFindings' own
-  // comment for why).
-  const mindFindings = [...clusterFindings(clusters), ...dayOfWeekFindings(dayOfWeekPatterns), ...lagRelationshipFindings(lagRelationships), ...patternEvolutionFindings(patternEvolutions)];
+  // day-of-week, lag relationships, pattern evolution, rare events); sleep/
+  // body/intervention findings will join this list as their detectors are
+  // ported. Pattern evolution is "What stands out" only, same as the web
+  // app — it has no dedicated section of its own (see
+  // patternEvolutionFindings' own comment for why).
+  const mindFindings = [...clusterFindings(clusters), ...dayOfWeekFindings(dayOfWeekPatterns), ...lagRelationshipFindings(lagRelationships), ...patternEvolutionFindings(patternEvolutions), ...rareEventFindings(rareEvents, 'mind')];
   const standoutFindings = selectStandoutFindings(mindFindings, 3);
 
   return (
@@ -224,6 +244,7 @@ export default function InsightsScreen() {
             <CircadianSection patterns={circadianPatterns} />
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
             <LagRelationshipSection relationships={lagRelationships} />
+            <RareEventsSection events={rareEvents} />
             {clusters.length > 0 && <Text style={styles.sectionLabel}>Patterns</Text>}
           </>
         }
@@ -265,6 +286,7 @@ const styles = StyleSheet.create({
   smallCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20 },
   smallCardTitle: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   smallCardBody: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
+  smallCardSubtext: { marginTop: 4, color: '#6b7690', fontStyle: 'italic' },
   standoutCard: { backgroundColor: '#1a1f3a', borderWidth: 1, borderColor: 'rgba(129,140,248,0.3)', borderRadius: 16, padding: 18, paddingHorizontal: 20 },
   standoutSentence: { fontSize: 15, color: '#e2e8f0', lineHeight: 22, marginBottom: 6 },
   standoutEvidence: { fontSize: 12, color: '#6b7690' },
