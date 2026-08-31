@@ -4,8 +4,8 @@
 //
 // Only the functions for detectors already ported are here: clusterFindings,
 // dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings,
-// rareEventFindings. NOT ported yet (each needs a detector module not on
-// native yet): sleepConnectionFindings, interventionImpactFindings,
+// rareEventFindings, interventionImpactFindings. NOT ported yet (each needs
+// a detector module not on native yet): sleepConnectionFindings,
 // bodyMindConnectionFindings, bodyTimeOfDayFindings,
 // bodyEventFrequencyFindings, bodyEventImpactFindings — port each one
 // alongside its source detector, same pattern as this file's own history.
@@ -14,6 +14,7 @@
 // only shapes it. Do not add detection logic here.
 
 import { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
+import { InterventionImpact } from '@/lib/detection/intervention-impact';
 import { LagRelationship } from '@/lib/detection/lag-relationships';
 import { PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { RareEvent } from '@/lib/detection/rare-events';
@@ -253,4 +254,28 @@ export function rareEventFindings(events: RareEvent[], area: Area = 'mind'): Pat
       evidenceLine: `${e.occurrence_dates.length} occurrence${e.occurrence_dates.length !== 1 ? 's' : ''}`,
     };
   });
+}
+
+// ── Medication/therapy: intervention impact (Insights-only) ──────────────────
+
+export function interventionImpactFindings(impacts: InterventionImpact[]): PatternFinding[] {
+  const results: PatternFinding[] = [];
+  for (const impact of impacts) {
+    const top = impact.affected_domains[0];
+    if (!top) continue;
+    const label = factorLabel(top.domain);
+    results.push({
+      id: `impact-${impact.marker_id}`,
+      patternSource: null,
+      patternId: null,
+      areas: ['medication'],
+      grade: impact.data_quality,
+      onsetDate: impact.marker_date,
+      effectSize: Math.abs(top.change),
+      sentence: `${label} ${top.direction} by ${Math.abs(top.change).toFixed(1)} points in the ${top.window_days} days after ${impact.marker_label}.`,
+      sentenceHighlights: [{ text: label, factor: top.domain }],
+      evidenceLine: `${impact.before_day_count} days before · ${impact.after_day_count} days after`,
+    });
+  }
+  return results;
 }

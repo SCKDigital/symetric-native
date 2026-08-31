@@ -10,14 +10,17 @@ import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { buildDayScores } from '@/lib/day-scores';
 import { parseDateString } from '@/lib/date-utils';
 import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
+import { detectInterventionImpacts, InterventionImpact } from '@/lib/detection/intervention-impact';
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
 import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
 import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
-import { clusterFindings, dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings, PatternFinding, rareEventFindings } from '@/lib/pattern-findings';
+import { clusterFindings, dayOfWeekFindings, interventionImpactFindings, lagRelationshipFindings, patternEvolutionFindings, PatternFinding, rareEventFindings } from '@/lib/pattern-findings';
+import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
 import { Baseline, CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
+import type { InterventionMarker } from '@/types/marker';
 
 type RangeDays = 7 | 14 | 30 | 60 | 90;
 const RANGE_OPTIONS: RangeDays[] = [7, 14, 30, 60, 90];
@@ -196,19 +199,41 @@ function RareEventsSection({ events }: { events: RareEvent[] }) {
   );
 }
 
-// Chunk 1–7 of the multi-session Insights port: cluster detection (1),
+function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
+  if (impacts.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>Medication &amp; therapy</Text>
+      <View style={styles.sectionList}>
+        {impacts.map(impact => {
+          const top = impact.affected_domains[0];
+          return (
+            <View key={impact.marker_id} style={styles.smallCard}>
+              <Text style={styles.smallCardTitle}>{impact.marker_label}</Text>
+              {top && (
+                <Text style={styles.smallCardBody}>
+                  {domainLabel(top.domain)} {top.direction} by {Math.abs(top.change).toFixed(1)} points in the {top.window_days} days after
+                </Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// Chunk 1–8 of the multi-session Insights port: cluster detection (1),
 // circadian detection (2), day-of-week + lag-relationship detection (3),
 // the pattern-findings translation layer + "What stands out" ranking (4),
-// pattern evolution detection (5), rare-event detection (6), and this pass
-// (7) — a UI pass rather than another detector: a real RangeControl and
-// AreaIndex ("The evidence") built on top of the six detectors above,
-// including the mind/sleep finding partition the web app actually does
-// (lag-relationship findings that touch sleep move entirely into the sleep
-// bucket, not just mind) which earlier chunks hadn't replicated yet.
-// Mind-only throughout — body-day-score merging and intervention markers
-// (needed for the Body/Medication rows) are still deferred. Area rows are
-// informational-only for now (no tap-through) since the per-area detail
-// screens (MindAreaDetail etc.) aren't ported.
+// pattern evolution detection (5), rare-event detection (6), a RangeControl/
+// AreaIndex UI pass (7), and intervention-impact detection (8, this pass —
+// unblocked now that markers are ported in Settings/History). The Medication
+// area row is now real (markerCount/tooRecentLabel/findings all wired,
+// matching the web app's "too early to read" handling for a too-recent
+// marker). Mind-only throughout — body-day-score merging is still deferred.
+// Area rows are informational-only for now (no tap-through) since the
+// per-area detail screens (MindAreaDetail etc.) aren't ported.
 export default function InsightsScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -219,6 +244,9 @@ export default function InsightsScreen() {
   const [lagRelationships, setLagRelationships] = useState<LagRelationship[]>([]);
   const [patternEvolutions, setPatternEvolutions] = useState<PatternEvolution[]>([]);
   const [rareEvents, setRareEvents] = useState<RareEvent[]>([]);
+  const [interventionImpacts, setInterventionImpacts] = useState<InterventionImpact[]>([]);
+  const [markers, setMarkers] = useState<InterventionMarker[]>([]);
+  const [tooRecentLabel, setTooRecentLabel] = useState<string | null>(null);
   const [activeDomains, setActiveDomains] = useState<DomainType[]>([]);
   const [rangeStats, setRangeStats] = useState({ from: '', to: '', checkInCount: 0, daysWithCheckIn: 0 });
 
@@ -247,7 +275,7 @@ export default function InsightsScreen() {
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const from90 = ninetyDaysAgo.toLocaleDateString('en-CA');
 
-    const [clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines }, { data: rangeCheckIns }, { data: rangeSleepLogs }] = await Promise.all([
+    const [clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines }, { data: rangeCheckIns }, { data: rangeSleepLogs }, markersData] = await Promise.all([
       fetchClustersForDateRange(user.id, from30, to),
       fetchCircadianPatterns(user.id, from30),
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
@@ -256,6 +284,7 @@ export default function InsightsScreen() {
       supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true),
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', `${fromRange}T00:00:00`).order('scheduled_at', { ascending: true }),
       supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', fromRange).lte('log_date', to).order('log_date', { ascending: true }),
+      fetchMarkersInRange(from90, to).catch(() => [] as InterventionMarker[]),
     ]);
 
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
@@ -274,6 +303,23 @@ export default function InsightsScreen() {
     });
     setPatternEvolutions(detectPatternEvolution(days90d, resolvedDomains, baselineMap));
     setRareEvents(detectRareEvents(days90d, resolvedDomains, baselineMap));
+    setMarkers(markersData);
+
+    const impacts = detectInterventionImpacts(markersData, days90d, resolvedDomains);
+    setInterventionImpacts(impacts);
+
+    // Ported from the web app's InsightsScreen.tsx: a marker too recent for
+    // its impact window to have closed yet reads as "too early to read"
+    // rather than silently absent from the medication row. Computed here
+    // (not at render time) since it needs Date.now() — impure, and the
+    // React Compiler-era lint rules flag that during render even for a
+    // one-off "how many days ago" calculation like this.
+    const eligibleMarkers = markersData.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy');
+    const impactedMarkerIds = new Set(impacts.map(i => i.marker_id));
+    const unreadMarkers = eligibleMarkers.filter(m => !impactedMarkerIds.has(m.id));
+    const mostRecentUnread = [...unreadMarkers].sort((a, b) => b.marker_date.localeCompare(a.marker_date))[0];
+    const daysSinceMostRecent = mostRecentUnread ? Math.round((Date.now() - parseDateString(mostRecentUnread.marker_date).getTime()) / 86400000) : null;
+    setTooRecentLabel(impacts.length === 0 && mostRecentUnread ? `${mostRecentUnread.label} was ${daysSinceMostRecent} day${daysSinceMostRecent !== 1 ? 's' : ''} ago, too early to read` : null);
 
     const daysRange = buildDayScores(rangeCheckIns as CheckIn[] | null, rangeSleepLogs as SleepLog[] | null);
     setRangeStats({ from: fromRange, to, checkInCount: rangeCheckIns?.length ?? 0, daysWithCheckIn: daysRange.length });
@@ -289,7 +335,7 @@ export default function InsightsScreen() {
 
   if (loading) return <PulseLoadingScreen />;
 
-  const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0 && lagRelationships.length === 0 && rareEvents.length === 0;
+  const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0 && lagRelationships.length === 0 && rareEvents.length === 0 && interventionImpacts.length === 0;
 
   // Derived, pure, cheap — computed during render rather than stored in its
   // own state/effect. Mirrors the web app's InsightsScreen.tsx mind/sleep
@@ -308,12 +354,15 @@ export default function InsightsScreen() {
     ...rareEventFindings(rareEvents, 'mind'),
   ];
   const sleepFindings = allLagFindings.filter(f => f.areas.includes('sleep'));
-  const standoutFindings = selectStandoutFindings([...mindFindings, ...sleepFindings], 3);
+  const medicationFindings = interventionImpactFindings(interventionImpacts);
+  const eligibleMarkerCount = markers.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy').length;
+
+  const standoutFindings = selectStandoutFindings([...mindFindings, ...sleepFindings, ...medicationFindings], 3);
   const areaRows = buildAreaRows({
     mind: { findings: mindFindings, trackedDomainCount: activeDomains.length },
     body: { tracked: false, daysLogged: 0, risingCount: 0 },
     sleep: { findings: sleepFindings },
-    medication: { markerCount: 0, tooRecentLabel: null, findings: [] },
+    medication: { markerCount: eligibleMarkerCount, tooRecentLabel, findings: medicationFindings },
   });
 
   return (
@@ -332,6 +381,7 @@ export default function InsightsScreen() {
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
             <LagRelationshipSection relationships={lagRelationships} />
             <RareEventsSection events={rareEvents} />
+            <MedicationSection impacts={interventionImpacts} />
             {clusters.length > 0 && <Text style={styles.sectionLabel}>Patterns</Text>}
           </>
         }
