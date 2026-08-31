@@ -1,4 +1,5 @@
 import { debug } from '@/lib/debug';
+import { detectCircadianPatterns } from '@/lib/circadian-detection';
 import { checkRapidCyclingQuality } from '@/lib/detection/data-quality-checks';
 import { detectIntradayVolatility, detectWeeklyOscillations } from '@/lib/detection/cluster-shape-detectors';
 import { upsertStreakCluster } from '@/lib/detection/streak-cluster-helper';
@@ -11,15 +12,9 @@ import { CheckIn, DomainType, supabase } from '@/lib/supabase';
  * Cluster detection — multi-day sustained or cycling deviations from personal
  * baseline (plus intraday volatility swings), surfaced on Insights as
  * "Worth Discussing With Your Doctor". Ported from the web app's
- * src/lib/clusterDetection.ts.
- *
- * NOT ported yet: the `detectCircadianPatterns(userId)` call the web version
- * makes inline at the end of `runClusterDetection` — circadian pattern
- * detection is its own ~310-line module (`circadianDetection.ts`), a
- * separate later chunk of the multi-session Insights port, not folded in
- * here. Everything else in this file (sustained deviation streaks, intraday
- * volatility, weekly oscillation/rapid cycling, and re-closing clusters that
- * have returned to baseline) is a complete, faithful port.
+ * src/lib/clusterDetection.ts — a complete, faithful port including the
+ * inline `detectCircadianPatterns` call (see circadian-detection.ts; chunk 1
+ * deferred this, chunk 2 closes the gap).
  */
 
 const ALL_DOMAINS: DomainType[] = ['mood', 'energy', 'anxiety', 'concentration', 'irritability', 'social_battery', 'sensory_sensitivity', 'motivation'];
@@ -278,7 +273,8 @@ export async function runClusterDetection(userId: string): Promise<void> {
   }
 
   // ── Circadian pattern detection ────────────────────────────────────────────
-  // Deferred — see file header.
+
+  await detectCircadianPatterns(userId);
 
   const openClusters = (allClusters ?? []).filter(c => !c.end_date);
 

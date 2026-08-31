@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
+import { CircadianPattern, fetchCircadianPatterns, formatCircadianPattern } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { parseDateString } from '@/lib/date-utils';
 import { DOMAIN_NAMES } from '@/lib/domains';
@@ -14,8 +15,6 @@ const CLUSTER_TYPE_LABEL: Record<string, string> = {
   sustained_deviation: 'Sustained pattern',
   intraday_volatility: 'Volatility spike',
   rapid_cycling: 'Rapid cycling',
-  // Not produced yet on native (circadian detection is a later porting
-  // chunk) — kept so a row created by the web app still renders sensibly.
   expiry_correlated: 'Expiry-correlated',
   baseline_shift: 'Baseline shift',
 };
@@ -33,19 +32,42 @@ function formatRange(cluster: DetectedCluster): string {
   return `${start} – ${end}`;
 }
 
-// Chunk 1 of the multi-session Insights port: cluster detection only (see
-// cluster-detection.ts for exactly what's ported vs. deferred). This screen
-// is deliberately NOT the web app's InsightsScreen.tsx — no RangeControl,
-// WhatStandsOut, AreaIndex, PinnedConnections, or area drill-downs, since
-// those combine findings from ~10 other detector modules that aren't ported
-// yet (day-of-week, lag relationships, pattern evolution, rare events, body
-// detectors, circadian, correlations). Just a real, honest list of detected
-// clusters — the single most foundational pattern type — ordered by the same
-// internal sort weight the web app computes, most notable first.
+function CircadianSection({ patterns }: { patterns: CircadianPattern[] }) {
+  if (patterns.length === 0) return null;
+  return (
+    <View style={styles.circadianSection}>
+      <Text style={styles.sectionLabel}>Time of day</Text>
+      <View style={styles.circadianList}>
+        {patterns.map(p => {
+          const formatted = formatCircadianPattern(p);
+          return (
+            <View key={p.domain} style={styles.circadianCard}>
+              <Text style={styles.circadianDomain}>{formatted.domain}</Text>
+              <Text style={styles.circadianBody}>
+                Highest {p.highest_block}, lowest {p.lowest_block} · range {formatted.range}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// Chunk 1+2 of the multi-session Insights port: cluster detection (chunk 1)
+// + circadian pattern detection (chunk 2 — closes the gap chunk 1 left in
+// cluster-detection.ts, since the web app runs it inline from the same
+// detector pass). This screen is deliberately NOT the web app's
+// InsightsScreen.tsx — no RangeControl, WhatStandsOut, AreaIndex,
+// PinnedConnections, or area drill-downs, since those combine findings from
+// detector modules that aren't ported yet (day-of-week, lag relationships,
+// pattern evolution, rare events, body detectors, correlations). Just a
+// real, honest list of detected clusters and time-of-day patterns.
 export default function InsightsScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [clusters, setClusters] = useState<DetectedCluster[]>([]);
+  const [circadianPatterns, setCircadianPatterns] = useState<CircadianPattern[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -64,9 +86,10 @@ export default function InsightsScreen() {
       return d.toLocaleDateString('en-CA');
     })();
 
-    const data = await fetchClustersForDateRange(user.id, from, to);
-    const sorted = [...data].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
+    const [clusterData, circadianData] = await Promise.all([fetchClustersForDateRange(user.id, from, to), fetchCircadianPatterns(user.id, from)]);
+    const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
     setClusters(sorted as DetectedCluster[]);
+    setCircadianPatterns(circadianData);
     setLoading(false);
   }, [user]);
 
@@ -84,7 +107,13 @@ export default function InsightsScreen() {
         data={clusters}
         keyExtractor={c => c.id}
         contentContainerStyle={styles.list}
-        ListHeaderComponent={<Text style={styles.heading}>Insights</Text>}
+        ListHeaderComponent={
+          <>
+            <Text style={styles.heading}>Insights</Text>
+            <CircadianSection patterns={circadianPatterns} />
+            {clusters.length > 0 && <Text style={styles.sectionLabel}>Patterns</Text>}
+          </>
+        }
         renderItem={({ item }) => {
           const domains = (item.domains_involved ?? []).map(domainLabel).join(' + ');
           return (
@@ -101,10 +130,12 @@ export default function InsightsScreen() {
           );
         }}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyHeading}>Not enough data yet</Text>
-            <Text style={styles.emptyBody}>Patterns appear here once there’s enough check-in history to detect them.</Text>
-          </View>
+          circadianPatterns.length > 0 ? null : (
+            <View style={styles.empty}>
+              <Text style={styles.emptyHeading}>Not enough data yet</Text>
+              <Text style={styles.emptyBody}>Patterns appear here once there’s enough check-in history to detect them.</Text>
+            </View>
+          )
         }
       />
     </SafeAreaView>
@@ -115,6 +146,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40, gap: 8 },
   heading: { fontSize: 26, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.6, marginBottom: 20 },
+  sectionLabel: { fontSize: 11, color: '#818cf8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 10 },
+  circadianSection: { marginBottom: 24 },
+  circadianList: { gap: 8 },
+  circadianCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20 },
+  circadianDomain: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
+  circadianBody: { fontSize: 12.5, color: '#8892a4', textTransform: 'capitalize' },
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 18, paddingHorizontal: 20, marginBottom: 8 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
   cardDomains: { fontSize: 15, fontWeight: '500', color: '#e2e8f0' },
