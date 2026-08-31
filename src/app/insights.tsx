@@ -12,6 +12,8 @@ import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-o
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
 import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
+import { clusterFindings, dayOfWeekFindings, lagRelationshipFindings, PatternFinding } from '@/lib/pattern-findings';
+import { selectStandoutFindings } from '@/lib/standout-ranking';
 import { CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 
 const CLUSTER_TYPE_LABEL: Record<string, string> = {
@@ -50,6 +52,23 @@ function formatLagRelationship(r: LagRelationship): string {
   const relation = r.direction === 'positive' ? 'tends to come with' : 'tends to come with the opposite of';
   const dayWord = r.lagDays === 1 ? 'the next day' : `${r.lagDays} days later`;
   return `Higher ${predictorLabel.toLowerCase()} ${relation} ${outcomeLabel.toLowerCase()} ${dayWord}`;
+}
+
+function WhatStandsOut({ findings }: { findings: PatternFinding[] }) {
+  if (findings.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>What stands out</Text>
+      <View style={styles.sectionList}>
+        {findings.map(f => (
+          <View key={f.id} style={styles.standoutCard}>
+            <Text style={styles.standoutSentence}>{f.sentence}</Text>
+            <Text style={styles.standoutEvidence}>{f.evidenceLine}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
 }
 
 function CircadianSection({ patterns }: { patterns: CircadianPattern[] }) {
@@ -106,14 +125,16 @@ function LagRelationshipSection({ relationships }: { relationships: LagRelations
   );
 }
 
-// Chunk 1–3 of the multi-session Insights port: cluster detection (1),
-// circadian detection (2), day-of-week + lag-relationship detection (3, this
-// pass — mind-only, body-day-score merging deferred until body check-ins are
-// ported). Deliberately NOT the web app's InsightsScreen.tsx — no
-// RangeControl, WhatStandsOut, AreaIndex, PinnedConnections, or area
-// drill-downs, since those combine findings from detector modules that
+// Chunk 1–4 of the multi-session Insights port: cluster detection (1),
+// circadian detection (2), day-of-week + lag-relationship detection (3),
+// and the pattern-findings translation layer + "What stands out" ranking (4,
+// this pass — mind-only throughout, body-day-score merging deferred until
+// body check-ins are ported). Deliberately NOT the web app's
+// InsightsScreen.tsx — no RangeControl, AreaIndex, PinnedConnections, or
+// area drill-downs, since those need findings from detector modules that
 // aren't ported yet (pattern evolution, rare events, body detectors,
-// domain/sleep correlations). Just real, honest sections per detector.
+// domain/sleep correlations, intervention impact). "What stands out" here
+// only ever ranks findings from the three detectors above.
 export default function InsightsScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -172,6 +193,13 @@ export default function InsightsScreen() {
 
   const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0 && lagRelationships.length === 0;
 
+  // Derived, pure, cheap — computed during render rather than stored in its
+  // own state/effect. Only findings for detectors ported so far (clusters,
+  // day-of-week, lag relationships); sleep/body/evolution/rare-event/
+  // intervention findings will join this list as their detectors are ported.
+  const mindFindings = [...clusterFindings(clusters), ...dayOfWeekFindings(dayOfWeekPatterns), ...lagRelationshipFindings(lagRelationships)];
+  const standoutFindings = selectStandoutFindings(mindFindings, 3);
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <FlatList
@@ -181,6 +209,7 @@ export default function InsightsScreen() {
         ListHeaderComponent={
           <>
             <Text style={styles.heading}>Insights</Text>
+            <WhatStandsOut findings={standoutFindings} />
             <CircadianSection patterns={circadianPatterns} />
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
             <LagRelationshipSection relationships={lagRelationships} />
@@ -225,6 +254,9 @@ const styles = StyleSheet.create({
   smallCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20 },
   smallCardTitle: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   smallCardBody: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
+  standoutCard: { backgroundColor: '#1a1f3a', borderWidth: 1, borderColor: 'rgba(129,140,248,0.3)', borderRadius: 16, padding: 18, paddingHorizontal: 20 },
+  standoutSentence: { fontSize: 15, color: '#e2e8f0', lineHeight: 22, marginBottom: 6 },
+  standoutEvidence: { fontSize: 12, color: '#6b7690' },
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 18, paddingHorizontal: 20, marginBottom: 8 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
   cardDomains: { fontSize: 15, fontWeight: '500', color: '#e2e8f0' },
