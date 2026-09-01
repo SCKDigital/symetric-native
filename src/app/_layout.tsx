@@ -2,6 +2,7 @@ import { DarkTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthScreen } from '@/components/auth/auth-screen';
 import AppTabs from '@/components/app-tabs';
@@ -16,11 +17,16 @@ SplashScreen.preventAutoHideAsync();
 // not driven by useColorScheme like the template default was.
 export default function RootLayout() {
   return (
-    <ThemeProvider value={DarkTheme}>
-      <AuthProvider>
-        <AuthGate />
-      </AuthProvider>
-    </ThemeProvider>
+    // Required at the app root for react-native-gesture-handler to work
+    // reliably (especially on Android) — needed once Prepare's question
+    // list added drag-to-reorder via react-native-draggable-flatlist.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={DarkTheme}>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

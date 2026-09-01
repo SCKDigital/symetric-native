@@ -21,3 +21,5 @@ export function trackPrepareTabOpened() {}
 export function trackAppointmentCreated(_daysUntil: number) {}
 export function trackPatternMarkedForDiscussion() {}
 export function trackPatternNoteAdded() {}
+export function trackQuestionAdded(_source: 'manual' | 'auto' | 'cycle_draft') {}
+export function trackQuestionReordered() {}

@@ -8,6 +8,7 @@ import NotableChangesSection from '@/components/prepare/notable-changes-section'
 import PastAppointmentsSection from '@/components/prepare/past-appointments-section';
 import PatternReviewSection from '@/components/prepare/pattern-review-section';
 import PrepareInfoSheet from '@/components/prepare/prepare-info-sheet';
+import QuestionsSection from '@/components/prepare/questions-section';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { fetchUpcomingAppointment, fetchAllAppointments } from '@/lib/api/appointments';
@@ -36,17 +37,17 @@ function CollapsedPatternsRow({ count, onExpand }: { count: number; onExpand: ()
   );
 }
 
-// Chunk 3 of the Prepare tab port. Adds notable changes (markers + check-in
-// context notes + data-gap detection in the selected range), on top of
-// chunk 1's appointment CRUD core and chunk 2's date-range control +
-// pattern review. Findings are cluster-only for now — the web app's
-// PrepareScreen also mixes in sleepConnectionFindings, but that detector
-// (sleep_symptom_connections weekly cadence) isn't ported to native yet,
-// same deferral noted in pattern-findings.ts since Insights chunk 1. STILL
-// NOT ported: the auto-generated + custom question list (with priority
-// reordering — needs an RN drag-library decision first) and PDF report
-// generation (blocked on the on-device PDF approach, still unresolved) —
-// each is its own later chunk, standing in behind a placeholder note.
+// Chunk 4 of the Prepare tab port. Adds the auto-generated + custom
+// question list with priority reordering (react-native-draggable-flatlist,
+// see questions-section.tsx's header comment for the @dnd-kit swap), on
+// top of chunk 1's appointment CRUD core, chunk 2's date-range control +
+// pattern review, and chunk 3's notable changes. Findings are cluster-only
+// for now — the web app's PrepareScreen also mixes in
+// sleepConnectionFindings, but that detector (sleep_symptom_connections
+// weekly cadence) isn't ported to native yet, same deferral noted in
+// pattern-findings.ts since Insights chunk 1. STILL NOT ported: PDF report
+// generation (blocked on the on-device PDF approach, still unresolved) and
+// the post-appointment completion flow — each behind a placeholder note.
 export default function PrepareScreen() {
   const { user } = useAuth();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
@@ -160,9 +161,11 @@ export default function PrepareScreen() {
 
             <NotableChangesSection fromDate={range.start} toDate={range.end} />
 
+            <QuestionsSection appointmentId={appointment.id} />
+
             <View style={styles.placeholderCard}>
               <Text style={styles.placeholderText}>
-                Your question list and PDF report generation aren&rsquo;t built yet — this screen only covers your appointment, patterns, and notable changes so far.
+                PDF report generation isn&rsquo;t built yet — everything else on this screen is real.
               </Text>
             </View>
           </>
