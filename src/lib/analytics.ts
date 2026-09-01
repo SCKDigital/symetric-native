@@ -31,3 +31,8 @@ export function trackReportGenerated(
   _patternCount: number,
   _opts?: { medicationPagePresent?: boolean; cycleSectionPresent?: boolean; patternCardsShown?: number; generationTimeMs?: number }
 ) {}
+export function trackBodyCheckInStarted() {}
+export function trackBodyCheckInCompleted(_domainCount: number, _eventCount: number, _retroactive: boolean) {}
+export function trackBodyEventLogged(_eventType: string) {}
+export function trackBodyBackfillUsed(_daysAgo: number) {}
+export function trackBodySitePickerUsed(_eventType: string) {}

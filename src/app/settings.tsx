@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import BodyCheckIn from '@/components/body/body-check-in';
 import MarkerModal from '@/components/marker-modal';
 import { CalendarIcon, PillIcon, PinIcon } from '@/components/marker-icons';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
@@ -22,17 +23,21 @@ function formatMarkerDate(dateStr: string): string {
   return parseDateString(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// Settings' first real feature: intervention marker CRUD, ported from the
-// web app's Settings marker section + MarkerModal.tsx. Everything else the
-// web Settings screen has (domain toggles, push opt-in, PDF report
-// generation, PIN lock) is still a placeholder note below — this screen
-// only covers markers so far.
+// Settings' real features so far: intervention marker CRUD (ported from
+// the web app's Settings marker section + MarkerModal.tsx) and a body
+// check-in entry point — a deliberately minimal, temporary wiring point
+// for chunk 1 of the body-tracking port (see body-check-in.tsx's own
+// header comment), standing in for the real per-domain toggle sheet
+// (BodyTrackingSheet.tsx) that isn't ported yet. Everything else the web
+// Settings screen has (domain toggles, push opt-in, PDF report
+// generation, PIN lock) is still a placeholder note below.
 export default function SettingsScreen() {
   const { profile, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [markers, setMarkers] = useState<InterventionMarker[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingMarker, setEditingMarker] = useState<InterventionMarker | undefined>(undefined);
+  const [showBodyCheckIn, setShowBodyCheckIn] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -120,7 +125,17 @@ export default function SettingsScreen() {
         }
         ListFooterComponent={
           <View style={styles.footer}>
-            <Text style={styles.footerNote}>Domain toggles, push notifications, PDF report generation, and PIN lock aren’t built yet — this screen only covers markers so far.</Text>
+            <View style={styles.bodySection}>
+              <Text style={styles.sectionLabel}>Body tracking</Text>
+              <Text style={styles.sectionHint}>
+                Alpha — physical symptoms tracked separately from mind check-ins. No Settings toggle to turn this on/off yet; logging is open regardless of profile.body_tracking_enabled.
+              </Text>
+              <Pressable onPress={() => setShowBodyCheckIn(true)} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
+                <Text style={styles.bodyCheckInButtonText}>Log body check-in</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.footerNote}>Domain toggles, push notifications, PDF report generation, and PIN lock aren’t built yet — this screen only covers markers and a body check-in entry point so far.</Text>
             <Pressable onPress={() => signOut()} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>
@@ -137,6 +152,8 @@ export default function SettingsScreen() {
           cycleTrackingEnabled={profile?.cycle_tracking_enabled ?? false}
         />
       )}
+
+      <BodyCheckIn visible={showBodyCheckIn} onClose={() => setShowBodyCheckIn(false)} />
     </SafeAreaView>
   );
 }
@@ -159,6 +176,9 @@ const styles = StyleSheet.create({
   empty: { paddingVertical: 24, alignItems: 'center' },
   emptyText: { fontSize: 13, color: '#4a5568' },
   footer: { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#1e2533', gap: 16 },
+  bodySection: {},
+  bodyCheckInButton: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: 'rgba(188,129,47,0.15)', alignSelf: 'flex-start' },
+  bodyCheckInButtonText: { fontSize: 13, fontWeight: '600', color: '#BC812F' },
   footerNote: { fontSize: 12, color: '#4a5568', lineHeight: 18 },
   signOutButton: { alignItems: 'center', padding: 12 },
   signOutText: { fontSize: 14, color: '#f87171' },
