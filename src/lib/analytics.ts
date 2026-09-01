@@ -36,3 +36,4 @@ export function trackBodyCheckInCompleted(_domainCount: number, _eventCount: num
 export function trackBodyEventLogged(_eventType: string) {}
 export function trackBodyBackfillUsed(_daysAgo: number) {}
 export function trackBodySitePickerUsed(_eventType: string) {}
+export function trackBodyMapOpened() {}

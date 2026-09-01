@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import DomainSlider from '@/components/checkin/domain-slider';
+import BodyMap, { type PainSite } from '@/components/body/body-map';
 import CharacterTags from '@/components/body/character-tags';
 import EventSitePicker, { type EventSite } from '@/components/body/event-site-picker';
 import { useAuth } from '@/contexts/auth-context';
 import {
-  trackBodyBackfillUsed, trackBodyCheckInCompleted, trackBodyCheckInStarted, trackBodyEventLogged,
+  trackBodyBackfillUsed, trackBodyCheckInCompleted, trackBodyCheckInStarted, trackBodyEventLogged, trackBodyMapOpened,
 } from '@/lib/analytics';
 import {
   BODY_DOMAINS, BODY_EARLY_LOG_HOUR, BODY_EARLY_LOG_SENSITIVE_DOMAINS, BODY_EVENT_ORDER, BODY_EVENTS,
@@ -31,18 +32,16 @@ interface Props {
 
 type DomainValues = Partial<Record<BodyDomainType, number>>;
 
-// Chunk 1 of the body-tracking port (see project_rn_rewrite_scoping.md):
-// the evening check-in form — domain sliders, event checklist (with the
-// chip-based EventSitePicker, not the interactive body map), character
-// tags, and a note field. Deliberately NOT ported this chunk: BodyMap
-// (the 528-line interactive front/back pain-site diagram — pain_diffuse
-// and body_pain_sites go with it, both always saved as their empty/false
-// default here), the optional morning check-in, Settings' per-domain
-// toggle sheet, onboarding's body-consent step, and every read side
-// (History/Insights/report) of body data. `activeDomains` currently
-// always resolves to the full CHECKIN_BODY_DOMAIN_ORDER rather than
-// reading profile.body_domains_active, since there's no Settings UI yet
-// to have customized it away from the DB default.
+// The evening check-in form (chunks 1 and 3 of the body-tracking port, see
+// project_rn_body_tracking_scoping.md): domain sliders, the interactive
+// BodyMap pain-site diagram (chunk 3 — closes the last check-in-form gap:
+// pain_diffuse/body_pain_sites, deferred since chunk 1), event checklist
+// (with the chip-based EventSitePicker), character tags, and a note field.
+// Deliberately NOT ported: the optional morning check-in, Settings' real
+// per-domain toggle sheet, onboarding's body-consent step. `activeDomains`
+// currently always resolves to the full CHECKIN_BODY_DOMAIN_ORDER rather
+// than reading profile.body_domains_active, since there's no Settings UI
+// yet to have customized it away from the DB default.
 export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   const { user } = useAuth();
   const [today] = useState(() => todayDateString());
@@ -51,6 +50,8 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   const [loading, setLoading] = useState(true);
   const [checkinId, setCheckinId] = useState<string | null>(null);
   const [values, setValues] = useState<DomainValues>({});
+  const [painDiffuse, setPainDiffuse] = useState(false);
+  const [painSites, setPainSites] = useState<PainSite[]>([]);
   const [painCharacter, setPainCharacter] = useState<string[]>([]);
   const [breathlessnessCharacter, setBreathlessnessCharacter] = useState<string[]>([]);
   const [note, setNote] = useState('');
@@ -77,6 +78,13 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   }, [selectedDate, today]);
 
   useEffect(() => {
+    if ((values.pain_mechanical ?? 0) > 0 || (values.joint_instability ?? 0) > 0) {
+      trackBodyMapOpened();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(values.pain_mechanical ?? 0) > 0 || (values.joint_instability ?? 0) > 0]);
+
+  useEffect(() => {
     if (!user || !visible) return;
     let cancelled = false;
     // Re-synced to true on every selectedDate/visible change, not just once
@@ -98,13 +106,19 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
           if (v !== null && v !== undefined) nextValues[d] = v;
         }
         setValues(nextValues);
+        setPainDiffuse(checkin.pain_diffuse);
         setPainCharacter(checkin.pain_character ?? []);
         setBreathlessnessCharacter(checkin.breathlessness_character ?? []);
         setNote(checkin.note ?? '');
         setNoteExpanded(!!checkin.note);
+
+        const { data: sites } = await supabase.from('body_pain_sites').select('*').eq('body_checkin_id', checkin.id);
+        if (!cancelled) setPainSites((sites ?? []).map(s => ({ region: s.region, side: s.side, aspect: s.aspect })));
       } else {
         setCheckinId(null);
         setValues({});
+        setPainDiffuse(false);
+        setPainSites([]);
         setPainCharacter([]);
         setBreathlessnessCharacter([]);
         setNote('');
@@ -140,6 +154,7 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
     return () => { cancelled = true; };
   }, [user, visible, selectedDate]);
 
+  const showBodyMap = (values.pain_mechanical ?? 0) > 0 || (values.joint_instability ?? 0) > 0;
   const showPainCharacter = (values.pain_mechanical ?? 0) > 0 || (values.pain_widespread ?? 0) > 0;
   const showBreathlessnessCharacter = (values.breathlessness ?? 0) > 0;
   const painCharacterAnchor = activeDomains.includes('pain_widespread')
@@ -173,7 +188,7 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
     const payload: Record<string, unknown> = {
       user_id: user.id,
       entry_date: selectedDate,
-      pain_diffuse: false,
+      pain_diffuse: painDiffuse,
       pain_character: painCharacter.filter(t => PAIN_CHARACTER_TAGS.includes(t)),
       breathlessness_character: breathlessnessCharacter.filter(t => BREATHLESSNESS_CHARACTER_TAGS.includes(t)),
       note: note || null,
@@ -191,6 +206,13 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       const { data: inserted, error: insErr } = await supabase.from('body_checkins').insert(payload).select('id').single();
       if (insErr || !inserted) { setSaving(false); setError('Could not save. Try again.'); return; }
       id = inserted.id;
+    }
+
+    await supabase.from('body_pain_sites').delete().eq('body_checkin_id', id);
+    if (painSites.length > 0) {
+      await supabase.from('body_pain_sites').insert(
+        painSites.map(s => ({ body_checkin_id: id, user_id: user.id, region: s.region, side: s.side, aspect: s.aspect }))
+      );
     }
 
     for (const type of BODY_EVENT_ORDER) {
@@ -298,6 +320,17 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
                 </View>
               </View>
 
+              {showBodyMap && (
+                <View style={styles.mapCard}>
+                  <Text style={styles.mapHint}>Where does it hurt or feel unstable?</Text>
+                  <BodyMap sites={painSites} onChange={setPainSites} />
+                  <Pressable onPress={() => setPainDiffuse(prev => !prev)} style={[styles.diffuseButton, painDiffuse && styles.diffuseButtonActive]}>
+                    <View style={[styles.diffuseCheckbox, painDiffuse && styles.diffuseCheckboxActive]} />
+                    <Text style={[styles.diffuseButtonText, painDiffuse && styles.diffuseButtonTextActive]}>Diffuse: can’t pin it anywhere</Text>
+                  </Pressable>
+                </View>
+              )}
+
               <View style={styles.eventsCard}>
                 <Text style={styles.eventsHint}>Anything happen today?</Text>
                 <View style={styles.eventsList}>
@@ -376,6 +409,14 @@ const styles = StyleSheet.create({
   dateShortcutTextActive: { color: BODY_COLOR },
   slidersCard: { backgroundColor: '#1e2840', borderWidth: 1, borderColor: '#3d4f7a', borderRadius: 20, padding: 24, paddingTop: 28, marginBottom: 16 },
   slidersGroup: { gap: 28 },
+  mapCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
+  mapHint: { fontSize: 13, color: '#718096', marginBottom: 14 },
+  diffuseButton: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, padding: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: '#2d3748' },
+  diffuseButtonActive: { borderWidth: 1.5, borderColor: BODY_COLOR, backgroundColor: `${BODY_COLOR}22` },
+  diffuseCheckbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1.5, borderColor: '#4a5568' },
+  diffuseCheckboxActive: { borderWidth: 0, backgroundColor: BODY_COLOR },
+  diffuseButtonText: { fontSize: 12.5, color: '#8892a4' },
+  diffuseButtonTextActive: { color: BODY_COLOR },
   eventsCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
   eventsHint: { fontSize: 13, color: '#718096', marginBottom: 14 },
   eventsList: { gap: 4 },
