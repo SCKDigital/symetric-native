@@ -160,6 +160,43 @@ export function buildChartCoordinates(
   return { dates, dailyMeans, trackedDomains, chartDomains, domainCoverage, chartMarkers, chartHasEnoughData, currentRollingMedians };
 }
 
+/**
+ * Body's analog of the chartDomains construction above — points mapped over
+ * the report's full `dates` axis (not a body-specific range) so
+ * bodyChartDomains shares the exact same x-axis as mind's chartDomains and
+ * sparklineMarkerXFraction lands correctly for both. Ported from the web
+ * app's generateReport.ts's buildBodyChartDomains, unchanged.
+ *
+ * Unlike buildChartCoordinates' 7-day minimum for chartDomains (a lenient
+ * ~8% bar against a typical 90-day window), no minimum is applied here:
+ * bodyTrackedDomains already means "at least one logged value" (see
+ * computeBodySummaries), and body's logging history is often much shorter —
+ * a required, every-evening domain like exhaustion should still get a row
+ * even with only a handful of days behind it. renderSparklineSvg already
+ * falls back to an empty string for a domain with zero points; a domain
+ * with a few real points now draws an honestly-sparse line instead of not
+ * appearing at all.
+ */
+export function buildBodyChartDomains(
+  bodyDayScores: { date: string; scores: Record<string, number | undefined> }[],
+  bodyTrackedDomains: string[],
+  dates: string[],
+  bodyBaselineMap: Record<string, number>,
+): ChartDomain[] {
+  const scoresByDate = new Map(bodyDayScores.map(d => [d.date, d.scores]));
+  return bodyTrackedDomains.map(domain => {
+    const vals = dates.map(date => scoresByDate.get(date)?.[domain] ?? null).filter((v): v is number => v != null);
+    return {
+      domain,
+      points: dates.map(date => ({ date, value: scoresByDate.get(date)?.[domain] ?? null })),
+      baseline: bodyBaselineMap[domain] ?? 5,
+      dashPattern: '',
+      observedMin: vals.length > 0 ? Math.min(...vals) : 1,
+      observedMax: vals.length > 0 ? Math.max(...vals) : 10,
+    };
+  });
+}
+
 /** Just the sleep-vs-domain half of chartMath.ts's computeConnections — a
  *  simple good-sleep/poor-sleep mean split, not a Pearson correlation, so
  *  it doesn't need the significance-testing math the domain-pairwise half

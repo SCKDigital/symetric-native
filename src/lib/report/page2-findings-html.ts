@@ -79,8 +79,19 @@ export function buildDomainSparklineSectionHtml(params: {
   chartMarkers: ChartMarker[];
   flaggedClusters: DetectedCluster[];
   dates: string[];
+  /** Sparkline line/dot color. Defaults to the mind indigo used on Page 2;
+   *  the Body Overview page passes BODY_COLOR instead. */
+  lineColor?: string;
+  /** Per-domain "is a lower value clinically better" check, used for the
+   *  endpoint dot's deviation color. Defaults to the mind-only LOWER_IS_BETTER
+   *  Set; the Body Overview page passes `() => true` since every body domain
+   *  is a severity scale — see LOWER_IS_BETTER's own comment in theme.ts. */
+  isLowerBetterFn?: (domain: string) => boolean;
 }): string {
-  const { chartDomains, baselineMap, currentRollingMedians, chartHasEnoughData, chartMarkers, flaggedClusters, dates } = params;
+  const {
+    chartDomains, baselineMap, currentRollingMedians, chartHasEnoughData, chartMarkers, flaggedClusters, dates,
+    lineColor = '#818cf8', isLowerBetterFn = (d: string) => LOWER_IS_BETTER.has(d),
+  } = params;
 
   if (!chartHasEnoughData) {
     return `<div class="section-gap"><p class="section-label">Domain sparklines</p><p class="empty-muted">Fewer than 7 days of data - charts omitted.</p></div>`;
@@ -100,8 +111,8 @@ export function buildDomainSparklineSectionHtml(params: {
     let arrow = '→';
     if (current != null && baseline != null && Math.abs(current - baseline) >= 0.3) arrow = current > baseline ? '↑' : '↓';
     const headerColor = current != null && baseline != null && Math.abs(current - baseline) >= 0.5 ? theme.colors.heading : theme.colors.gray;
-    const isLowerBetter = LOWER_IS_BETTER.has(cd.domain);
-    const svg = renderSparklineSvg(cd, dates, '#818cf8', isLowerBetter);
+    const isLowerBetter = isLowerBetterFn(cd.domain);
+    const svg = renderSparklineSvg(cd, dates, lineColor, isLowerBetter);
     return `<div class="spark-cell">
       <div class="spark-header"><span style="color:${headerColor}; font-weight:bold;">${esc(label)} ${arrow}</span><span class="spark-meta">base ${bVal} &middot; now ${cVal}</span></div>
       ${svg || `<div class="spark-no-data">Insufficient data</div>`}

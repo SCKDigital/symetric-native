@@ -22,8 +22,9 @@ interface Props {
 // for exactly what's in Page 1 and what's deferred. This component itself
 // is also scoped down from the web app's GenerateReportSection.tsx: no
 // report-name field (uses the profile name/email as-is), no mind/body/
-// cycle include toggles (mind is the only option until body tracking
-// exists), no copy-as-markdown alternative. Mechanic swap: the web app's
+// cycle include-toggle UI (body content is included automatically whenever
+// the user has body tracking on — see generateReport's bodyTrackingEnabled
+// param), no copy-as-markdown alternative. Mechanic swap: the web app's
 // auto-download anchor click -> expo-print's printToFileAsync followed by
 // the native share sheet (expo-sharing), since there's no browser
 // downloads folder on native to drop a file into.
@@ -59,6 +60,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
         dateTo: toDate,
         clusters,
         appointmentId,
+        bodyTrackingEnabled: profile.body_tracking_enabled ?? false,
       });
       const Sharing = await import('expo-sharing');
       if (await Sharing.isAvailableAsync()) {

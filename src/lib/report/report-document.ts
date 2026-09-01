@@ -128,6 +128,19 @@ export function buildReportDocument(params: {
   .rare-meta { font-size: ${fontSize.small}pt; color: ${colors.muted}; }
   .rare-body { font-size: ${fontSize.small}pt; color: ${colors.body}; line-height: 1.4; margin: 0 0 2pt; }
 
+  .event-table-header-row { display: flex; border-bottom: 1pt solid ${colors.heading}; padding-bottom: 2pt; margin-bottom: 1pt; }
+  .event-table-row { display: flex; border-bottom: 0.5pt solid ${colors.border}; padding: 3pt 0; }
+  .event-col-date { width: 56pt; font-size: ${fontSize.small}pt; color: ${colors.muted}; }
+  .event-col-date-h { width: 56pt; font-weight: bold; font-size: 7pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; }
+  .event-col-type { width: 130pt; font-size: ${fontSize.small}pt; color: ${colors.heading}; }
+  .event-col-type-h { width: 130pt; font-weight: bold; font-size: 7pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; }
+  .event-col-detail { flex: 1; font-size: ${fontSize.small}pt; color: ${colors.muted}; }
+  .event-col-detail-h { flex: 1; font-weight: bold; font-size: 7pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; }
+
+  .site-row { display: flex; justify-content: space-between; padding: 3pt 0; border-bottom: 0.5pt solid ${colors.border}; }
+  .site-label { font-size: ${fontSize.small}pt; color: ${colors.body}; }
+  .site-count { font-weight: bold; font-size: ${fontSize.small}pt; color: ${colors.body}; }
+
   .explainer-box { border-left: 2pt solid ${colors.border}; padding: 6pt 0 6pt 8pt; margin-top: 8pt; }
   .explainer-title { font-weight: bold; font-size: ${fontSize.small}pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; margin: 0 0 3pt; }
   .explainer-text { font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.45; margin: 0; }

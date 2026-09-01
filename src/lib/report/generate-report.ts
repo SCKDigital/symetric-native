@@ -4,21 +4,26 @@ import { detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
 import { detectLagRelationships } from '@/lib/detection/lag-relationships';
 import { detectPatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents } from '@/lib/detection/rare-events';
+import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
+import { dailyBodyValue } from '@/lib/detection/body-daily-value';
 import type { CircadianPattern } from '@/lib/circadian-detection';
 import { resolveActiveDomains } from '@/lib/domains';
 import { median } from '@/lib/baseline-stats';
 import { calculateSortWeight } from '@/lib/priority-scoring';
+import { isBodyDomain } from '@/lib/pattern-findings';
 import { fetchQuestionsForAppointment } from '@/lib/api/questions';
 import { fetchPatternReviewsForAppointment } from '@/lib/api/pattern-reviews';
-import { buildChartCoordinates, computeDomainConnections, computeSleepConnections } from '@/lib/report/chart-coordinates';
+import { buildBodyChartDomains, buildChartCoordinates, computeDomainConnections, computeSleepConnections } from '@/lib/report/chart-coordinates';
+import { buildBodyOverviewHtml } from '@/lib/report/page-body-overview-html';
 import { buildContextConnectionsHtml } from '@/lib/report/page-context-connections-html';
 import { buildDataQualityHtml } from '@/lib/report/page-data-quality-html';
 import { buildPage1BodyHtml } from '@/lib/report/page1-html';
 import { buildPage2Html } from '@/lib/report/page2-html';
+import { computeBodySiteFrequency, computeBodySummaries, buildBodyEventOccurrences } from '@/lib/report/body-summary';
 import { buildReportDocument } from '@/lib/report/report-document';
 import { computeWeeklyCompletion } from '@/lib/report/weekly-completion';
 import { supabase } from '@/lib/supabase';
-import type { DetectedCluster, PrepareQuestion } from '@/lib/supabase';
+import type { BodyDomainType, DetectedCluster, PrepareQuestion } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
 export interface GenerateReportInput {
@@ -27,10 +32,36 @@ export interface GenerateReportInput {
   dateFrom: string;
   dateTo: string;
   /** Unfiltered — every cluster (mind or body) in range, same as the web
-   *  app's own `clusters` prop; this port only ever reads mind-domain ones
-   *  since body tracking isn't ported yet. */
+   *  app's own `clusters` prop. Split into mind-only/body-only internally
+   *  via isBodyDomain, matching web's mindClusters/bodyClusters split. */
   clusters: DetectedCluster[];
   appointmentId?: string;
+  /** Gates the body_checkins/body_events/body_pain_sites fetches and the
+   *  conditional Body Overview page. There's no report-level include-body
+   *  toggle on native yet (see this file's own header comment), so the
+   *  caller just passes profile.body_tracking_enabled straight through —
+   *  the report includes body content whenever the user tracks it, same
+   *  end result as the web app's default (includeBody defaults false only
+   *  because web's caller has its own opt-in checkbox to thread through). */
+  bodyTrackingEnabled?: boolean;
+}
+
+// Mirrors insights.tsx's buildBodyDays/bodyBaselineMap recipe, but scoped to
+// the report's own date-range rows (bodyCheckIns) rather than a separate
+// 90-day lookback — consistent with how the mind-side detectors in this
+// file already only see the report's own checkIns/sleepLogs range. Ported
+// from the web app's generateReport.ts's buildBodyDayScores, unchanged.
+function buildBodyDayScores(rows: Record<string, unknown>[], domains: BodyDomainType[]): { date: string; scores: Partial<Record<BodyDomainType, number>> }[] {
+  return rows
+    .map(entry => {
+      const scores: Partial<Record<BodyDomainType, number>> = {};
+      for (const d of domains) {
+        const v = dailyBodyValue(entry, d);
+        if (v !== null) scores[d] = v;
+      }
+      return { date: entry.entry_date as string, scores };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /**
@@ -49,14 +80,31 @@ export interface GenerateReportInput {
  * web version's auto-download anchor click (there's no browser download
  * folder on native to drop a file into). NOT ported yet: report name
  * field (uses profile.report_display_name / display_name / email
- * directly, no in-place edit), mind/body/cycle include toggles (mind is
- * the only option until body tracking exists), copy-as-markdown,
+ * directly, no in-place edit), a mind/body/cycle include-toggle UI (body
+ * content is included automatically whenever bodyTrackingEnabled is
+ * passed true — see GenerateReportInput's own comment), copy-as-markdown,
  * cycle-day computation, and persisted domain connections (the "held
  * steady across two windows" annotation on the connections table —
  * sourced from the weekly-cron domain_connections table, not ported).
+ *
+ * Body Overview (a later pass, after body tracking + its own Insights
+ * detector sub-series both shipped): a third page, inserted between Mind
+ * Overview and Context & Connections whenever there's body content in
+ * range (hasBodyContent below, mirroring the web app's SymetricReport.tsx
+ * gate) — domain sparklines, a dated event table, a ranked pain/instability
+ * site list, and body-only rare-event/pattern-evolution detection, reusing
+ * page2-findings-html.ts's already-generic section builders. Page 1's own
+ * "Mind domain summary"/"Patterns detected" sections stay mind-only for
+ * now — folding body clusters/findings into that ranked list is a real,
+ * separable follow-up (same scope boundary as insights.tsx's own deferred
+ * mind+body day-score merge for day-of-week/lag/medication detection), not
+ * done this pass. flaggedClusters IS now correctly split into mind-only/
+ * body-only (previously unfiltered — see the split below), fixing a latent
+ * bug where a flagged body cluster could have leaked into the mind-only
+ * Page 1/Page 2 sections with an unlabelled domain key.
  */
 export async function generateReport(input: GenerateReportInput): Promise<{ uri: string }> {
-  const { userId, userName, dateFrom, dateTo, clusters, appointmentId } = input;
+  const { userId, userName, dateFrom, dateTo, clusters, appointmentId, bodyTrackingEnabled = false } = input;
 
   const [
     { data: checkIns },
@@ -68,6 +116,8 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     { data: circadianPatterns },
     patternReviews,
     questions,
+    { data: bodyCheckInsRaw },
+    { data: bodyEventsRaw },
   ] = await Promise.all([
     supabase.from('check_ins').select('*').eq('user_id', userId).eq('status', 'completed')
       .gte('scheduled_at', dateFrom + 'T00:00:00Z').lte('scheduled_at', dateTo + 'T23:59:59Z')
@@ -92,7 +142,25 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
       .gte('detection_window_end', dateFrom).lte('detection_window_start', dateTo),
     appointmentId ? fetchPatternReviewsForAppointment(appointmentId).catch(() => []) : Promise.resolve([]),
     appointmentId ? fetchQuestionsForAppointment(appointmentId).catch(() => []) : Promise.resolve([]),
+    bodyTrackingEnabled
+      ? supabase.from('body_checkins').select('*').eq('user_id', userId).gte('entry_date', dateFrom).lte('entry_date', dateTo).order('entry_date', { ascending: true })
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    bodyTrackingEnabled
+      ? supabase.from('body_events').select('*, body_event_sites(*)').eq('user_id', userId).gte('event_date', dateFrom).lte('event_date', dateTo)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
+
+  // body_pain_sites has no date column of its own (only body_checkin_id) —
+  // fetch it as a follow-up query keyed off the check-ins already fetched,
+  // then join entry_date on locally. The ranked site-frequency list needs a
+  // date per site to count distinct days. Ported from the web app's
+  // GenerateReportSection.tsx, unchanged.
+  const bodyCheckInIds = (bodyCheckInsRaw ?? []).map(c => c.id as string);
+  const { data: bodyPainSitesRaw } = bodyTrackingEnabled && bodyCheckInIds.length > 0
+    ? await supabase.from('body_pain_sites').select('*').in('body_checkin_id', bodyCheckInIds)
+    : { data: [] as Record<string, unknown>[] };
+  const entryDateByCheckInId = new Map((bodyCheckInsRaw ?? []).map(c => [c.id as string, c.entry_date as string]));
+  const bodyPainSites = (bodyPainSitesRaw ?? []).map(site => ({ ...site, entry_date: entryDateByCheckInId.get(site.body_checkin_id as string) })) as any[];
 
   const activeDomains = resolveActiveDomains(settings);
   const markers = (markersData ?? []) as InterventionMarker[];
@@ -108,9 +176,15 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // the type doesn't guarantee it) — default to '' so an untyped edge case
   // just sorts last rather than throwing.
   const sortWeight = (c: DetectedCluster) => calculateSortWeight({ ...c, cluster_type: c.cluster_type ?? '' });
-  const flaggedClusters = clusters
-    .filter(c => c.flagged_for_report === true || reviewMap[c.id]?.should_discuss === true)
-    .sort((a, b) => sortWeight(b) - sortWeight(a));
+  const flagFilter = (c: DetectedCluster) => c.flagged_for_report === true || reviewMap[c.id]?.should_discuss === true;
+  // `clusters` mixes mind- and body-domain rows indiscriminately (see
+  // fetchClustersForDateRange) — split by domain before filtering so a
+  // body-domain cluster the patient marked "should discuss" can never leak
+  // into the mind-only flaggedClusters list with an unlabelled domain key.
+  const mindClusters = clusters.filter(c => !isBodyDomain((c.domains_involved ?? [])[0] ?? ''));
+  const bodyClustersRaw = bodyTrackingEnabled ? clusters.filter(c => isBodyDomain((c.domains_involved ?? [])[0] ?? '')) : [];
+  const flaggedClusters = mindClusters.filter(flagFilter).sort((a, b) => sortWeight(b) - sortWeight(a));
+  const bodyFlaggedClusters = bodyClustersRaw.filter(flagFilter).sort((a, b) => sortWeight(b) - sortWeight(a));
 
   const dayOfWeekPatterns = detectDayOfWeekPatterns(dayScores, activeDomains);
   const lagRelationships = detectLagRelationships(dayScores, activeDomains);
@@ -134,11 +208,49 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const sleepHours = (sleepLogs ?? []).map(s => s.hours_slept).filter((v): v is number => v != null);
   const sleepMedianHours = sleepHours.length > 0 ? median(sleepHours) : null;
 
-  // Fixed for now — no conditional pages (e.g. Body Overview) exist yet, so
-  // the methodology page is always page 4. Revisit once a page's presence
-  // becomes conditional, the way the web app's own methPageNum/totalPages
-  // computation in SymetricReport.tsx accounts for hasBodyContent.
-  const methodologyPageNum = 4;
+  // ── Body tracking ──────────────────────────────────────────────────────
+  // Scoped to the report's own date-range rows, same as every mind-side
+  // detector call above — not a separate 90-day lookback, matching the web
+  // app's own generateReport.ts comment on this exact choice.
+
+  const bodySummary = computeBodySummaries(bodyCheckInsRaw ?? [], bodyEventsRaw ?? []);
+  const bodyTrackedDomains = bodySummary.domains.map(d => d.domain) as BodyDomainType[];
+  const bodyDayScores = buildBodyDayScores(bodyCheckInsRaw ?? [], bodyTrackedDomains);
+
+  const bodyBaselineMap: Record<string, number> = {};
+  for (const d of bodyTrackedDomains) {
+    const history = bodyDayScores.map(bd => bd.scores[d]).filter((v): v is number => v !== undefined);
+    bodyBaselineMap[d] = rollingBodyBaseline(history);
+  }
+
+  const bodyPatternEvolution = detectPatternEvolution(bodyDayScores, bodyTrackedDomains, bodyBaselineMap);
+  const bodyRareEvents = detectRareEvents(bodyDayScores, bodyTrackedDomains, bodyBaselineMap);
+  // Not computed this pass: detectBodyTimeOfDayPatterns/detectBodyEventFrequency/
+  // detectBodyEventImpacts. On the web app these three only ever feed Page 1's
+  // unified findings ranking (reportFindings.tsx's allFindings) — Page 3 itself
+  // never renders them directly. Page 1 stays mind-only this pass (see this
+  // file's header comment), so there's nothing yet to consume their output;
+  // add them back alongside whichever chunk gives Page 1 body-awareness.
+
+  const bodyCurrentRollingMedians: Record<string, number> = {};
+  for (const domain of bodyTrackedDomains) {
+    const vals = bodyDayScores.map(bd => bd.scores[domain]).filter((v): v is number => v != null);
+    if (vals.length > 0) bodyCurrentRollingMedians[domain] = median(vals);
+  }
+  const bodyChartDomains = buildBodyChartDomains(bodyDayScores as any, bodyTrackedDomains, coords.dates, bodyBaselineMap);
+  const bodyChartHasEnoughData = coords.dates.length >= 7 && bodyChartDomains.some(cd => cd.points.filter(p => p.value != null).length >= 7);
+
+  const bodyEventOccurrences = buildBodyEventOccurrences(bodyEventsRaw as any ?? [], bodyCheckInsRaw ?? []);
+  const bodySiteFrequency = computeBodySiteFrequency(bodyPainSites, bodyEventsRaw as any ?? []);
+
+  const hasBodyContent = bodySummary.domains.length > 0 || bodySummary.events.length > 0;
+
+  // Page count/numbering shifts by one whenever Body Overview is present,
+  // mirroring the web app's SymetricReport.tsx hasBodyContent-aware
+  // methPageNum/totalPages computation. buildReportDocument derives
+  // totalPages from pages.length itself, so only methodologyPageNum (used
+  // by Page 1's "Methodology on page N" footnote) needs computing here.
+  const methodologyPageNum = hasBodyContent ? 5 : 4;
 
   const page1Body = buildPage1BodyHtml({
     userName,
@@ -177,6 +289,21 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     lagRelationships,
   });
 
+  const bodyOverviewBody = hasBodyContent ? buildBodyOverviewHtml({
+    bodyChartDomains,
+    bodyBaselineMap,
+    bodyCurrentRollingMedians,
+    bodyChartHasEnoughData,
+    bodyEventOccurrences,
+    bodySiteFrequency,
+    bodyFlaggedClusters,
+    chartMarkers: coords.chartMarkers,
+    dates: coords.dates,
+    interventionImpacts,
+    bodyRareEvents,
+    bodyPatternEvolution,
+  }) : null;
+
   const contextConnectionsBody = buildContextConnectionsHtml({
     dayOfWeekPatterns,
     circadianPatterns: (circadianPatterns ?? []) as CircadianPattern[],
@@ -195,6 +322,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     pages: [
       { sectionTitle: 'Executive Summary', bodyHtml: page1Body },
       { sectionTitle: 'Mind Overview', bodyHtml: page2Body },
+      ...(bodyOverviewBody != null ? [{ sectionTitle: 'Body Overview', bodyHtml: bodyOverviewBody }] : []),
       { sectionTitle: 'Context & Connections', bodyHtml: contextConnectionsBody },
       { sectionTitle: 'Data Quality & Methodology', bodyHtml: dataQualityBody },
     ],
