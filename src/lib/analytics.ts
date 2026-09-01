@@ -19,3 +19,5 @@ export function trackOnboardingCompleted(_durationSeconds: number, _domainCount:
 export function trackCheckInCompleted(_domainCount: number) {}
 export function trackPrepareTabOpened() {}
 export function trackAppointmentCreated(_daysUntil: number) {}
+export function trackPatternMarkedForDiscussion() {}
+export function trackPatternNoteAdded() {}

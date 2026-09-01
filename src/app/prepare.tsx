@@ -3,23 +3,48 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AppointmentContext from '@/components/prepare/appointment-context';
+import DateRangeControl from '@/components/prepare/date-range-control';
 import PastAppointmentsSection from '@/components/prepare/past-appointments-section';
+import PatternReviewSection from '@/components/prepare/pattern-review-section';
 import PrepareInfoSheet from '@/components/prepare/prepare-info-sheet';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchUpcomingAppointment } from '@/lib/api/appointments';
+import { fetchUpcomingAppointment, fetchAllAppointments } from '@/lib/api/appointments';
 import { trackPrepareTabOpened } from '@/lib/analytics';
-import type { Appointment } from '@/lib/supabase';
+import { fetchClustersForDateRange } from '@/lib/cluster-detection';
+import { addDays, todayDateString } from '@/lib/date-utils';
+import { clusterFindings, type PatternFinding } from '@/lib/pattern-findings';
+import { defaultRangeForPreset, loadSavedRange, saveRange, type PrepareRange } from '@/lib/prepare-range';
+import { fetchMarkers } from '@/lib/queries/markers';
+import type { Appointment, DetectedCluster } from '@/lib/supabase';
+import type { InterventionMarker } from '@/types/marker';
 
-// Chunk 1 of the Prepare tab port (of the web app's PrepareScreen.tsx +
-// prepare/*.tsx, ~2,600 lines across 11 sub-components). This chunk covers
-// the appointment CRUD core: setting/editing/removing the next appointment,
-// and the past-appointments list. NOT ported yet: the date-range control,
-// pattern review (should-discuss/notes on detected clusters), the
-// auto-generated + custom question list (with priority reordering),
-// notable-changes summary, PDF report generation, and the post-appointment
-// completion flow — each is its own later chunk. Until then, once an
-// appointment is set, a placeholder note stands in for those sections.
+function CollapsedPatternsRow({ count, onExpand }: { count: number; onExpand: () => void }) {
+  return (
+    <Pressable onPress={onExpand} style={styles.collapsedRow}>
+      <View style={styles.collapsedLeft}>
+        <Text style={styles.collapsedLabel}>Patterns</Text>
+        {count > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{count}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={styles.chevron}>▼</Text>
+    </Pressable>
+  );
+}
+
+// Chunk 2 of the Prepare tab port. Adds the date-range control and pattern
+// review (should-discuss checkboxes + notes on detected clusters), on top
+// of chunk 1's appointment CRUD core. Findings are cluster-only for now —
+// the web app's PrepareScreen also mixes in sleepConnectionFindings, but
+// that detector (sleep_symptom_connections weekly cadence) isn't ported to
+// native yet, same deferral noted in pattern-findings.ts since Insights
+// chunk 1. STILL NOT ported: the auto-generated + custom question list
+// (with priority reordering), notable-changes summary, PDF report
+// generation, and the post-appointment completion flow — each is its own
+// later chunk, standing in behind a placeholder note.
 export default function PrepareScreen() {
   const { user } = useAuth();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
@@ -27,6 +52,14 @@ export default function PrepareScreen() {
   const [loaded, setLoaded] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [pastRefresh, setPastRefresh] = useState(0);
+
+  const [range, setRange] = useState<PrepareRange>(() => defaultRangeForPreset('30'));
+  const [rangeReady, setRangeReady] = useState(false);
+  const [patternsOpen, setPatternsOpen] = useState(false);
+  const [allClusters, setAllClusters] = useState<DetectedCluster[]>([]);
+  const [clustersLoaded, setClustersLoaded] = useState(false);
+  const [lastVisitDate, setLastVisitDate] = useState<string | null>(null);
+  const [markers, setMarkers] = useState<InterventionMarker[]>([]);
 
   const loadAppointment = useCallback(async () => {
     if (!user) return;
@@ -53,7 +86,42 @@ export default function PrepareScreen() {
     loadAppointment();
   }, [loadAppointment]);
 
+  useEffect(() => {
+    if (!user) return;
+    loadSavedRange(user.id).then(saved => {
+      setRange(saved);
+      setRangeReady(true);
+    });
+  }, [user]);
+
+  const handleRangeChange = useCallback((r: PrepareRange) => {
+    setRange(r);
+    setPatternsOpen(false);
+    if (user) saveRange(user.id, r);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const todayStr = todayDateString();
+    const from = addDays(todayStr, -90);
+    fetchClustersForDateRange(user.id, from, todayStr)
+      .then(data => setAllClusters(data ?? []))
+      .catch(console.error)
+      .finally(() => setClustersLoaded(true));
+
+    fetchAllAppointments(user.id).then(all => {
+      const completed = all.filter(a => a.is_completed).sort((a, b) => b.appointment_date.localeCompare(a.appointment_date));
+      setLastVisitDate(completed[0]?.appointment_date ?? null);
+    }).catch(() => {});
+
+    fetchMarkers().then(setMarkers).catch(() => {});
+  }, [user]);
+
   if (loading) return <PulseLoadingScreen />;
+
+  const rangeClusters = allClusters.filter(c => c.start_date <= range.end && (c.ongoing || !c.end_date || c.end_date >= range.start));
+  const findings: PatternFinding[] = clusterFindings(rangeClusters, todayDateString());
+  const mostRecentMarker = [...markers].sort((a, b) => b.marker_date.localeCompare(a.marker_date))[0] ?? null;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -70,11 +138,30 @@ export default function PrepareScreen() {
         {user && <PastAppointmentsSection userId={user.id} refreshKey={pastRefresh} />}
 
         {appointment ? (
-          <View style={styles.placeholderCard}>
-            <Text style={styles.placeholderText}>
-              Pattern review, your question list, notable changes, and PDF report generation aren&rsquo;t built yet — this screen only covers your appointment so far.
-            </Text>
-          </View>
+          <>
+            {rangeReady && (
+              <DateRangeControl range={range} onChange={handleRangeChange} lastVisitDate={lastVisitDate} mostRecentMarker={mostRecentMarker} />
+            )}
+
+            {clustersLoaded && (
+              patternsOpen ? (
+                <View>
+                  <PatternReviewSection appointmentId={appointment.id} findings={findings} />
+                  <Pressable onPress={() => setPatternsOpen(false)} style={styles.collapseButton}>
+                    <Text style={styles.collapseButtonText}>↑ Collapse patterns</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <CollapsedPatternsRow count={findings.length} onExpand={() => setPatternsOpen(true)} />
+              )
+            )}
+
+            <View style={styles.placeholderCard}>
+              <Text style={styles.placeholderText}>
+                Your question list, notable changes, and PDF report generation aren&rsquo;t built yet — this screen only covers your appointment and patterns so far.
+              </Text>
+            </View>
+          </>
         ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyEmoji}>📅</Text>
@@ -98,6 +185,14 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   heading: { fontSize: 26, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.6 },
   infoIcon: { fontSize: 18, color: '#4a5568' },
+  collapsedRow: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  collapsedLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  collapsedLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9 },
+  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: 'rgba(129,140,248,0.15)', borderRadius: 20 },
+  countBadgeText: { fontSize: 11, fontWeight: '600', color: '#818cf8' },
+  chevron: { fontSize: 10, color: '#6b7a99' },
+  collapseButton: { paddingVertical: 12, paddingBottom: 16 },
+  collapseButtonText: { fontSize: 12, color: '#4a5568' },
   placeholderCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
   placeholderText: { fontSize: 13, color: '#4a5568', lineHeight: 19 },
   emptyCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 28, paddingHorizontal: 24, alignItems: 'center' },

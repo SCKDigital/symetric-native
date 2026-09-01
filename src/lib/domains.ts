@@ -71,6 +71,12 @@ export const DOMAIN_COLORS: Record<string, string> = {
 
 export const BRAND_COLOR = '#818CF8';
 
+/** The body-domain accent (also reused as the app tint in theme.ts) and the
+ *  neutral color used for mind-area labels/badges outside a check-in
+ *  context. Ported from the web app's src/utils/domainColors.ts. */
+export const BODY_COLOR = '#BC812F';
+export const MIND_AREA_COLOR = '#e2e8f0';
+
 const SIMPLIFIED_COLOR = BRAND_COLOR;
 
 export function getDomainColor(domain: string, simplifiedMode = false): string {
