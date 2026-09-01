@@ -37,3 +37,4 @@ export function trackBodyEventLogged(_eventType: string) {}
 export function trackBodyBackfillUsed(_daysAgo: number) {}
 export function trackBodySitePickerUsed(_eventType: string) {}
 export function trackBodyMapOpened() {}
+export function trackBodyMorningCheckInCompleted(_domainCount: number, _retroactive: boolean) {}

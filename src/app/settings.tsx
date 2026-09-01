@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BodyCheckIn from '@/components/body/body-check-in';
 import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
+import MorningBodyCheckIn from '@/components/body/morning-body-check-in';
 import MarkerModal from '@/components/marker-modal';
 import { CalendarIcon, PillIcon, PinIcon } from '@/components/marker-icons';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
@@ -35,9 +36,11 @@ function formatMarkerDate(dateStr: string): string {
 // replacing the temporary "auto-enable on first check-in" wiring from
 // earlier chunks), domain toggle pills + timing sheet
 // (use-body-tracking-settings.ts/BodyTrackingSheet, ported from the web
-// app's useBodyTrackingSettings.ts/BodyTrackingSheet.tsx), and the check-in
-// entry point itself. Everything else the web Settings screen has (push
-// opt-in, PDF report generation, PIN lock) is still a placeholder note below.
+// app's useBodyTrackingSettings.ts/BodyTrackingSheet.tsx), and both check-in
+// entry points (evening, and — chunk 5, gated on body_morning_enabled —
+// the optional morning check-in). Everything else the web Settings screen
+// has (push opt-in, PDF report generation, PIN lock) is still a
+// placeholder note below.
 export default function SettingsScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -45,6 +48,7 @@ export default function SettingsScreen() {
   const [showModal, setShowModal] = useState(false);
   const [editingMarker, setEditingMarker] = useState<InterventionMarker | undefined>(undefined);
   const [showBodyCheckIn, setShowBodyCheckIn] = useState(false);
+  const [showMorningCheckIn, setShowMorningCheckIn] = useState(false);
   const [showBodyTrackingSheet, setShowBodyTrackingSheet] = useState(false);
   const [bodyToggleError, setBodyToggleError] = useState<string | null>(null);
 
@@ -183,9 +187,16 @@ export default function SettingsScreen() {
                     </Text>
                   </Pressable>
 
-                  <Pressable onPress={() => setShowBodyCheckIn(true)} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
-                    <Text style={styles.bodyCheckInButtonText}>Log body check-in</Text>
-                  </Pressable>
+                  <View style={styles.bodyButtonRow}>
+                    <Pressable onPress={() => setShowBodyCheckIn(true)} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
+                      <Text style={styles.bodyCheckInButtonText}>Log body check-in</Text>
+                    </Pressable>
+                    {bodyMorningEnabled && (
+                      <Pressable onPress={() => setShowMorningCheckIn(true)} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
+                        <Text style={styles.bodyCheckInButtonText}>Log morning check-in</Text>
+                      </Pressable>
+                    )}
+                  </View>
                 </>
               )}
             </View>
@@ -209,6 +220,7 @@ export default function SettingsScreen() {
       )}
 
       <BodyCheckIn visible={showBodyCheckIn} onClose={() => setShowBodyCheckIn(false)} />
+      <MorningBodyCheckIn visible={showMorningCheckIn} onClose={() => setShowMorningCheckIn(false)} />
 
       {showBodyTrackingSheet && (
         <BodyTrackingSheet
@@ -257,6 +269,7 @@ const styles = StyleSheet.create({
   bodyTimingRow: { paddingVertical: 6 },
   bodyTimingLabel: { fontSize: 11, color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
   bodyTimingValue: { fontSize: 13, color: '#8892a4' },
+  bodyButtonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   bodyCheckInButton: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: 'rgba(188,129,47,0.15)', alignSelf: 'flex-start' },
   bodyCheckInButtonText: { fontSize: 13, fontWeight: '600', color: '#BC812F' },
   footerNote: { fontSize: 12, color: '#4a5568', lineHeight: 18 },
