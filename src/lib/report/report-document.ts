@@ -145,6 +145,19 @@ export function buildReportDocument(params: {
   .callout-text { font-size: ${fontSize.small}pt; color: ${colors.amber}; line-height: 1.4; margin: 0; }
 
   .meth-text { font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.55; margin: 0 0 8pt; }
+
+  .two-col { display: flex; gap: 12pt; margin-bottom: 4pt; }
+  .chart-col { flex: 1; }
+  .chart-title { font-weight: bold; font-size: 8pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.4pt; margin: 0 0 3pt; }
+  .chart-note { margin-top: 3pt; }
+  .chart-empty { display: flex; align-items: center; justify-content: center; height: 80pt; }
+
+  .connections-table { width: 100%; border-collapse: collapse; }
+  .connections-table th { text-align: left; font-weight: bold; font-size: 7pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; border-bottom: 1pt solid ${colors.heading}; padding-bottom: 3pt; }
+  .connections-table td { font-size: ${fontSize.small}pt; padding: 4pt 0; border-bottom: 0.5pt solid ${colors.border}; }
+  .col-pair { width: 200pt; color: ${colors.heading}; }
+  .col-dir { color: ${colors.body}; }
+  .col-n { width: 60pt; text-align: right; color: ${colors.muted}; }
 </style>
 </head>
 <body>${pagesHtml}</body>

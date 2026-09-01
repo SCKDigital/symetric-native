@@ -1,15 +1,14 @@
 import { median } from '@/lib/baseline-stats';
 import { getDatesInRange } from '@/lib/date-utils';
+import { computeRawConnection } from '@/lib/detection/compute-connection';
 import { DOMAIN_ORDER } from '@/lib/domains';
 import type { CheckIn, SleepLog } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
 // Scoped port of the web app's lib/report/chartMath.ts — buildChartCoordinates
-// (unchanged math) plus just the sleep half of computeConnections (the
-// domain-pairwise-correlation half needs the significance-testing math from
-// detection/computeConnection.ts, which isn't ported — domain connections
-// live on the report's Context & Connections page, a later chunk than this
-// one, not Mind Overview).
+// and both halves of computeConnections (unchanged math). The domain-pairwise
+// half needs detection/compute-connection.ts's significance-testing math,
+// ported alongside this in report chunk 4.
 
 const DASH_PATTERNS = ['', '5,3', '2,3', '5,3,2,3'];
 
@@ -38,6 +37,13 @@ export interface DomainCoverage {
 export interface SleepConnection {
   domain: string;
   observation: string;
+}
+
+export interface DomainConnection {
+  domainA: string;
+  domainB: string;
+  direction: 'positive' | 'negative';
+  n: number; // overlapping check-in count
 }
 
 type DailyMeans = Record<string, Record<string, number | null>>;
@@ -177,4 +183,27 @@ export function computeSleepConnections(dates: string[], dailyMeans: DailyMeans,
     sleep.push({ domain: domainKey, observation: diff > 0 ? 'Tends to be lower after poor sleep' : 'Tends to be higher after poor sleep' });
   });
   return sleep;
+}
+
+/** The domain-pairwise half of chartMath.ts's computeConnections — Pearson
+ *  correlation gated by detection/compute-connection.ts's overlap/
+ *  significance thresholds. */
+export function computeDomainConnections(dates: string[], dailyMeans: DailyMeans, trackedDomains: string[]): DomainConnection[] {
+  const nonSleep = trackedDomains.filter(d => d !== 'sleep');
+  const domain: DomainConnection[] = [];
+  for (let i = 0; i < nonSleep.length; i++) {
+    for (let j = i + 1; j < nonSleep.length; j++) {
+      const a = nonSleep[i]; const b = nonSleep[j];
+      const xs: number[] = []; const ys: number[] = [];
+      dates.forEach(date => {
+        const va = dailyMeans[date]?.[a]; const vb = dailyMeans[date]?.[b];
+        if (va != null && vb != null) { xs.push(va); ys.push(vb); }
+      });
+      const raw = computeRawConnection(xs, ys);
+      if (raw.direction !== 'none') {
+        domain.push({ domainA: a, domainB: b, direction: raw.direction === 'together' ? 'positive' : 'negative', n: xs.length });
+      }
+    }
+  }
+  return domain;
 }

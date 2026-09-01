@@ -1,5 +1,6 @@
 import { interventionImpactFindings, type Grade, type PatternFinding } from '@/lib/pattern-findings';
 import { patternEvolutionHeadline, patternEvolutionStatLine } from '@/lib/report/chart-utils';
+import type { DomainConnection } from '@/lib/report/chart-coordinates';
 import { DOMAIN_LABELS, LOWER_IS_BETTER, theme } from '@/lib/report/theme';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
@@ -10,18 +11,18 @@ import type { CircadianPattern } from '@/lib/circadian-detection';
 import type { DetectedCluster } from '@/lib/supabase';
 
 // Scoped port of the web app's lib/report/sections/reportFindings.tsx —
-// only buildUnifiedFindings' mind-domain sections (clusters, lag
-// relationships, day-of-week, circadian, rare events, pattern evolution,
-// medication impact) plus the small color/label helpers Page 1 needs.
-// Domain connections (section 2 in the web source) are omitted — that
-// needs buildChartCoordinates/computeConnections from chartUtils.ts,
-// deferred to a later report chunk. Every body-domain section (10) is
-// omitted entirely, same mind-only scoping as the rest of this port.
-// NOT ported yet: DomainSummaryTable/BodySummaryTable/PatternCard/
-// EpisodeTimeline/RareEventsSection/DomainSparklineSection as reusable
-// components — Page 1's HTML template in generate-report.ts inlines the
-// small pieces of this it needs directly, since there's no @react-pdf/
-// renderer component tree here, just an HTML string for expo-print.
+// only buildUnifiedFindings' mind-domain sections (clusters, domain
+// connections, lag relationships, day-of-week, circadian, rare events,
+// pattern evolution, medication impact) plus the small color/label helpers
+// Page 1 needs. Domain connections were deferred through report chunk 3,
+// ported alongside chart-coordinates.ts's computeDomainConnections in
+// chunk 4. Every body-domain section (10) is omitted entirely, same
+// mind-only scoping as the rest of this port. NOT ported yet:
+// DomainSummaryTable/BodySummaryTable/PatternCard/EpisodeTimeline/
+// RareEventsSection/DomainSparklineSection as reusable components — each
+// page's HTML template inlines the small pieces of this it needs
+// directly, since there's no @react-pdf/renderer component tree here,
+// just an HTML string for expo-print.
 
 export type Tier = 'high' | 'moderate' | 'early';
 
@@ -79,6 +80,7 @@ export function plainPatternHeadline(cluster: DetectedCluster): string {
 
 export interface UnifiedFindingsInput {
   flaggedClusters: DetectedCluster[];
+  domainConnections: DomainConnection[];
   lagRelationships: LagRelationship[];
   dayOfWeekPatterns: DayOfWeekPattern[];
   circadianPatterns: CircadianPattern[];
@@ -114,6 +116,21 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
       sortKey: c.severity_score ?? 0,
       domains: c.domains_involved ?? [],
       kind: plainPatternHeadline(c).split(' - ')[1] ?? 'Pattern detected',
+    });
+  }
+
+  for (let i = 0; i < data.domainConnections.length; i++) {
+    const c = data.domainConnections[i];
+    const domA = DOMAIN_LABELS[c.domainA] ?? c.domainA;
+    const domB = DOMAIN_LABELS[c.domainB] ?? c.domainB;
+    findings.push({
+      id: `connection:${i}`,
+      tier: 'moderate',
+      headline: `${domA} & ${domB} - ${c.direction === 'positive' ? 'move together' : 'move inversely'}`,
+      statLine: `${c.n} overlapping check-ins · above correlation threshold`,
+      sortKey: c.n,
+      domains: [c.domainA, c.domainB],
+      kind: 'Domain connection',
     });
   }
 

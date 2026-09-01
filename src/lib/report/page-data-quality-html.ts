@@ -44,7 +44,7 @@ function buildLowCompletionCalloutHtml(weeks: WeeklyCompletion[]): string {
   return `<div class="callout-box"><p class="callout-text">${esc(text)}</p></div>`;
 }
 
-interface Page3Data {
+interface DataQualityData {
   dateFrom: string;
   dateTo: string;
   weeklyCompletion: WeeklyCompletion[];
@@ -54,14 +54,18 @@ interface Page3Data {
 
 // Ported from the web app's Page5DataQuality.tsx (named for its fixed
 // position on the web, always the report's last page regardless of how
-// many pages precede it — this port names its pages by position instead,
-// since chunks are added incrementally rather than needing to support an
-// already-variable page count from day one; revisit the name if a future
-// chunk inserts a page before this one). Closes the loop on Page 1's
-// "Methodology on page N" footer line, which chunk 1 dropped since no
-// methodology page existed yet — generate-report.ts now passes a real
-// page number back into Page 1 for this.
-export function buildPage3Html(data: Page3Data): string {
+// many pages precede it). Named by role here instead of position — this
+// file was originally page3-html.ts, on the assumption this page would
+// always be third; report chunk 4 then needed to insert Context &
+// Connections before it, which would have made that name stale. Renamed
+// once, rather than leaving a wrong number in the filename or renaming
+// again on the next reorder — page1-html.ts/page2-html.ts keep their
+// numeric names since Executive Summary and Mind Overview are always the
+// report's first two pages, position-stable in a way this one isn't.
+// Closes the loop on Page 1's "Methodology on page N" footer line, which
+// chunk 1 dropped since no methodology page existed yet — generate-report.ts
+// passes the real page number back into Page 1 for this.
+export function buildDataQualityHtml(data: DataQualityData): string {
   const { dateFrom, dateTo, weeklyCompletion, completedCheckIns, totalScheduled } = data;
   const overallPct = totalScheduled > 0 ? Math.round((completedCheckIns / totalScheduled) * 100) : 0;
 
