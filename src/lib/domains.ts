@@ -1,3 +1,4 @@
+import { BODY_DOMAINS } from '@/lib/body/constants';
 import { DomainType, Profile } from '@/lib/supabase';
 
 // Scoped port of what MindSetup needs from the web app's src/utils/domainUtils.ts
@@ -52,10 +53,7 @@ export function resolveActiveDomains(
 }
 
 // ── Colors ────────────────────────────────────────────────────────────────────
-// Ported from the web app's src/utils/domainColors.ts. Body domain color
-// resolution (BODY_COLOR / BODY_DOMAINS check) is omitted until body check-in
-// is ported — falls back to BRAND_COLOR for anything not in DOMAIN_COLORS,
-// same as the web version's own fallback.
+// Ported from the web app's src/utils/domainColors.ts.
 
 export const DOMAIN_COLORS: Record<string, string> = {
   mood: '#818cf8',
@@ -82,6 +80,7 @@ const SIMPLIFIED_COLOR = BRAND_COLOR;
 export function getDomainColor(domain: string, simplifiedMode = false): string {
   if (simplifiedMode) return SIMPLIFIED_COLOR;
   const normalized = domain.toLowerCase().replace(/ /g, '_');
+  if (normalized in BODY_DOMAINS) return BODY_COLOR;
   return DOMAIN_COLORS[normalized] ?? BRAND_COLOR;
 }
 
