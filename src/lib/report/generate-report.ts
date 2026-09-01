@@ -10,7 +10,10 @@ import { median } from '@/lib/baseline-stats';
 import { calculateSortWeight } from '@/lib/priority-scoring';
 import { fetchQuestionsForAppointment } from '@/lib/api/questions';
 import { fetchPatternReviewsForAppointment } from '@/lib/api/pattern-reviews';
-import { buildPage1Html } from '@/lib/report/page1-html';
+import { buildChartCoordinates, computeSleepConnections } from '@/lib/report/chart-coordinates';
+import { buildPage1BodyHtml } from '@/lib/report/page1-html';
+import { buildPage2Html } from '@/lib/report/page2-html';
+import { buildReportDocument } from '@/lib/report/report-document';
 import { supabase } from '@/lib/supabase';
 import type { DetectedCluster, PrepareQuestion } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
@@ -28,16 +31,20 @@ export interface GenerateReportInput {
 }
 
 /**
- * Chunk 1 of the PDF report port (see project_rn_rewrite_scoping.md):
- * Page 1 (Executive Summary) only, mind-only. Renders an HTML string via
- * buildPage1Html and hands it to expo-print, then opens the native share
- * sheet — the RN equivalent of the web version's auto-download anchor
- * click (there's no browser download folder on native to drop a file
- * into). NOT ported yet: report name field (uses profile.report_display_name
- * / display_name / email directly, no in-place edit), mind/body/cycle
+ * PDF report port (see project_rn_rewrite_scoping.md), mind-only. Chunk 2
+ * adds Page 2 (Mind Overview: sleep, domain sparklines, episode timeline,
+ * rare events) alongside chunk 1's Page 1 (Executive Summary). Renders each
+ * page as an HTML fragment and assembles them via report-document.ts, then
+ * hands the whole document to expo-print and opens the native share sheet
+ * — the RN equivalent of the web version's auto-download anchor click
+ * (there's no browser download folder on native to drop a file into). NOT
+ * ported yet: report name field (uses profile.report_display_name /
+ * display_name / email directly, no in-place edit), mind/body/cycle
  * include toggles (mind is the only option until body tracking exists),
- * copy-as-markdown, and every page after Page 1 (Mind Overview with
- * sparkline charts, Context & Connections, Data Quality & Methodology).
+ * copy-as-markdown, domain connections/correlations (needs the
+ * significance-testing math from detection/computeConnection.ts, not
+ * ported), and the Context & Connections / Data Quality & Methodology
+ * pages.
  */
 export async function generateReport(input: GenerateReportInput): Promise<{ uri: string }> {
   const { userId, userName, dateFrom, dateTo, clusters, appointmentId } = input;
@@ -77,12 +84,6 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const baselineMap: Record<string, number> = { sleep: 3 };
   (baselines ?? []).forEach(b => { baselineMap[b.domain] = b.baseline_score; });
 
-  const currentRollingMedians: Record<string, number> = {};
-  for (const domain of activeDomains) {
-    const vals = dayScores.map(d => d.scores[domain]).filter((v): v is number => v != null);
-    if (vals.length > 0) currentRollingMedians[domain] = median(vals);
-  }
-
   const reviewMap: Record<string, { should_discuss?: boolean | null }> = {};
   patternReviews.forEach(r => { reviewMap[r.pattern_id] = r; });
   // calculateSortWeight requires cluster_type: string; DetectedCluster's is
@@ -109,16 +110,22 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
 
   const generationDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const html = buildPage1Html({
+  // ── Page 2 — chart coordinates, sleep connections, sleep hours ────────────
+
+  const coords = buildChartCoordinates(checkIns ?? [], sleepLogs ?? [], baselineMap, activeDomains, { from: dateFrom, to: dateTo }, markers);
+  const sleepConnections = computeSleepConnections(coords.dates, coords.dailyMeans, coords.trackedDomains);
+  const sleepHours = (sleepLogs ?? []).map(s => s.hours_slept).filter((v): v is number => v != null);
+  const sleepMedianHours = sleepHours.length > 0 ? median(sleepHours) : null;
+
+  const page1Body = buildPage1BodyHtml({
     userName,
     dateFrom,
     dateTo,
-    generationDate,
     completedCheckIns,
     totalScheduled: totalScheduled ?? 0,
     trackedDomains: activeDomains,
     baselineMap,
-    currentRollingMedians,
+    currentRollingMedians: coords.currentRollingMedians,
     questions: storedQuestions,
     flaggedClusters,
     lagRelationships,
@@ -127,6 +134,32 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     rareEvents,
     patternEvolution,
     interventionImpacts,
+  });
+
+  const page2Body = buildPage2Html({
+    chartDomains: coords.chartDomains,
+    baselineMap,
+    currentRollingMedians: coords.currentRollingMedians,
+    chartHasEnoughData: coords.chartHasEnoughData,
+    chartMarkers: coords.chartMarkers,
+    flaggedClusters,
+    dates: coords.dates,
+    interventionImpacts,
+    rareEvents,
+    patternEvolution,
+    sleepConnections,
+    sleepMedianHours,
+    lagRelationships,
+  });
+
+  const html = buildReportDocument({
+    pages: [
+      { sectionTitle: 'Executive Summary', bodyHtml: page1Body },
+      { sectionTitle: 'Mind Overview', bodyHtml: page2Body },
+    ],
+    generationDate,
+    dateFrom,
+    dateTo,
   });
 
   const { printToFileAsync } = await import('expo-print');

@@ -46,3 +46,16 @@ export function addDays(dateStr: string, n: number): string {
   d.setDate(d.getDate() + n);
   return d.toLocaleDateString('en-CA');
 }
+
+/** Every 'YYYY-MM-DD' string from `from` to `to` inclusive. Ported from the
+ *  web app's src/utils/dateUtils.ts, unchanged. */
+export function getDatesInRange(from: string, to: string): string[] {
+  const dates: string[] = [];
+  const cur = parseDateString(from);
+  const end = parseDateString(to);
+  while (cur <= end) {
+    dates.push(cur.toLocaleDateString('en-CA'));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
