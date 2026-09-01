@@ -2,13 +2,13 @@
 // presentation/composition layer that normalises detector output into one
 // shared PatternFinding shape, which "What stands out" is built from.
 //
-// Only the functions for detectors already ported are here: clusterFindings,
+// Functions for every detector ported so far: clusterFindings,
 // dayOfWeekFindings, lagRelationshipFindings, patternEvolutionFindings,
-// rareEventFindings, interventionImpactFindings. NOT ported yet (each needs
-// a detector module not on native yet): sleepConnectionFindings,
-// bodyMindConnectionFindings, bodyTimeOfDayFindings,
-// bodyEventFrequencyFindings, bodyEventImpactFindings — port each one
-// alongside its source detector, same pattern as this file's own history.
+// rareEventFindings, interventionImpactFindings, plus (chunk 4 of the body
+// detector sub-series) bodyMindConnectionFindings, bodyTimeOfDayFindings,
+// bodyEventFrequencyFindings, bodyEventImpactFindings. NOT ported yet:
+// sleepConnectionFindings — its source detector (sleepConnections.ts) isn't
+// on native yet.
 //
 // Pure, synchronous, no DB/network access — callers fetch data, this module
 // only shapes it. Do not add detection logic here.
@@ -18,24 +18,23 @@ import { InterventionImpact } from '@/lib/detection/intervention-impact';
 import { LagRelationship } from '@/lib/detection/lag-relationships';
 import { PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { RareEvent } from '@/lib/detection/rare-events';
+import { BodyTimeOfDayPattern } from '@/lib/detection/body-time-of-day';
+import { BodyEventFrequencyPattern } from '@/lib/detection/body-event-frequency';
+import { BodyEventMindImpact } from '@/lib/detection/body-event-impact';
 import { parseDateString } from '@/lib/date-utils';
 import { DOMAIN_COPY } from '@/lib/domains';
-import { DetectedCluster, PatternSource } from '@/lib/supabase';
+import { BODY_DOMAINS, BODY_EVENTS } from '@/lib/body/constants';
+import { BodyDomainType, DetectedCluster, PatternSource } from '@/lib/supabase';
 
-/**
- * True for a body-tracking domain. Always false on native for now — body
- * check-ins aren't ported yet, so no body domain type exists to check
- * against. Kept as a named function (rather than inlined `false`) so every
- * call site here already reads correctly once body domains do exist —
- * update only this one function, not its callers.
- */
-export function isBodyDomain(_d: string): boolean {
-  return false;
+/** True for any of the body-tracking domains (fatigue, pain, joint_instability, orthostatic, gut, exhaustion, ...). */
+export function isBodyDomain(d: string): d is BodyDomainType {
+  return d in BODY_DOMAINS;
 }
 
-/** Resolves a display label for any tracked factor — mind domain or 'sleep'. */
+/** Resolves a display label for any tracked factor — mind domain, body domain, or 'sleep'. */
 export function factorLabel(d: string): string {
   if (d === 'sleep') return 'Sleep';
+  if (d in BODY_DOMAINS) return BODY_DOMAINS[d as BodyDomainType].label;
   return DOMAIN_COPY[d as keyof typeof DOMAIN_COPY]?.label ?? d;
 }
 
@@ -275,6 +274,114 @@ export function interventionImpactFindings(impacts: InterventionImpact[]): Patte
       sentence: `${label} ${top.direction} by ${Math.abs(top.change).toFixed(1)} points in the ${top.window_days} days after ${impact.marker_label}.`,
       sentenceHighlights: [{ text: label, factor: top.domain }],
       evidenceLine: `${impact.before_day_count} days before · ${impact.after_day_count} days after`,
+    });
+  }
+  return results;
+}
+
+// ── Body × mind: same-day correlations (persisted to domain_connections) ─────
+
+export interface BodyMindConnectionRow {
+  domain_a: string;
+  domain_b: string;
+  moves_together: boolean;
+  strength: number;
+  sample_size: number;
+  window_end: string;
+}
+
+function areaFor(factor: string): Area {
+  if (factor === 'sleep') return 'sleep';
+  return isBodyDomain(factor) ? 'body' : 'mind';
+}
+
+export function bodyMindConnectionFindings(rows: BodyMindConnectionRow[]): PatternFinding[] {
+  return rows.map(r => {
+    const grade: Grade = r.strength >= 0.7 ? 'solid' : 'partial';
+    const labelA = factorLabel(r.domain_a);
+    const labelB = factorLabel(r.domain_b);
+    const areas: Area[] = [...new Set([areaFor(r.domain_a), areaFor(r.domain_b)])];
+    const verb = r.moves_together ? 'tend to move together' : 'tend to move in opposite directions';
+    return {
+      id: `conn-${r.domain_a}-${r.domain_b}`,
+      patternSource: null,
+      patternId: null,
+      areas,
+      grade,
+      onsetDate: r.window_end,
+      effectSize: r.strength,
+      sentence: `Your ${labelA} and ${labelB} ${verb}.`,
+      sentenceHighlights: [{ text: labelA, factor: r.domain_a }, { text: labelB, factor: r.domain_b }],
+      evidenceLine: `${r.sample_size} days compared`,
+    };
+  });
+}
+
+// ── Body: morning vs evening ──────────────────────────────────────────────────
+
+export function bodyTimeOfDayFindings(patterns: BodyTimeOfDayPattern[]): PatternFinding[] {
+  return patterns.map(p => {
+    const label = factorLabel(p.domain);
+    const verb = p.direction === 'worse_in_evening'
+      ? 'tends to be worse in the evening than first thing'
+      : 'tends to be worse first thing than by evening';
+    return {
+      id: `tod-${p.domain}`,
+      patternSource: null,
+      patternId: null,
+      areas: ['body'],
+      grade: p.dataQuality,
+      onsetDate: today(),
+      effectSize: p.difference,
+      sentence: `Your ${label} ${verb}, holding true on ${p.consistentDays} of ${p.dayCount} days.`,
+      sentenceHighlights: [{ text: label, factor: p.domain }],
+      evidenceLine: `${p.consistentDays} of ${p.dayCount} days with both a morning and an evening reading`,
+    };
+  });
+}
+
+// ── Body: event frequency spikes ──────────────────────────────────────────────
+// eventType is an event label (e.g. "A joint went out"), not a domain name,
+// so nothing here gets the domain-color treatment.
+
+export function bodyEventFrequencyFindings(patterns: BodyEventFrequencyPattern[]): PatternFinding[] {
+  return patterns.map(p => {
+    const label = BODY_EVENTS[p.eventType]?.label ?? p.eventType;
+    return {
+      id: `freq-${p.eventType}`,
+      patternSource: null,
+      patternId: null,
+      areas: ['body'],
+      grade: p.dataQuality,
+      onsetDate: today(),
+      effectSize: p.recentCount,
+      sentence: `${label} happened ${p.recentCount} times in the last two weeks, more than your usual rate.`,
+      sentenceHighlights: [],
+      evidenceLine: `${p.recentCount} in the last ${p.recentWindowDays} days · about ${p.historicalRatePerWeek.toFixed(1)} a week before that`,
+    };
+  });
+}
+
+// ── Body events → mind domains (cross-area, Insights-only) ───────────────────
+
+export function bodyEventImpactFindings(impacts: BodyEventMindImpact[]): PatternFinding[] {
+  const results: PatternFinding[] = [];
+  for (const impact of impacts) {
+    const top = impact.affectedDomains[0];
+    if (!top) continue;
+    const eventLabel = (BODY_EVENTS[impact.eventType]?.label ?? impact.eventType).toLowerCase();
+    const domainLabel = factorLabel(top.domain);
+    results.push({
+      id: `bodyimpact-${impact.eventType}`,
+      patternSource: null,
+      patternId: null,
+      areas: ['body', 'mind'],
+      grade: impact.dataQuality,
+      onsetDate: today(),
+      effectSize: Math.abs(top.change),
+      sentence: `Your ${domainLabel} tends to ${top.direction === 'increased' ? 'rise' : 'drop'} in the days after "${eventLabel}".`,
+      sentenceHighlights: [{ text: domainLabel, factor: top.domain }],
+      evidenceLine: `${impact.occurrenceCount} occurrences · ${impact.beforeDayCount} days before · ${impact.afterDayCount} days after`,
     });
   }
   return results;
