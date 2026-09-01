@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AppointmentContext from '@/components/prepare/appointment-context';
 import DateRangeControl from '@/components/prepare/date-range-control';
+import GenerateReportSection from '@/components/prepare/generate-report-section';
 import NotableChangesSection from '@/components/prepare/notable-changes-section';
 import PastAppointmentsSection from '@/components/prepare/past-appointments-section';
 import PatternReviewSection from '@/components/prepare/pattern-review-section';
@@ -38,17 +39,15 @@ function CollapsedPatternsRow({ count, onExpand }: { count: number; onExpand: ()
   );
 }
 
-// Chunk 5 of the Prepare tab port. Adds the post-appointment completion
-// flow (notes, addressed/not-covered question summary, mark-as-done) on
-// top of chunks 1-4 (appointment CRUD, date-range + pattern review,
-// notable changes, question list). This closes out every Prepare
-// sub-component except GenerateReportSection — PDF generation, still
-// blocked on the on-device PDF library decision flagged at the top of
-// project_rn_rewrite_scoping.md and never actually settled across five
-// chunks. Findings are cluster-only for now — the web app's PrepareScreen
-// also mixes in sleepConnectionFindings, but that detector
-// (sleep_symptom_connections weekly cadence) isn't ported to native yet,
-// same deferral noted in pattern-findings.ts since Insights chunk 1.
+// Chunk 6 of the Prepare tab port — every sub-component is now wired,
+// including PDF report generation (chunk 1 of that sub-feature's own
+// multi-chunk port: Page 1/Executive Summary only so far, see
+// generate-report.ts's header comment for what's deferred to later report
+// chunks). Findings passed to PatternReviewSection are cluster-only — the
+// web app's PrepareScreen also mixes in sleepConnectionFindings, but that
+// detector (sleep_symptom_connections weekly cadence) isn't ported to
+// native yet, same deferral noted in pattern-findings.ts since Insights
+// chunk 1.
 export default function PrepareScreen() {
   const { user } = useAuth();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
@@ -164,13 +163,9 @@ export default function PrepareScreen() {
 
             <QuestionsSection appointmentId={appointment.id} />
 
-            <PostAppointmentSection appointment={appointment} onComplete={loadAppointment} />
+            <GenerateReportSection clusters={rangeClusters} appointmentId={appointment.id} fromDate={range.start} toDate={range.end} />
 
-            <View style={styles.placeholderCard}>
-              <Text style={styles.placeholderText}>
-                PDF report generation isn&rsquo;t built yet — everything else on this screen is real.
-              </Text>
-            </View>
+            <PostAppointmentSection appointment={appointment} onComplete={loadAppointment} />
           </>
         ) : (
           <View style={styles.emptyCard}>
@@ -203,8 +198,6 @@ const styles = StyleSheet.create({
   chevron: { fontSize: 10, color: '#6b7a99' },
   collapseButton: { paddingVertical: 12, paddingBottom: 16 },
   collapseButtonText: { fontSize: 12, color: '#4a5568' },
-  placeholderCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
-  placeholderText: { fontSize: 13, color: '#4a5568', lineHeight: 19 },
   emptyCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 28, paddingHorizontal: 24, alignItems: 'center' },
   emptyEmoji: { fontSize: 32, marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#c8d0e0', marginBottom: 8 },
