@@ -1,5 +1,5 @@
 import { debug } from '@/lib/debug';
-import { DomainType } from '@/lib/supabase';
+import { BodyDomainType, DomainType } from '@/lib/supabase';
 
 /**
  * Rare-event detection — statistically infrequent day-shapes, not clinical
@@ -14,11 +14,11 @@ import { DomainType } from '@/lib/supabase';
  * Your Doctor" section — those qualify by duration/pattern shape, not
  * rarity, and can occur frequently and still be surfaced there.
  *
- * Ported from the web app's src/lib/detection/rareEvents.ts — mind-only for
- * now, same TrackedFactor note as the other detection modules in this
- * Insights chunk series.
+ * Ported from the web app's src/lib/detection/rareEvents.ts. Widened to
+ * cover body domains too (body detector sub-series chunk 6) — domain-
+ * agnostic already, a type-level change only.
  */
-export type TrackedFactor = DomainType;
+export type TrackedFactor = DomainType | BodyDomainType;
 
 export interface RareEvent {
   event_type: 'consecutive_poor_sleep' | 'all_elevated' | 'all_suppressed' | 'extreme_spike' | 'multi_crash';

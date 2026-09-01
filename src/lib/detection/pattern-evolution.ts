@@ -1,12 +1,14 @@
 import { median as medianOf } from '@/lib/baseline-stats';
 import { addDays } from '@/lib/date-utils';
 import { debug } from '@/lib/debug';
-import { DomainType } from '@/lib/supabase';
+import { BodyDomainType, DomainType } from '@/lib/supabase';
 
-// Ported from the web app's src/lib/detection/patternEvolution.ts — mind-only
-// for now, same TrackedFactor note as the other detection modules ported so
-// far in this Insights chunk series.
-export type TrackedFactor = DomainType;
+// Ported from the web app's src/lib/detection/patternEvolution.ts. Widened
+// to cover body domains too (body detector sub-series chunk 6) — this
+// detector is domain-agnostic (a generic loop over activeDomains, no
+// mind-specific assumptions beyond HIGHER_IS_BETTER below), so covering body
+// domains is a type-level change only, matching web's TrackedFactor exactly.
+export type TrackedFactor = DomainType | BodyDomainType;
 
 export interface PatternEvolution {
   domain: TrackedFactor;
@@ -56,6 +58,9 @@ const TYPE_PRIORITY: Record<PatternEvolution['evolution_type'], number> = {
   stability_decline: 2,
 };
 
+// Body domains are intentionally absent — all of them run "higher = worse"
+// (symptom severity), so the default (not in this set) already gives the
+// correct improving/worsening direction without listing them explicitly.
 const HIGHER_IS_BETTER = new Set<TrackedFactor>(['mood', 'energy', 'concentration', 'social_battery', 'motivation']);
 
 function stdDev(arr: number[]): number {

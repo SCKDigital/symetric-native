@@ -2,13 +2,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import BodyAreaDetail from '@/components/insights/body-area-detail';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { AreaRow, buildAreaRows } from '@/lib/area-rows';
+import { BODY_DOMAIN_ORDER, BODY_DOMAINS, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
 import { CircadianPattern, fetchCircadianPatterns, formatCircadianPattern } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { buildDayScores } from '@/lib/day-scores';
 import { parseDateString } from '@/lib/date-utils';
+import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
+import { dailyBodyValue } from '@/lib/detection/body-daily-value';
+import { detectBodyEventFrequency, BodyEventFrequencyPattern } from '@/lib/detection/body-event-frequency';
+import { detectBodyEventImpacts, BodyEventMindImpact } from '@/lib/detection/body-event-impact';
+import { detectBodyTimeOfDayPatterns, MorningEveningPair, BodyTimeOfDayPattern } from '@/lib/detection/body-time-of-day';
 import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
 import { detectInterventionImpacts, InterventionImpact } from '@/lib/detection/intervention-impact';
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
@@ -16,10 +23,16 @@ import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, Patte
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
 import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
-import { clusterFindings, dayOfWeekFindings, interventionImpactFindings, lagRelationshipFindings, patternEvolutionFindings, PatternFinding, rareEventFindings } from '@/lib/pattern-findings';
+import {
+  Area, BodyMindConnectionRow, PatternFinding,
+  bodyEventFrequencyFindings, bodyEventImpactFindings, bodyMindConnectionFindings, bodyTimeOfDayFindings,
+  clusterFindings, dayOfWeekFindings, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings,
+} from '@/lib/pattern-findings';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
+import { computeBodySummaries } from '@/lib/report/body-summary';
+import type { BodyDomainSummary, BodyEventSummary } from '@/lib/report/types';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
-import { Baseline, CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
+import { Baseline, BodyDomainType, CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
 type RangeDays = 7 | 14 | 30 | 60 | 90;
@@ -35,6 +48,10 @@ const CLUSTER_TYPE_LABEL: Record<string, string> = {
 
 function domainLabel(domain: string): string {
   if (domain === 'sleep') return 'Sleep';
+  // Body domains use BODY_DOMAINS' own label (e.g. "Joint & muscle pain"),
+  // not DOMAIN_NAMES — that set is deliberately mind-only wording (see its
+  // own header comment), never a dedup target for body domains.
+  if (domain in BODY_DOMAINS) return BODY_DOMAINS[domain as BodyDomainType].label;
   return DOMAIN_NAMES[domain as DomainType] ?? domain;
 }
 
@@ -87,25 +104,40 @@ function RangeControl({ range, onChange, fromDate, toDate, checkInCount, daysWit
 }
 
 // "The evidence" — one row per tracked area, ported from AreaIndex.tsx. The
-// web version is tappable (opens a per-area detail view with sparklines/
-// correlations/rare-day content); those detail screens aren't ported yet, so
-// this is informational-only for now rather than pretending to navigate
-// somewhere real.
-function AreaIndex({ rows }: { rows: AreaRow[] }) {
+// web version makes every row tappable (opens a per-area detail view); on
+// native only "Body" has a detail screen so far (BodyAreaDetail, body
+// detector sub-series chunk 5) — Mind/Sleep/Medication stay informational-
+// only until MindAreaDetail/SleepAreaDetail/MedicationAreaDetail are ported,
+// rather than tapping through to a blank screen.
+function AreaIndex({ rows, onSelectBody }: { rows: AreaRow[]; onSelectBody: () => void }) {
   if (rows.length === 0) return null;
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>The evidence</Text>
       <View style={styles.sectionList}>
-        {rows.map(row => (
-          <View key={row.area} style={[styles.areaRow, row.state !== 'active' && styles.areaRowMuted]}>
-            <View style={styles.areaDot} />
-            <View style={styles.areaRowText}>
-              <Text style={styles.areaRowLabel}>{row.label}</Text>
-              <Text style={styles.areaRowSubtitle}>{row.subtitle}</Text>
+        {rows.map(row => {
+          const rowContent = (
+            <>
+              <View style={styles.areaDot} />
+              <View style={styles.areaRowText}>
+                <Text style={styles.areaRowLabel}>{row.label}</Text>
+                <Text style={styles.areaRowSubtitle}>{row.subtitle}</Text>
+              </View>
+            </>
+          );
+          if (row.area === 'body') {
+            return (
+              <Pressable key={row.area} onPress={onSelectBody} style={[styles.areaRow, row.state !== 'active' && styles.areaRowMuted]}>
+                {rowContent}
+              </Pressable>
+            );
+          }
+          return (
+            <View key={row.area} style={[styles.areaRow, row.state !== 'active' && styles.areaRowMuted]}>
+              {rowContent}
             </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
@@ -227,15 +259,35 @@ function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
 // circadian detection (2), day-of-week + lag-relationship detection (3),
 // the pattern-findings translation layer + "What stands out" ranking (4),
 // pattern evolution detection (5), rare-event detection (6), a RangeControl/
-// AreaIndex UI pass (7), and intervention-impact detection (8, this pass —
-// unblocked now that markers are ported in Settings/History). The Medication
-// area row is now real (markerCount/tooRecentLabel/findings all wired,
-// matching the web app's "too early to read" handling for a too-recent
-// marker). Mind-only throughout — body-day-score merging is still deferred.
-// Area rows are informational-only for now (no tap-through) since the
-// per-area detail screens (MindAreaDetail etc.) aren't ported.
+// AreaIndex UI pass (7), and intervention-impact detection (8). The
+// Medication area row is real (markerCount/tooRecentLabel/findings all
+// wired, matching the web app's "too early to read" handling for a too-
+// recent marker).
+//
+// Body detector sub-series chunk 6 (final chunk — depends on 1–5) adds real
+// body-domain coverage: bodyTimeOfDayFindings/bodyEventFrequencyFindings/
+// bodyEventImpactFindings/bodyMindConnectionFindings feed "What stands out"
+// and the Body area row, which is now tappable through to BodyAreaDetail.
+// Cluster/day-of-week/lag-relationship findings are now split by area
+// (`.areas.includes('mind' | 'body')`) rather than assumed mind-only, since
+// clusters share one table with body cluster detection (chunk 1) and can
+// carry either tag once isBodyDomain stopped being a permanent `false`
+// (pattern-findings.ts chunk 4). Pattern evolution and rare-event detection
+// also run a second time against body-only day-scores/baselines, reusing
+// the same generic detectors mind uses (both were domain-agnostic already —
+// widened to TrackedFactor = DomainType | BodyDomainType this chunk).
+//
+// Deliberately NOT done this chunk (real, separable follow-up work, not
+// part of the original body-detector plan): merging mind+body day-scores
+// for day-of-week-pattern/lag-relationship/intervention-impact detection —
+// each would need the same TrackedFactor widening PLUS updates to the raw
+// (non-PatternFinding) DayOfWeekSection/LagRelationshipSection/
+// MedicationSection rendering below, which currently assume mind-only
+// input. Those three sections still show mind-only content; only cluster/
+// pattern-evolution/rare-event detection and the four dedicated body
+// detectors are body-aware.
 export default function InsightsScreen() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<RangeDays>(30);
   const [clusters, setClusters] = useState<DetectedCluster[]>([]);
@@ -249,6 +301,16 @@ export default function InsightsScreen() {
   const [tooRecentLabel, setTooRecentLabel] = useState<string | null>(null);
   const [activeDomains, setActiveDomains] = useState<DomainType[]>([]);
   const [rangeStats, setRangeStats] = useState({ from: '', to: '', checkInCount: 0, daysWithCheckIn: 0 });
+  const [activeArea, setActiveArea] = useState<Area | null>(null);
+  const [bodyDomains, setBodyDomains] = useState<BodyDomainSummary[]>([]);
+  const [bodyEvents, setBodyEvents] = useState<BodyEventSummary[]>([]);
+  const [bodyDaysLogged, setBodyDaysLogged] = useState(0);
+  const [bodyPatternEvolutions, setBodyPatternEvolutions] = useState<PatternEvolution[]>([]);
+  const [bodyRareEvents, setBodyRareEvents] = useState<RareEvent[]>([]);
+  const [bodyTimeOfDayPatterns, setBodyTimeOfDayPatterns] = useState<BodyTimeOfDayPattern[]>([]);
+  const [bodyEventFrequencyPatterns, setBodyEventFrequencyPatterns] = useState<BodyEventFrequencyPattern[]>([]);
+  const [bodyEventImpacts, setBodyEventImpacts] = useState<BodyEventMindImpact[]>([]);
+  const [bodyMindConnectionRows, setBodyMindConnectionRows] = useState<BodyMindConnectionRow[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -275,7 +337,15 @@ export default function InsightsScreen() {
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const from90 = ninetyDaysAgo.toLocaleDateString('en-CA');
 
-    const [clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines }, { data: rangeCheckIns }, { data: rangeSleepLogs }, markersData] = await Promise.all([
+    const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
+
+    const [
+      clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines },
+      { data: rangeCheckIns }, { data: rangeSleepLogs }, markersData,
+      { data: bodyCheckIns90dRaw }, { data: bodyEvents90dRaw },
+      { data: bodyCheckInsRangeRaw }, { data: bodyEventsRangeRaw },
+      { data: domainConnectionsData },
+    ] = await Promise.all([
       fetchClustersForDateRange(user.id, from30, to),
       fetchCircadianPatterns(user.id, from30),
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
@@ -285,6 +355,21 @@ export default function InsightsScreen() {
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', `${fromRange}T00:00:00`).order('scheduled_at', { ascending: true }),
       supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', fromRange).lte('log_date', to).order('log_date', { ascending: true }),
       fetchMarkersInRange(from90, to).catch(() => [] as InterventionMarker[]),
+      bodyTrackingEnabled
+        ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', from90).lte('entry_date', to).order('entry_date', { ascending: true })
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      bodyTrackingEnabled
+        ? supabase.from('body_events').select('*').eq('user_id', user.id).gte('event_date', from90).lte('event_date', to)
+        : Promise.resolve({ data: [] as { event_date: string; event_type: string }[] }),
+      bodyTrackingEnabled
+        ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', fromRange).lte('entry_date', to)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      bodyTrackingEnabled
+        ? supabase.from('body_events').select('*').eq('user_id', user.id).gte('event_date', fromRange).lte('event_date', to)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      bodyTrackingEnabled
+        ? supabase.from('domain_connections').select('*').eq('user_id', user.id).gte('window_end', from90).order('strength', { ascending: false })
+        : Promise.resolve({ data: [] as BodyMindConnectionRow[] }),
     ]);
 
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
@@ -308,6 +393,75 @@ export default function InsightsScreen() {
     const impacts = detectInterventionImpacts(markersData, days90d, resolvedDomains);
     setInterventionImpacts(impacts);
 
+    // ── Body: day-scores, baseline, pattern evolution + rare events ─────────
+    // Filter rather than cast — see body-cluster-detection.ts for why
+    // 'exertion' (a legacy value still in body_domains_active's DB default)
+    // is excluded.
+    const bodyActiveFromProfile: BodyDomainType[] = bodyTrackingEnabled
+      ? (((profile?.body_domains_active as string[] | null) ?? [])
+          .filter((d): d is BodyDomainType => (BODY_DOMAIN_ORDER as string[]).includes(d)))
+      : [];
+    const resolvedBodyDomains: BodyDomainType[] = bodyActiveFromProfile.length > 0
+      ? bodyActiveFromProfile
+      : (bodyTrackingEnabled ? BODY_DOMAIN_ORDER : []);
+
+    function buildBodyDays(rows: Record<string, unknown>[] | null): { date: string; scores: Partial<Record<BodyDomainType, number>> }[] {
+      return (rows ?? []).map(entry => {
+        const scores: Partial<Record<BodyDomainType, number>> = {};
+        for (const d of resolvedBodyDomains) {
+          const v = dailyBodyValue(entry, d);
+          if (v !== null) scores[d] = v;
+        }
+        return { date: entry.entry_date as string, scores };
+      }).sort((a, b) => a.date.localeCompare(b.date));
+    }
+    const bodyDays90d = buildBodyDays(bodyCheckIns90dRaw);
+
+    const bodyBaselineMap: Partial<Record<BodyDomainType, number>> = {};
+    for (const d of resolvedBodyDomains) {
+      const history = bodyDays90d.map(bd => bd.scores[d]).filter((v): v is number => v !== undefined);
+      bodyBaselineMap[d] = rollingBodyBaseline(history);
+    }
+    setBodyPatternEvolutions(detectPatternEvolution(bodyDays90d, resolvedBodyDomains, bodyBaselineMap));
+    setBodyRareEvents(detectRareEvents(bodyDays90d, resolvedBodyDomains, bodyBaselineMap));
+
+    // ── Body: time-of-day (morning vs evening) ───────────────────────────────
+    const moPairs: MorningEveningPair[] = [];
+    for (const entry of (bodyCheckIns90dRaw ?? []) as Record<string, unknown>[]) {
+      for (const d of MORNING_BODY_DOMAIN_ORDER) {
+        const evening = entry[d];
+        const morning = entry[`morning_${d}`];
+        if (typeof evening === 'number' && typeof morning === 'number') {
+          moPairs.push({ date: entry.entry_date as string, domain: d, morning, evening });
+        }
+      }
+    }
+    setBodyTimeOfDayPatterns(detectBodyTimeOfDayPatterns(moPairs));
+
+    // ── Body: event frequency + body-event → mind impact ─────────────────────
+    const bodyEventOccurrences = (bodyEvents90dRaw ?? []) as { event_date: string; event_type: any }[];
+    setBodyEventFrequencyPatterns(detectBodyEventFrequency(bodyEventOccurrences, to));
+    setBodyEventImpacts(detectBodyEventImpacts(bodyEventOccurrences, days90d, resolvedDomains));
+
+    // ── Body × mind: persisted same-day correlations (chunk 3's weekly
+    // scheduler pass writes these; de-duplicate to the highest-strength row
+    // per pair, matching the web app's fetchLatestDomainConnections) ────────
+    const seenConnectionPairs = new Set<string>();
+    const latestConnections: BodyMindConnectionRow[] = [];
+    for (const row of (domainConnectionsData ?? []) as BodyMindConnectionRow[]) {
+      const key = `${row.domain_a}:${row.domain_b}`;
+      if (!seenConnectionPairs.has(key)) {
+        seenConnectionPairs.add(key);
+        latestConnections.push(row);
+      }
+    }
+    setBodyMindConnectionRows(latestConnections.filter(r => isBodyDomain(r.domain_a) || isBodyDomain(r.domain_b)));
+
+    const bodySummary = computeBodySummaries(bodyCheckInsRangeRaw ?? [], bodyEventsRangeRaw ?? []);
+    setBodyDomains(bodySummary.domains);
+    setBodyEvents(bodySummary.events);
+    setBodyDaysLogged(bodySummary.daysLogged);
+
     // Ported from the web app's InsightsScreen.tsx: a marker too recent for
     // its impact window to have closed yet reads as "too early to read"
     // rather than silently absent from the medication row. Computed here
@@ -325,7 +479,7 @@ export default function InsightsScreen() {
     setRangeStats({ from: fromRange, to, checkInCount: rangeCheckIns?.length ?? 0, daysWithCheckIn: daysRange.length });
 
     setLoading(false);
-  }, [user, range]);
+  }, [user, profile, range]);
 
   useEffect(() => {
     // See use-today-check-ins.ts for why this needs the disable comment.
@@ -335,7 +489,10 @@ export default function InsightsScreen() {
 
   if (loading) return <PulseLoadingScreen />;
 
-  const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0 && lagRelationships.length === 0 && rareEvents.length === 0 && interventionImpacts.length === 0;
+  const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0
+    && lagRelationships.length === 0 && rareEvents.length === 0 && interventionImpacts.length === 0
+    && bodyPatternEvolutions.length === 0 && bodyRareEvents.length === 0 && bodyTimeOfDayPatterns.length === 0
+    && bodyEventFrequencyPatterns.length === 0 && bodyEventImpacts.length === 0 && bodyMindConnectionRows.length === 0;
 
   // Derived, pure, cheap — computed during render rather than stored in its
   // own state/effect. Mirrors the web app's InsightsScreen.tsx mind/sleep
@@ -345,25 +502,59 @@ export default function InsightsScreen() {
   // high_despite_poor_sleep case still counts as mind). Pattern evolution
   // only counts once the selected range covers its own minimum span — same
   // gate the web app applies.
+  //
+  // clusterFindings/dayOfWeekFindings can each return both mind- and body-
+  // tagged findings now (clusters share one table with body cluster
+  // detection — body detector sub-series chunk 1) — split by area rather
+  // than assuming mind-only, same as the web app's InsightsScreen.tsx.
+  const allClusterFindings = clusterFindings(clusters);
+  const allDowFindings = dayOfWeekFindings(dayOfWeekPatterns);
   const allLagFindings = lagRelationshipFindings(lagRelationships);
   const mindFindings = [
-    ...clusterFindings(clusters),
-    ...dayOfWeekFindings(dayOfWeekPatterns),
+    ...allClusterFindings.filter(f => f.areas.includes('mind')),
+    ...allDowFindings.filter(f => f.areas.includes('mind')),
     ...allLagFindings.filter(f => f.areas.includes('mind') && !f.areas.includes('sleep')),
     ...(range >= EVOLUTION_MIN_SPAN_DAYS ? patternEvolutionFindings(patternEvolutions) : []),
     ...rareEventFindings(rareEvents, 'mind'),
+  ];
+  const bodyMindConnectionInput = bodyMindConnectionRows.map(r => ({
+    domain_a: r.domain_a, domain_b: r.domain_b, moves_together: r.moves_together,
+    strength: r.strength, sample_size: r.sample_size, window_end: r.window_end,
+  }));
+  const bodyFindings: PatternFinding[] = [
+    ...allClusterFindings.filter(f => f.areas.includes('body')),
+    ...allDowFindings.filter(f => f.areas.includes('body')),
+    ...allLagFindings.filter(f => f.areas.includes('body')),
+    ...(range >= EVOLUTION_MIN_SPAN_DAYS ? patternEvolutionFindings(bodyPatternEvolutions) : []),
+    ...rareEventFindings(bodyRareEvents, 'body'),
+    ...bodyTimeOfDayFindings(bodyTimeOfDayPatterns),
+    ...bodyEventFrequencyFindings(bodyEventFrequencyPatterns),
+    ...bodyEventImpactFindings(bodyEventImpacts),
+    ...bodyMindConnectionFindings(bodyMindConnectionInput),
   ];
   const sleepFindings = allLagFindings.filter(f => f.areas.includes('sleep'));
   const medicationFindings = interventionImpactFindings(interventionImpacts);
   const eligibleMarkerCount = markers.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy').length;
 
-  const standoutFindings = selectStandoutFindings([...mindFindings, ...sleepFindings, ...medicationFindings], 3);
+  const standoutFindings = selectStandoutFindings([...mindFindings, ...sleepFindings, ...bodyFindings, ...medicationFindings], 3);
   const areaRows = buildAreaRows({
     mind: { findings: mindFindings, trackedDomainCount: activeDomains.length },
-    body: { tracked: false, daysLogged: 0, risingCount: 0 },
+    body: {
+      tracked: profile?.body_tracking_enabled ?? false,
+      daysLogged: bodyDaysLogged,
+      risingCount: bodyFindings.filter(f => f.grade !== 'limited').length,
+    },
     sleep: { findings: sleepFindings },
     medication: { markerCount: eligibleMarkerCount, tooRecentLabel, findings: medicationFindings },
   });
+
+  if (activeArea === 'body') {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <BodyAreaDetail onBack={() => setActiveArea(null)} domains={bodyDomains} events={bodyEvents} daysLogged={bodyDaysLogged} findings={bodyFindings} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -374,9 +565,9 @@ export default function InsightsScreen() {
         ListHeaderComponent={
           <>
             <Text style={styles.heading}>Insights</Text>
-            <RangeControl range={range} onChange={setRange} fromDate={rangeStats.from} toDate={rangeStats.to} checkInCount={rangeStats.checkInCount} daysWithCheckIn={rangeStats.daysWithCheckIn} />
+            <RangeControl range={range} onChange={r => { setRange(r); setActiveArea(null); }} fromDate={rangeStats.from} toDate={rangeStats.to} checkInCount={rangeStats.checkInCount} daysWithCheckIn={rangeStats.daysWithCheckIn} />
             <WhatStandsOut findings={standoutFindings} />
-            <AreaIndex rows={areaRows} />
+            <AreaIndex rows={areaRows} onSelectBody={() => setActiveArea('body')} />
             <CircadianSection patterns={circadianPatterns} />
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
             <LagRelationshipSection relationships={lagRelationships} />
