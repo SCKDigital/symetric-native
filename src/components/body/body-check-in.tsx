@@ -32,18 +32,16 @@ interface Props {
 
 type DomainValues = Partial<Record<BodyDomainType, number>>;
 
-// The evening check-in form (chunks 1 and 3 of the body-tracking port, see
-// project_rn_body_tracking_scoping.md): domain sliders, the interactive
-// BodyMap pain-site diagram (chunk 3 — closes the last check-in-form gap:
-// pain_diffuse/body_pain_sites, deferred since chunk 1), event checklist
-// (with the chip-based EventSitePicker), character tags, and a note field.
-// Deliberately NOT ported: the optional morning check-in, Settings' real
-// per-domain toggle sheet, onboarding's body-consent step. `activeDomains`
-// currently always resolves to the full CHECKIN_BODY_DOMAIN_ORDER rather
-// than reading profile.body_domains_active, since there's no Settings UI
-// yet to have customized it away from the DB default.
+// The evening check-in form (chunks 1, 3, and 4 of the body-tracking port,
+// see project_rn_body_tracking_scoping.md): domain sliders (now respecting
+// profile.body_domains_active, customizable via Settings' real toggle
+// sheet as of chunk 4), the interactive BodyMap pain-site diagram (chunk 3
+// — closes the check-in-form gap: pain_diffuse/body_pain_sites, deferred
+// since chunk 1), event checklist (with the chip-based EventSitePicker),
+// character tags, and a note field. Deliberately NOT ported: the optional
+// morning check-in, onboarding's body-consent step.
 export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [today] = useState(() => todayDateString());
 
   const [selectedDate, setSelectedDate] = useState(initialDate ?? today);
@@ -64,7 +62,14 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
 
-  const activeDomains = CHECKIN_BODY_DOMAIN_ORDER;
+  // profile.body_domains_active's DB default/history can still carry the
+  // legacy 'exertion' value (see BODY_DOMAIN_ORDER's comment) — filtering
+  // through CHECKIN_BODY_DOMAIN_ORDER.includes/BODY_DOMAINS lookups below
+  // already drops anything not in the current config, same defensive
+  // pattern the web app's own bodyClusterDetection.ts uses.
+  const activeDomains = profile?.body_domains_active?.length
+    ? CHECKIN_BODY_DOMAIN_ORDER.filter(d => profile.body_domains_active.includes(d) || BODY_DOMAINS[d].required)
+    : CHECKIN_BODY_DOMAIN_ORDER;
 
   useEffect(() => {
     if (visible) trackBodyCheckInStarted();

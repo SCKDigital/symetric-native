@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BodyCheckIn from '@/components/body/body-check-in';
+import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
 import MarkerModal from '@/components/marker-modal';
 import { CalendarIcon, PillIcon, PinIcon } from '@/components/marker-icons';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
+import { CHECKIN_BODY_DOMAIN_ORDER, BODY_DOMAINS } from '@/lib/body/constants';
+import { BODY_COLOR } from '@/lib/domains';
+import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
 import { parseDateString } from '@/lib/date-utils';
 import { markerColors, markerTypeLabels, MarkerType } from '@/lib/marker-colors';
 import { createMarker, deleteMarker, fetchMarkers, updateMarker } from '@/lib/queries/markers';
 import { supabase } from '@/lib/supabase';
+import type { BodyDomainType } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
 const MARKER_ICON: Record<MarkerType, typeof PillIcon> = {
@@ -25,13 +30,14 @@ function formatMarkerDate(dateStr: string): string {
 }
 
 // Settings' real features so far: intervention marker CRUD (ported from
-// the web app's Settings marker section + MarkerModal.tsx) and a body
-// check-in entry point — a deliberately minimal, temporary wiring point
-// for chunk 1 of the body-tracking port (see body-check-in.tsx's own
-// header comment), standing in for the real per-domain toggle sheet
-// (BodyTrackingSheet.tsx) that isn't ported yet. Everything else the web
-// Settings screen has (domain toggles, push opt-in, PDF report
-// generation, PIN lock) is still a placeholder note below.
+// the web app's Settings marker section + MarkerModal.tsx) and body
+// tracking — a real master toggle (chunk 4 of the body-tracking port,
+// replacing the temporary "auto-enable on first check-in" wiring from
+// earlier chunks), domain toggle pills + timing sheet
+// (use-body-tracking-settings.ts/BodyTrackingSheet, ported from the web
+// app's useBodyTrackingSettings.ts/BodyTrackingSheet.tsx), and the check-in
+// entry point itself. Everything else the web Settings screen has (push
+// opt-in, PDF report generation, PIN lock) is still a placeholder note below.
 export default function SettingsScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -39,6 +45,15 @@ export default function SettingsScreen() {
   const [showModal, setShowModal] = useState(false);
   const [editingMarker, setEditingMarker] = useState<InterventionMarker | undefined>(undefined);
   const [showBodyCheckIn, setShowBodyCheckIn] = useState(false);
+  const [showBodyTrackingSheet, setShowBodyTrackingSheet] = useState(false);
+  const [bodyToggleError, setBodyToggleError] = useState<string | null>(null);
+
+  const {
+    bodyDomainsActive, bodyAvailableFrom, bodyReminderTime, bodyMorningEnabled, bodyMorningTime,
+    handleToggleBodyDomain, handleSaveBodyTiming,
+  } = useBodyTrackingSettings(user?.id, profile, refreshProfile, {
+    onError: setBodyToggleError,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,17 +86,15 @@ export default function SettingsScreen() {
     setMarkers(prev => prev.filter(m => m.id !== id));
   };
 
-  // No Settings toggle exists yet to turn body_tracking_enabled on (that's
-  // BodyTrackingSheet, not ported) — flip it here instead, the first time
-  // someone opens the check-in form, so History's body section (gated on
-  // this same flag, matching the web app) isn't a dead end for data this
-  // screen lets you log.
-  const handleOpenBodyCheckIn = async () => {
-    if (user && !profile?.body_tracking_enabled) {
-      await supabase.from('profiles').update({ body_tracking_enabled: true }).eq('id', user.id);
-      await refreshProfile();
+  const handleToggleBodyTracking = async (next: boolean) => {
+    if (!user) return;
+    setBodyToggleError(null);
+    const { error } = await supabase.from('profiles').update({ body_tracking_enabled: next }).eq('id', user.id);
+    if (error) {
+      setBodyToggleError('Failed to save changes. Please try again.');
+      return;
     }
-    setShowBodyCheckIn(true);
+    await refreshProfile();
   };
 
   if (loading) return <PulseLoadingScreen />;
@@ -140,16 +153,44 @@ export default function SettingsScreen() {
         ListFooterComponent={
           <View style={styles.footer}>
             <View style={styles.bodySection}>
-              <Text style={styles.sectionLabel}>Body tracking</Text>
-              <Text style={styles.sectionHint}>
-                Alpha — physical symptoms tracked separately from mind check-ins. Opening this the first time turns body tracking on; there’s no way to turn it back off yet.
-              </Text>
-              <Pressable onPress={handleOpenBodyCheckIn} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
-                <Text style={styles.bodyCheckInButtonText}>Log body check-in</Text>
-              </Pressable>
+              <View style={styles.bodyToggleRow}>
+                <View style={styles.bodyToggleTextWrap}>
+                  <Text style={styles.sectionLabel}>Body tracking</Text>
+                  <Text style={styles.bodyToggleSubtitle}>Alpha — fatigue, pain, and other physical symptoms, tracked separately from mind check-ins.</Text>
+                </View>
+                <Switch value={profile?.body_tracking_enabled ?? false} onValueChange={handleToggleBodyTracking} trackColor={{ true: BODY_COLOR }} />
+              </View>
+
+              {bodyToggleError && <Text style={styles.bodyErrorText}>{bodyToggleError}</Text>}
+
+              {profile?.body_tracking_enabled && (
+                <>
+                  <View style={styles.pillRow}>
+                    {CHECKIN_BODY_DOMAIN_ORDER.filter(d => !BODY_DOMAINS[d].required).map((d: BodyDomainType) => {
+                      const active = bodyDomainsActive.includes(d);
+                      return (
+                        <Pressable key={d} onPress={() => handleToggleBodyDomain(d)} style={[styles.domainPill, active && styles.domainPillActive]}>
+                          <Text style={[styles.domainPillText, active && styles.domainPillTextActive]}>{BODY_DOMAINS[d].label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  <Pressable onPress={() => setShowBodyTrackingSheet(true)} style={styles.bodyTimingRow}>
+                    <Text style={styles.bodyTimingLabel}>Timing</Text>
+                    <Text style={styles.bodyTimingValue}>
+                      Opens {bodyAvailableFrom} · Reminds {bodyReminderTime}{bodyMorningEnabled ? ` · Morning ${bodyMorningTime}` : ''}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => setShowBodyCheckIn(true)} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
+                    <Text style={styles.bodyCheckInButtonText}>Log body check-in</Text>
+                  </Pressable>
+                </>
+              )}
             </View>
 
-            <Text style={styles.footerNote}>Domain toggles, push notifications, PDF report generation, and PIN lock aren’t built yet — this screen only covers markers and a body check-in entry point so far.</Text>
+            <Text style={styles.footerNote}>Push notifications, PDF report generation, and PIN lock aren’t built yet — this screen covers markers and body tracking so far.</Text>
             <Pressable onPress={() => signOut()} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>
@@ -168,6 +209,19 @@ export default function SettingsScreen() {
       )}
 
       <BodyCheckIn visible={showBodyCheckIn} onClose={() => setShowBodyCheckIn(false)} />
+
+      {showBodyTrackingSheet && (
+        <BodyTrackingSheet
+          activeDomains={bodyDomainsActive}
+          onToggleDomain={handleToggleBodyDomain}
+          currentAvailableFrom={bodyAvailableFrom}
+          currentReminderTime={bodyReminderTime}
+          currentMorningEnabled={bodyMorningEnabled}
+          currentMorningTime={bodyMorningTime}
+          onSaveTiming={handleSaveBodyTiming}
+          onClose={() => setShowBodyTrackingSheet(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -190,7 +244,19 @@ const styles = StyleSheet.create({
   empty: { paddingVertical: 24, alignItems: 'center' },
   emptyText: { fontSize: 13, color: '#4a5568' },
   footer: { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#1e2533', gap: 16 },
-  bodySection: {},
+  bodySection: { gap: 14 },
+  bodyToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  bodyToggleTextWrap: { flex: 1, marginRight: 12, gap: 4 },
+  bodyToggleSubtitle: { fontSize: 12.5, color: '#4a5568', lineHeight: 18 },
+  bodyErrorText: { fontSize: 12, color: '#f87171' },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  domainPill: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
+  domainPillActive: { backgroundColor: 'rgba(188,129,47,0.15)', borderColor: 'rgba(188,129,47,0.4)' },
+  domainPillText: { fontSize: 12, fontWeight: '500', color: '#555c72' },
+  domainPillTextActive: { color: '#BC812F' },
+  bodyTimingRow: { paddingVertical: 6 },
+  bodyTimingLabel: { fontSize: 11, color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
+  bodyTimingValue: { fontSize: 13, color: '#8892a4' },
   bodyCheckInButton: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: 'rgba(188,129,47,0.15)', alignSelf: 'flex-start' },
   bodyCheckInButtonText: { fontSize: 13, fontWeight: '600', color: '#BC812F' },
   footerNote: { fontSize: 12, color: '#4a5568', lineHeight: 18 },
