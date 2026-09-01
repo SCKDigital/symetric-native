@@ -7,6 +7,7 @@ import DateRangeControl from '@/components/prepare/date-range-control';
 import NotableChangesSection from '@/components/prepare/notable-changes-section';
 import PastAppointmentsSection from '@/components/prepare/past-appointments-section';
 import PatternReviewSection from '@/components/prepare/pattern-review-section';
+import PostAppointmentSection from '@/components/prepare/post-appointment-section';
 import PrepareInfoSheet from '@/components/prepare/prepare-info-sheet';
 import QuestionsSection from '@/components/prepare/questions-section';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
@@ -37,17 +38,17 @@ function CollapsedPatternsRow({ count, onExpand }: { count: number; onExpand: ()
   );
 }
 
-// Chunk 4 of the Prepare tab port. Adds the auto-generated + custom
-// question list with priority reordering (react-native-draggable-flatlist,
-// see questions-section.tsx's header comment for the @dnd-kit swap), on
-// top of chunk 1's appointment CRUD core, chunk 2's date-range control +
-// pattern review, and chunk 3's notable changes. Findings are cluster-only
-// for now — the web app's PrepareScreen also mixes in
-// sleepConnectionFindings, but that detector (sleep_symptom_connections
-// weekly cadence) isn't ported to native yet, same deferral noted in
-// pattern-findings.ts since Insights chunk 1. STILL NOT ported: PDF report
-// generation (blocked on the on-device PDF approach, still unresolved) and
-// the post-appointment completion flow — each behind a placeholder note.
+// Chunk 5 of the Prepare tab port. Adds the post-appointment completion
+// flow (notes, addressed/not-covered question summary, mark-as-done) on
+// top of chunks 1-4 (appointment CRUD, date-range + pattern review,
+// notable changes, question list). This closes out every Prepare
+// sub-component except GenerateReportSection — PDF generation, still
+// blocked on the on-device PDF library decision flagged at the top of
+// project_rn_rewrite_scoping.md and never actually settled across five
+// chunks. Findings are cluster-only for now — the web app's PrepareScreen
+// also mixes in sleepConnectionFindings, but that detector
+// (sleep_symptom_connections weekly cadence) isn't ported to native yet,
+// same deferral noted in pattern-findings.ts since Insights chunk 1.
 export default function PrepareScreen() {
   const { user } = useAuth();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
@@ -162,6 +163,8 @@ export default function PrepareScreen() {
             <NotableChangesSection fromDate={range.start} toDate={range.end} />
 
             <QuestionsSection appointmentId={appointment.id} />
+
+            <PostAppointmentSection appointment={appointment} onComplete={loadAppointment} />
 
             <View style={styles.placeholderCard}>
               <Text style={styles.placeholderText}>

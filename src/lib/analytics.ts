@@ -23,3 +23,5 @@ export function trackPatternMarkedForDiscussion() {}
 export function trackPatternNoteAdded() {}
 export function trackQuestionAdded(_source: 'manual' | 'auto' | 'cycle_draft') {}
 export function trackQuestionReordered() {}
+export function trackAppointmentCompleted(_questionCount: number, _addressedCount: number) {}
+export function trackPostAppointmentOutcomeCaptured() {}
