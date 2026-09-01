@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { parseDateString } from '@/lib/date-utils';
 import { markerColors, markerTypeLabels, MarkerType } from '@/lib/marker-colors';
 import { createMarker, deleteMarker, fetchMarkers, updateMarker } from '@/lib/queries/markers';
+import { supabase } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
 const MARKER_ICON: Record<MarkerType, typeof PillIcon> = {
@@ -32,7 +33,7 @@ function formatMarkerDate(dateStr: string): string {
 // Settings screen has (domain toggles, push opt-in, PDF report
 // generation, PIN lock) is still a placeholder note below.
 export default function SettingsScreen() {
-  const { profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [markers, setMarkers] = useState<InterventionMarker[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -68,6 +69,19 @@ export default function SettingsScreen() {
   const handleDelete = async (id: string) => {
     await deleteMarker(id);
     setMarkers(prev => prev.filter(m => m.id !== id));
+  };
+
+  // No Settings toggle exists yet to turn body_tracking_enabled on (that's
+  // BodyTrackingSheet, not ported) — flip it here instead, the first time
+  // someone opens the check-in form, so History's body section (gated on
+  // this same flag, matching the web app) isn't a dead end for data this
+  // screen lets you log.
+  const handleOpenBodyCheckIn = async () => {
+    if (user && !profile?.body_tracking_enabled) {
+      await supabase.from('profiles').update({ body_tracking_enabled: true }).eq('id', user.id);
+      await refreshProfile();
+    }
+    setShowBodyCheckIn(true);
   };
 
   if (loading) return <PulseLoadingScreen />;
@@ -128,9 +142,9 @@ export default function SettingsScreen() {
             <View style={styles.bodySection}>
               <Text style={styles.sectionLabel}>Body tracking</Text>
               <Text style={styles.sectionHint}>
-                Alpha — physical symptoms tracked separately from mind check-ins. No Settings toggle to turn this on/off yet; logging is open regardless of profile.body_tracking_enabled.
+                Alpha — physical symptoms tracked separately from mind check-ins. Opening this the first time turns body tracking on; there’s no way to turn it back off yet.
               </Text>
-              <Pressable onPress={() => setShowBodyCheckIn(true)} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
+              <Pressable onPress={handleOpenBodyCheckIn} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
                 <Text style={styles.bodyCheckInButtonText}>Log body check-in</Text>
               </Pressable>
             </View>

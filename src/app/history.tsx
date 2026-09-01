@@ -7,6 +7,7 @@ import MarkerModal from '@/components/marker-modal';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { DayData, useHistory } from '@/hooks/use-history';
+import { resolveBodyColumnMode } from '@/lib/history/day-card-helpers';
 import { parseDateString } from '@/lib/date-utils';
 import { deleteMarker, updateMarker } from '@/lib/queries/markers';
 import type { InterventionMarker } from '@/types/marker';
@@ -25,17 +26,19 @@ function formatFullDate(dateStr: string): string {
 }
 
 // Scoped port of the web app's HistoryScreen.tsx — the Timeline (list) view
-// only. Intervention markers ARE now included (tap a marker chip to edit,
-// same as the web app). Still not ported: the Calendar view
-// (MonthViewCalendar), body tracking columns, cluster/pattern highlighting,
-// edit/delete check-in actions, the info sheet. See use-history.ts and
-// day-card.tsx for the specific scoping notes.
+// only. Intervention markers and body tracking (chunk 2 of the body-tracking
+// port) ARE now included. Still not ported: the Calendar view
+// (MonthViewCalendar), cluster/pattern highlighting, edit/delete check-in
+// actions, the info sheet. See use-history.ts and day-card.tsx for the
+// specific scoping notes.
 export default function HistoryScreen() {
   const { profile } = useAuth();
   const { loading, days, refresh } = useHistory();
   const [editingMarker, setEditingMarker] = useState<InterventionMarker | null>(null);
 
   if (loading) return <PulseLoadingScreen />;
+
+  const bodyColumnMode = resolveBodyColumnMode(profile?.body_tracking_enabled ?? false, profile?.body_morning_enabled ?? false);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -53,6 +56,10 @@ export default function HistoryScreen() {
             profile={profile}
             sleepLog={item.sleepLog}
             dayMarkers={item.markers}
+            bodyColumnMode={bodyColumnMode}
+            bodyEntry={item.bodyEntry}
+            bodyPainSites={item.bodyPainSites}
+            bodyEvents={item.bodyEvents}
             onEditMarker={setEditingMarker}
           />
         )}

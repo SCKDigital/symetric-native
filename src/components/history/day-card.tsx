@@ -2,11 +2,28 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import BodySection from '@/components/history/body-section';
 import MindSection from '@/components/history/mind-section';
 import { CalendarIcon, MoonIcon, NoteIcon, PillIcon, PinIcon } from '@/components/marker-icons';
-import { summariseDay, type DaySummaryCheckIn } from '@/lib/summarise-day';
-import { CheckIn, Profile, SleepLog } from '@/lib/supabase';
+import { formatEventLabel, formatPainSiteLabel } from '@/lib/body/format-body-event';
+import { BODY_DOMAIN_ORDER, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import type { BodyColumnMode } from '@/lib/history/day-card-helpers';
+import { summariseDay, type BodyReadingPair, type DaySummaryCheckIn } from '@/lib/summarise-day';
+import { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite, CheckIn, Profile, SleepLog } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
+
+/** Same-day am/pm pairs for the body-direction clause — only domains logged
+ *  at both times of day count (see BodyReadingPair). */
+function buildBodyPairs(columnMode: Exclude<BodyColumnMode, 'off'> | 'off', bodyEntry?: BodyCheckIn): BodyReadingPair[] {
+  if (columnMode !== 'twice' || !bodyEntry) return [];
+  const pairs: BodyReadingPair[] = [];
+  for (const key of MORNING_BODY_DOMAIN_ORDER) {
+    const am = bodyEntry[`morning_${key}` as keyof BodyCheckIn] as number | null | undefined;
+    const pm = bodyEntry[key] as number | null | undefined;
+    if (am != null && pm != null) pairs.push({ am, pm });
+  }
+  return pairs;
+}
 
 function getSleepDescriptor(score: number | null): string {
   switch (score) {
@@ -50,17 +67,24 @@ export interface DayCardProps {
   profile: Profile | null | undefined;
   sleepLog: SleepLog | null;
   dayMarkers: InterventionMarker[];
+  bodyColumnMode: BodyColumnMode;
+  bodyEntry?: BodyCheckIn;
+  bodyPainSites: BodyPainSite[];
+  bodyEvents: (BodyEvent & { body_event_sites: BodyEventSite[] })[];
   onEditMarker: (marker: InterventionMarker) => void;
 }
 
 // Scoped port of the web app's DayCard.tsx — deliberately drops what depends
-// on features not ported yet: body tracking columns, cycle day numbers,
-// cluster/pattern highlighting, and the edit/delete menu for check-ins
-// (CheckInMenu, EditCheckInModal). Intervention markers ARE now included
-// (ported alongside Settings' marker CRUD). Keeps the part that's genuinely
+// on features not ported yet: cycle day numbers, cluster/pattern
+// highlighting, and the edit/delete menu for check-ins (CheckInMenu,
+// EditCheckInModal). Intervention markers and body tracking (chunk 2 of the
+// body-tracking port) ARE now included. Keeps the part that's genuinely
 // self-contained: the day header, the plain-language summary sentence, the
-// sleep/marker/notes chips, and the expandable mind sparkline section.
-export default function DayCard({ date: _date, dayLabel, fullDateLabel, completedCheckIns, profile, sleepLog, dayMarkers, onEditMarker }: DayCardProps) {
+// sleep/marker/notes chips, and the expandable mind sparkline + body section.
+export default function DayCard({
+  date: _date, dayLabel, fullDateLabel, completedCheckIns, profile, sleepLog, dayMarkers,
+  bodyColumnMode, bodyEntry, bodyPainSites, bodyEvents, onEditMarker,
+}: DayCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const mindCount = completedCheckIns.length;
@@ -81,7 +105,7 @@ export default function DayCard({ date: _date, dayLabel, fullDateLabel, complete
         },
       }),
     ),
-    bodyPairs: [],
+    bodyPairs: buildBodyPairs(bodyColumnMode, bodyEntry),
   });
 
   const hasSleep = !!sleepLog && (sleepLog.skipped || sleepLog.score !== null);
@@ -99,7 +123,23 @@ export default function DayCard({ date: _date, dayLabel, fullDateLabel, complete
   });
   if (hasNotes) chips.push({ icon: <NoteIcon />, label: 'Note' });
 
-  const hasDetail = mindCount >= 2;
+  // Pain and joint-instability sites share one body map (see BodyCheckIn's
+  // "Where does it hurt or feel unstable?" prompt) — there's no per-domain
+  // split in body_pain_sites, so the label names both rather than picking one.
+  const sitesLabel = bodyEntry?.pain_diffuse
+    ? 'Pain/Instability: diffuse'
+    : (bodyPainSites.length > 0 ? `Pain/Instability: ${formatPainSiteLabel(bodyPainSites) ?? ''}` : undefined);
+  const eventLabels = bodyEvents.map(formatEventLabel);
+  // Body data is entered independently of mind check-ins (someone can log a
+  // crash day without a single mind check-in) — it must never be hidden
+  // behind a mind-check-in-count threshold, only behind bodyColumnMode itself.
+  const hasBodyDomainValue = !!bodyEntry && (
+    BODY_DOMAIN_ORDER.some(d => bodyEntry[d] != null) ||
+    MORNING_BODY_DOMAIN_ORDER.some(d => bodyEntry[`morning_${d}` as keyof BodyCheckIn] != null)
+  );
+  const hasBodyData = bodyColumnMode !== 'off' && (hasBodyDomainValue || eventLabels.length > 0 || !!sitesLabel || !!bodyEntry?.note);
+
+  const hasDetail = mindCount >= 2 || hasBodyData;
 
   return (
     <Pressable onPress={hasDetail ? () => setExpanded(e => !e) : undefined} style={styles.card}>
@@ -142,7 +182,12 @@ export default function DayCard({ date: _date, dayLabel, fullDateLabel, complete
 
       {expanded && hasDetail && (
         <View style={styles.expandedSection}>
-          <MindSection completedCheckIns={completedCheckIns} profile={profile} />
+          {mindCount >= 2 && <MindSection completedCheckIns={completedCheckIns} profile={profile} />}
+          {bodyColumnMode !== 'off' && (
+            <View style={mindCount >= 2 ? styles.bodySectionSpaced : undefined}>
+              <BodySection bodyEntry={bodyEntry} columnMode={bodyColumnMode} sitesLabel={sitesLabel} eventLabels={eventLabels} />
+            </View>
+          )}
         </View>
       )}
     </Pressable>
@@ -160,6 +205,7 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#1e2533', borderRadius: 20, paddingVertical: 4, paddingHorizontal: 9 },
   chipLabel: { fontSize: 11, color: '#8892a4' },
+  bodySectionSpaced: { marginTop: 20 },
   expandButton: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12, paddingVertical: 4 },
   expandButtonText: { fontSize: 13, color: '#818cf8' },
   expandedSection: { borderTopWidth: 1, borderTopColor: '#1e2533', padding: 20, paddingTop: 16 },

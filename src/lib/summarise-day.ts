@@ -10,8 +10,11 @@ export interface DaySummaryCheckIn {
   values: Partial<Record<DomainType, number>>;
 }
 
-/** One body domain's paired same-day am/pm reading — body tracking isn't
- *  ported yet, so callers always pass an empty array for now. */
+/** One body domain's paired same-day am/pm reading — only produced when the
+ *  optional morning check-in has data (day-card.tsx's buildBodyPairs), which
+ *  isn't itself ported yet even though body tracking's evening check-in is;
+ *  a user with pre-existing web-app morning data can still surface a real
+ *  pair here, so this isn't dead until the morning form ships. */
 export interface BodyReadingPair {
   am: number;
   pm: number;
