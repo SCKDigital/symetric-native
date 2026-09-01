@@ -131,6 +131,20 @@ export function buildReportDocument(params: {
   .explainer-box { border-left: 2pt solid ${colors.border}; padding: 6pt 0 6pt 8pt; margin-top: 8pt; }
   .explainer-title { font-weight: bold; font-size: ${fontSize.small}pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; margin: 0 0 3pt; }
   .explainer-text { font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.45; margin: 0; }
+
+  .completion-table { width: 100%; border-collapse: collapse; }
+  .completion-table th { text-align: left; font-weight: bold; font-size: 7pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; border-bottom: 1pt solid ${colors.heading}; padding-bottom: 3pt; }
+  .completion-table td { font-size: ${fontSize.small}pt; padding: 4pt 0; border-bottom: 0.5pt solid ${colors.border}; }
+  .col-week { width: 100pt; color: ${colors.heading}; }
+  .col-sched, .col-comp { width: 70pt; text-align: center; color: ${colors.muted}; }
+  .completion-table td.col-comp { color: ${colors.body}; }
+  .col-pct { width: 60pt; text-align: right; font-weight: bold; }
+  .col-note { font-style: italic; font-size: 7pt; color: ${colors.muted}; padding-left: 8pt; }
+
+  .callout-box { border-left: 2pt solid ${colors.amber}; background: ${colors.amberBg}; padding: 5pt 0 5pt 8pt; margin-bottom: 12pt; }
+  .callout-text { font-size: ${fontSize.small}pt; color: ${colors.amber}; line-height: 1.4; margin: 0; }
+
+  .meth-text { font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.55; margin: 0 0 8pt; }
 </style>
 </head>
 <body>${pagesHtml}</body>

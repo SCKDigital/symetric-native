@@ -16,6 +16,9 @@ interface Page1Data extends UnifiedFindingsInput {
   baselineMap: Record<string, number>;
   currentRollingMedians: Record<string, number>;
   questions: PrepareQuestion[];
+  /** Page number of the Data Quality & Methodology page — omitted (no
+   *  footnote shown) until that page exists. */
+  methodologyPageNum?: number;
 }
 
 function esc(s: string): string {
@@ -38,7 +41,7 @@ export function buildPage1BodyHtml(data: Page1Data): string {
   const { colors } = theme;
   const {
     userName, dateFrom, dateTo, completedCheckIns, totalScheduled,
-    trackedDomains, baselineMap, currentRollingMedians, questions,
+    trackedDomains, baselineMap, currentRollingMedians, questions, methodologyPageNum,
   } = data;
 
   const pct = totalScheduled > 0 ? Math.round((completedCheckIns / totalScheduled) * 100) : 0;
@@ -131,6 +134,7 @@ export function buildPage1BodyHtml(data: Page1Data): string {
 
     <div class="completion-line">
       <span>${completedCheckIns} of ${totalScheduled} check-ins completed (${pct}%) this period</span>
+      ${methodologyPageNum != null ? `<span style="color:${colors.muted};">Methodology on page ${methodologyPageNum}</span>` : ''}
     </div>
 
     <div class="section-gap">

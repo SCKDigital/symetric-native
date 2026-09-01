@@ -13,7 +13,9 @@ import { fetchPatternReviewsForAppointment } from '@/lib/api/pattern-reviews';
 import { buildChartCoordinates, computeSleepConnections } from '@/lib/report/chart-coordinates';
 import { buildPage1BodyHtml } from '@/lib/report/page1-html';
 import { buildPage2Html } from '@/lib/report/page2-html';
+import { buildPage3Html } from '@/lib/report/page3-html';
 import { buildReportDocument } from '@/lib/report/report-document';
+import { computeWeeklyCompletion } from '@/lib/report/weekly-completion';
 import { supabase } from '@/lib/supabase';
 import type { DetectedCluster, PrepareQuestion } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
@@ -31,9 +33,12 @@ export interface GenerateReportInput {
 }
 
 /**
- * PDF report port (see project_rn_rewrite_scoping.md), mind-only. Chunk 2
- * adds Page 2 (Mind Overview: sleep, domain sparklines, episode timeline,
- * rare events) alongside chunk 1's Page 1 (Executive Summary). Renders each
+ * PDF report port (see project_rn_rewrite_scoping.md), mind-only. Chunk 3
+ * adds Page 3 (Data Quality & Methodology: week-by-week completion table,
+ * low-completion callout, methodology paragraph) alongside chunk 1's Page 1
+ * (Executive Summary) and chunk 2's Page 2 (Mind Overview). Page 1's
+ * "Methodology on page N" footer line, dropped in chunk 1 since no
+ * methodology page existed yet, is back now that page 3 does. Renders each
  * page as an HTML fragment and assembles them via report-document.ts, then
  * hands the whole document to expo-print and opens the native share sheet
  * — the RN equivalent of the web version's auto-download anchor click
@@ -43,14 +48,14 @@ export interface GenerateReportInput {
  * include toggles (mind is the only option until body tracking exists),
  * copy-as-markdown, domain connections/correlations (needs the
  * significance-testing math from detection/computeConnection.ts, not
- * ported), and the Context & Connections / Data Quality & Methodology
- * pages.
+ * ported), and the Context & Connections page.
  */
 export async function generateReport(input: GenerateReportInput): Promise<{ uri: string }> {
   const { userId, userName, dateFrom, dateTo, clusters, appointmentId } = input;
 
   const [
     { data: checkIns },
+    { data: allCheckIns },
     { data: sleepLogs },
     { data: baselines },
     { data: settings },
@@ -60,6 +65,12 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     questions,
   ] = await Promise.all([
     supabase.from('check_ins').select('*').eq('user_id', userId).eq('status', 'completed')
+      .gte('scheduled_at', dateFrom + 'T00:00:00Z').lte('scheduled_at', dateTo + 'T23:59:59Z')
+      .order('scheduled_at', { ascending: true }),
+    // Unfiltered by status (unlike checkIns above) — the weekly-completion
+    // table on Page 3 needs to know how many were scheduled vs. actually
+    // completed, which a status='completed'-only fetch can't tell it.
+    supabase.from('check_ins').select('*').eq('user_id', userId)
       .gte('scheduled_at', dateFrom + 'T00:00:00Z').lte('scheduled_at', dateTo + 'T23:59:59Z')
       .order('scheduled_at', { ascending: true }),
     supabase.from('sleep_logs').select('*').eq('user_id', userId)
@@ -102,9 +113,8 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const interventionImpacts = detectInterventionImpacts(markers, dayScores, activeDomains);
 
   const completedCheckIns = (checkIns ?? []).length; // already filtered to status='completed'
-  const { count: totalScheduled } = await supabase
-    .from('check_ins').select('id', { count: 'exact', head: true }).eq('user_id', userId)
-    .gte('scheduled_at', dateFrom + 'T00:00:00Z').lte('scheduled_at', dateTo + 'T23:59:59Z');
+  const totalScheduled = (allCheckIns ?? []).length;
+  const weeklyCompletion = computeWeeklyCompletion(allCheckIns ?? [], dateFrom, dateTo);
 
   const storedQuestions: PrepareQuestion[] = [...questions].sort((a, b) => a.sort_order - b.sort_order);
 
@@ -117,12 +127,18 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const sleepHours = (sleepLogs ?? []).map(s => s.hours_slept).filter((v): v is number => v != null);
   const sleepMedianHours = sleepHours.length > 0 ? median(sleepHours) : null;
 
+  // Fixed for now — no conditional pages (e.g. Body Overview) exist yet, so
+  // the methodology page is always page 3. Revisit once a page's presence
+  // becomes conditional, the way the web app's own methPageNum/totalPages
+  // computation in SymetricReport.tsx accounts for hasBodyContent.
+  const methodologyPageNum = 3;
+
   const page1Body = buildPage1BodyHtml({
     userName,
     dateFrom,
     dateTo,
     completedCheckIns,
-    totalScheduled: totalScheduled ?? 0,
+    totalScheduled,
     trackedDomains: activeDomains,
     baselineMap,
     currentRollingMedians: coords.currentRollingMedians,
@@ -134,6 +150,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     rareEvents,
     patternEvolution,
     interventionImpacts,
+    methodologyPageNum,
   });
 
   const page2Body = buildPage2Html({
@@ -152,10 +169,19 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     lagRelationships,
   });
 
+  const page3Body = buildPage3Html({
+    dateFrom,
+    dateTo,
+    weeklyCompletion,
+    completedCheckIns,
+    totalScheduled,
+  });
+
   const html = buildReportDocument({
     pages: [
       { sectionTitle: 'Executive Summary', bodyHtml: page1Body },
       { sectionTitle: 'Mind Overview', bodyHtml: page2Body },
+      { sectionTitle: 'Data Quality & Methodology', bodyHtml: page3Body },
     ],
     generationDate,
     dateFrom,
