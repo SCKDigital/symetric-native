@@ -13,7 +13,7 @@ import { AreaRow, buildAreaRows } from '@/lib/area-rows';
 import { BODY_DOMAIN_ORDER, BODY_DOMAINS, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
 import { CircadianPattern, fetchCircadianPatterns, formatCircadianPattern } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
-import { buildDayScores, DayScores } from '@/lib/day-scores';
+import { buildDayScores, DayScores, mergeDays } from '@/lib/day-scores';
 import { parseDateString } from '@/lib/date-utils';
 import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
 import { dailyBodyValue } from '@/lib/detection/body-daily-value';
@@ -444,18 +444,6 @@ export default function InsightsScreen() {
     // Pattern evolution and rare events stay un-merged — each runs a
     // separate pass per area (own baseline map), same as clusters already
     // do via the shared detected_clusters table.
-    function mergeDays<A extends string, B extends string>(
-      mindDays: { date: string; scores: Partial<Record<A, number>> }[],
-      bodyDaysToMerge: { date: string; scores: Partial<Record<B, number>> }[],
-    ): { date: string; scores: Partial<Record<A | B, number>> }[] {
-      const byDate = new Map<string, Partial<Record<A | B, number>>>();
-      for (const d of mindDays) byDate.set(d.date, { ...d.scores } as Partial<Record<A | B, number>>);
-      for (const d of bodyDaysToMerge) {
-        const existing = byDate.get(d.date) ?? {};
-        byDate.set(d.date, { ...existing, ...d.scores } as Partial<Record<A | B, number>>);
-      }
-      return [...byDate.entries()].map(([date, scores]) => ({ date, scores })).sort((a, b) => a.date.localeCompare(b.date));
-    }
     const merged90d = mergeDays(days90d, bodyDays90d);
     const combinedDomains = [...resolvedDomains, ...resolvedBodyDomains];
 

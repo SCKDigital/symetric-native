@@ -1,4 +1,4 @@
-import { buildDayScores } from '@/lib/day-scores';
+import { buildDayScores, mergeDays } from '@/lib/day-scores';
 import { detectInterventionImpacts } from '@/lib/detection/intervention-impact';
 import { detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
 import { detectLagRelationships } from '@/lib/detection/lag-relationships';
@@ -6,7 +6,11 @@ import { detectPatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents } from '@/lib/detection/rare-events';
 import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
 import { dailyBodyValue } from '@/lib/detection/body-daily-value';
+import { detectBodyEventFrequency } from '@/lib/detection/body-event-frequency';
+import { detectBodyEventImpacts } from '@/lib/detection/body-event-impact';
+import { detectBodyTimeOfDayPatterns, MorningEveningPair } from '@/lib/detection/body-time-of-day';
 import type { CircadianPattern } from '@/lib/circadian-detection';
+import { MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
 import { resolveActiveDomains } from '@/lib/domains';
 import { median } from '@/lib/baseline-stats';
 import { calculateSortWeight } from '@/lib/priority-scoring';
@@ -64,6 +68,23 @@ function buildBodyDayScores(rows: Record<string, unknown>[], domains: BodyDomain
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+// Ported from the web app's generateReport.ts's buildMorningEveningPairs,
+// unchanged — feeds detectBodyTimeOfDayPatterns for Page 1's ranking.
+function buildMorningEveningPairs(rows: Record<string, unknown>[], domains: BodyDomainType[]): MorningEveningPair[] {
+  const pairs: MorningEveningPair[] = [];
+  for (const entry of rows) {
+    for (const d of domains) {
+      if (!(MORNING_BODY_DOMAIN_ORDER as string[]).includes(d)) continue;
+      const evening = entry[d];
+      const morning = entry[`morning_${d}`];
+      if (typeof evening === 'number' && typeof morning === 'number') {
+        pairs.push({ date: entry.entry_date as string, domain: d, morning, evening });
+      }
+    }
+  }
+  return pairs;
+}
+
 /**
  * PDF report port (see project_rn_rewrite_scoping.md), mind-only. Chunk 4
  * adds the Context & Connections page (strongest day-of-week/time-of-day
@@ -99,20 +120,32 @@ function buildBodyDayScores(rows: Record<string, unknown>[], domains: BodyDomain
  * have leaked into the mind-only Page 1/Page 2 sections with an unlabelled
  * domain key.
  *
- * Mind+body day-score merge (a still-later pass, after insights.tsx's own
- * merge shipped): deliberately NOT mirrored here. insights.tsx could merge
- * day-of-week/lag-relationship/intervention-impact detection safely because
- * pattern-findings.ts's finding functions already split results by area
- * (`.areas.includes('mind'|'body')`) before they reach any UI. This file's
- * Page 1 ranking (report-findings.ts's buildUnifiedFindings) has no such
- * split — it dumps dayOfWeekPatterns/lagRelationships/interventionImpacts
- * straight into one ranked list with no domain-type filter. Merging body
- * domains into those inputs here would leak body-domain findings into
- * Page 1's "Mind domain summary" section unlabelled — worse than the
- * current mind-only state, not better. Giving Page 1 real body-awareness
- * needs report-findings.ts to gain the same area-split pattern-findings.ts
- * already has, which is its own separate piece of work, not a mechanical
- * copy of insights.tsx's merge.
+ * Page 1 body-awareness (a still-later pass, after insights.tsx's own
+ * mind+body day-score merge shipped): matches the web app's own
+ * reportFindings.tsx structure exactly, not insights.tsx's approach —
+ * dayOfWeekPatterns/lagRelationships stay mind-only everywhere, including
+ * Page 1 (body's day-of-week/lag-shaped signal is covered by the dedicated
+ * bodyTimeOfDay/bodyEventFrequency detectors instead). flaggedClusters and
+ * bodyFlaggedClusters stay two separate lists (not unioned) — Page 1 takes
+ * both directly as distinct inputs. Only interventionImpacts is always
+ * merged (mind+body), since a medication/therapy marker's effect can land
+ * on either area and that single variable already feeds every page's
+ * EpisodeTimeline. report-findings.ts's buildUnifiedFindings needed no
+ * area-split to make any of this work — it just labels whatever domain key
+ * an input carries via DOMAIN_LABELS (already covers body domains, see
+ * theme.ts) — so giving Page 1 real body-awareness was entirely about
+ * which inputs it receives (six new optional body fields, reusing
+ * clusterFindings/patternEvolutionFindings/rareEventFindings/
+ * bodyTimeOfDayFindings/bodyEventFrequencyFindings/bodyEventImpactFindings,
+ * all already ported for Insights), not a change to its ranking logic. A
+ * new "Body domain summary" table (bodySummary's existing per-domain
+ * averages, already computed for the Body Overview page) sits alongside
+ * the existing "Mind domain summary" table, sharing the same
+ * domainToFindingKind lookup so a body domain's "active pattern" column
+ * resolves the same way a mind domain's already does. Page 2 and Context &
+ * Connections deliberately stay mind-only throughout (a body-domain bar on
+ * either page's charts would be just as mislabelled as it would have been
+ * on Page 1's own tables).
  */
 export async function generateReport(input: GenerateReportInput): Promise<{ uri: string }> {
   const { userId, userName, dateFrom, dateTo, clusters, appointmentId, bodyTrackingEnabled = false } = input;
@@ -197,11 +230,41 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const flaggedClusters = mindClusters.filter(flagFilter).sort((a, b) => sortWeight(b) - sortWeight(a));
   const bodyFlaggedClusters = bodyClustersRaw.filter(flagFilter).sort((a, b) => sortWeight(b) - sortWeight(a));
 
+  // day-of-week/lag-relationship stay mind-only — matching the web app's
+  // own generateReport.ts exactly, which never merges body into these two
+  // (unlike insights.tsx's own merge pass). Body's day-of-week/lag-shaped
+  // signal is covered by the dedicated bodyTimeOfDay/bodyEventFrequency
+  // detectors below instead, not by feeding these generic ones merged data.
   const dayOfWeekPatterns = detectDayOfWeekPatterns(dayScores, activeDomains);
   const lagRelationships = detectLagRelationships(dayScores, activeDomains);
   const rareEvents = detectRareEvents(dayScores, activeDomains, baselineMap);
   const patternEvolution = detectPatternEvolution(dayScores, activeDomains, baselineMap);
-  const interventionImpacts = detectInterventionImpacts(markers, dayScores, activeDomains);
+
+  // ── Body tracking — computed early so intervention-impact detection below
+  // can merge it in. Scoped to the report's own date-range rows, same as
+  // every mind-side detector call above — not a separate 90-day lookback,
+  // matching the web app's own generateReport.ts comment on this exact
+  // choice.
+  const bodySummary = computeBodySummaries(bodyCheckInsRaw ?? [], bodyEventsRaw ?? []);
+  const bodyTrackedDomains = bodySummary.domains.map(d => d.domain) as BodyDomainType[];
+  const bodyDayScores = buildBodyDayScores(bodyCheckInsRaw ?? [], bodyTrackedDomains);
+
+  const bodyBaselineMap: Record<string, number> = {};
+  for (const d of bodyTrackedDomains) {
+    const history = bodyDayScores.map(bd => bd.scores[d]).filter((v): v is number => v !== undefined);
+    bodyBaselineMap[d] = rollingBodyBaseline(history);
+  }
+
+  // Unlike dayOfWeekPatterns/lagRelationships, interventionImpacts IS
+  // always computed from merged mind+body day-scores, matching the web
+  // app's own generateReport.ts exactly (one always-merged variable, no
+  // separate mind-only copy) — a medication/therapy marker's effect can
+  // land on either area, and this same variable feeds Page 2's and Body
+  // Overview's EpisodeTimeline too, where showing the full cross-area
+  // picture for one marker is the correct behavior, not a leak.
+  const mergedDayScores = mergeDays(dayScores, bodyDayScores);
+  const combinedDomains = [...activeDomains, ...bodyTrackedDomains];
+  const interventionImpacts = detectInterventionImpacts(markers, mergedDayScores, combinedDomains);
 
   const completedCheckIns = (checkIns ?? []).length; // already filtered to status='completed'
   const totalScheduled = (allCheckIns ?? []).length;
@@ -219,29 +282,22 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const sleepHours = (sleepLogs ?? []).map(s => s.hours_slept).filter((v): v is number => v != null);
   const sleepMedianHours = sleepHours.length > 0 ? median(sleepHours) : null;
 
-  // ── Body tracking ──────────────────────────────────────────────────────
-  // Scoped to the report's own date-range rows, same as every mind-side
-  // detector call above — not a separate 90-day lookback, matching the web
-  // app's own generateReport.ts comment on this exact choice.
-
-  const bodySummary = computeBodySummaries(bodyCheckInsRaw ?? [], bodyEventsRaw ?? []);
-  const bodyTrackedDomains = bodySummary.domains.map(d => d.domain) as BodyDomainType[];
-  const bodyDayScores = buildBodyDayScores(bodyCheckInsRaw ?? [], bodyTrackedDomains);
-
-  const bodyBaselineMap: Record<string, number> = {};
-  for (const d of bodyTrackedDomains) {
-    const history = bodyDayScores.map(bd => bd.scores[d]).filter((v): v is number => v !== undefined);
-    bodyBaselineMap[d] = rollingBodyBaseline(history);
-  }
+  // ── Body tracking (continued — bodySummary/bodyTrackedDomains/bodyDayScores/
+  // bodyBaselineMap were computed early, above, for the intervention-impact
+  // merge) ──────────────────────────────────────────────────────────────
 
   const bodyPatternEvolution = detectPatternEvolution(bodyDayScores, bodyTrackedDomains, bodyBaselineMap);
   const bodyRareEvents = detectRareEvents(bodyDayScores, bodyTrackedDomains, bodyBaselineMap);
-  // Not computed this pass: detectBodyTimeOfDayPatterns/detectBodyEventFrequency/
-  // detectBodyEventImpacts. On the web app these three only ever feed Page 1's
-  // unified findings ranking (reportFindings.tsx's allFindings) — Page 3 itself
-  // never renders them directly. Page 1 stays mind-only this pass (see this
-  // file's header comment), so there's nothing yet to consume their output;
-  // add them back alongside whichever chunk gives Page 1 body-awareness.
+
+  // These three feed Page 1's unified findings ranking only — Page 3 (Body
+  // Overview) never renders them directly, same as on the web app.
+  const bodyEventInput = (bodyEventsRaw ?? []).map(e => ({ event_date: e.event_date as string, event_type: e.event_type as any }));
+  const bodyTimeOfDayPatterns = detectBodyTimeOfDayPatterns(buildMorningEveningPairs(bodyCheckInsRaw ?? [], bodyTrackedDomains));
+  const bodyEventFrequencyPatterns = detectBodyEventFrequency(bodyEventInput, dateTo);
+  // Mind-only dayScores/activeDomains, matching the web app exactly — a
+  // body event's impact on BODY domains isn't computed (same "no merge
+  // for this one" choice already made in insights.tsx).
+  const bodyEventImpacts = detectBodyEventImpacts(bodyEventInput, dayScores, activeDomains);
 
   const bodyCurrentRollingMedians: Record<string, number> = {};
   for (const domain of bodyTrackedDomains) {
@@ -282,6 +338,15 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     patternEvolution,
     interventionImpacts,
     methodologyPageNum,
+    bodyTrackedDomains,
+    bodyBaselineMap,
+    bodyCurrentRollingMedians,
+    bodyFlaggedClusters,
+    bodyPatternEvolution,
+    bodyRareEvents,
+    bodyTimeOfDayPatterns,
+    bodyEventFrequencyPatterns,
+    bodyEventImpacts,
   });
 
   const page2Body = buildPage2Html({

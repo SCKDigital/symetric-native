@@ -1,7 +1,14 @@
-import { interventionImpactFindings, type Grade, type PatternFinding } from '@/lib/pattern-findings';
+import {
+  bodyEventFrequencyFindings, bodyEventImpactFindings, bodyTimeOfDayFindings,
+  clusterFindings, interventionImpactFindings, patternEvolutionFindings, rareEventFindings,
+  type Grade, type PatternFinding,
+} from '@/lib/pattern-findings';
 import { patternEvolutionHeadline, patternEvolutionStatLine } from '@/lib/report/chart-utils';
 import type { DomainConnection } from '@/lib/report/chart-coordinates';
 import { DOMAIN_LABELS, LOWER_IS_BETTER, theme } from '@/lib/report/theme';
+import type { BodyEventFrequencyPattern } from '@/lib/detection/body-event-frequency';
+import type { BodyEventMindImpact } from '@/lib/detection/body-event-impact';
+import type { BodyTimeOfDayPattern } from '@/lib/detection/body-time-of-day';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
 import type { PatternEvolution } from '@/lib/detection/pattern-evolution';
@@ -11,18 +18,24 @@ import type { CircadianPattern } from '@/lib/circadian-detection';
 import type { DetectedCluster } from '@/lib/supabase';
 
 // Scoped port of the web app's lib/report/sections/reportFindings.tsx —
-// only buildUnifiedFindings' mind-domain sections (clusters, domain
-// connections, lag relationships, day-of-week, circadian, rare events,
-// pattern evolution, medication impact) plus the small color/label helpers
-// Page 1 needs. Domain connections were deferred through report chunk 3,
-// ported alongside chart-coordinates.ts's computeDomainConnections in
-// chunk 4. Every body-domain section (10) is omitted entirely, same
-// mind-only scoping as the rest of this port. NOT ported yet:
-// DomainSummaryTable/BodySummaryTable/PatternCard/EpisodeTimeline/
-// RareEventsSection/DomainSparklineSection as reusable components — each
-// page's HTML template inlines the small pieces of this it needs
-// directly, since there's no @react-pdf/renderer component tree here,
-// just an HTML string for expo-print.
+// buildUnifiedFindings' mind-domain sections (clusters, domain connections,
+// lag relationships, day-of-week, circadian, rare events, pattern
+// evolution, medication impact) plus the small color/label helpers Page 1
+// needs. Domain connections were deferred through report chunk 3, ported
+// alongside chart-coordinates.ts's computeDomainConnections in chunk 4.
+// Section 10 (body patterns) ported in the Page-1-body-awareness pass,
+// after insights.tsx's own mind+body day-score merge shipped — reuses
+// clusterFindings/patternEvolutionFindings/rareEventFindings/
+// bodyTimeOfDayFindings/bodyEventFrequencyFindings/bodyEventImpactFindings
+// (all already ported for Insights) via the same toUnified() bridge
+// section 9 (medication impact) already established, rather than a new
+// mechanism. All six body inputs are optional and default to empty — Page
+// 1 still works, body-free, exactly as before when no body content exists.
+// NOT ported yet: DomainSummaryTable/BodySummaryTable/PatternCard/
+// EpisodeTimeline/RareEventsSection/DomainSparklineSection as reusable
+// components — each page's HTML template inlines the small pieces of this
+// it needs directly, since there's no @react-pdf/renderer component tree
+// here, just an HTML string for expo-print.
 
 export type Tier = 'high' | 'moderate' | 'early';
 
@@ -87,6 +100,15 @@ export interface UnifiedFindingsInput {
   rareEvents: RareEvent[];
   patternEvolution: PatternEvolution[];
   interventionImpacts: InterventionImpact[];
+  /** Body inputs — all optional, default to empty. Omitted (or all-empty)
+   *  whenever the caller has no body content, same as the rest of this
+   *  report's body-conditional pieces. */
+  bodyFlaggedClusters?: DetectedCluster[];
+  bodyPatternEvolution?: PatternEvolution[];
+  bodyRareEvents?: RareEvent[];
+  bodyTimeOfDayPatterns?: BodyTimeOfDayPattern[];
+  bodyEventFrequencyPatterns?: BodyEventFrequencyPattern[];
+  bodyEventImpacts?: BodyEventMindImpact[];
 }
 
 function rareEventLabel(t: string): string {
@@ -213,6 +235,33 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
 
   for (const f of interventionImpactFindings(data.interventionImpacts)) {
     findings.push(toUnified('med', 'Medication effect', f));
+  }
+
+  // 10 — Body patterns (deviations, evolution, rare events, time-of-day,
+  // event frequency/impact). Ported from web's reportFindings.tsx section
+  // 10, unchanged — clusterFindings() here (not the plainPatternHeadline()
+  // path sections 1's mind clusters use) is web's own real, if
+  // inconsistent, choice; faithfully preserved rather than unified.
+  const bodyFlaggedClusters = data.bodyFlaggedClusters ?? [];
+  const bodyClustersForCards = bodyFlaggedClusters.filter(c => c.cluster_type === 'sustained_deviation' || c.cluster_type === 'rapid_cycling');
+  clusterFindings(bodyFlaggedClusters).forEach((f, i) => {
+    const kind = bodyClustersForCards[i]?.cluster_type === 'rapid_cycling' ? 'Rapid cycling' : 'Sustained deviation';
+    findings.push(toUnified('body', kind, f));
+  });
+  for (const f of patternEvolutionFindings(data.bodyPatternEvolution ?? [])) {
+    findings.push(toUnified('body', 'Evolving trend', f));
+  }
+  for (const f of rareEventFindings(data.bodyRareEvents ?? [], 'body')) {
+    findings.push(toUnified('body', 'Rare event', f));
+  }
+  for (const f of bodyTimeOfDayFindings(data.bodyTimeOfDayPatterns ?? [])) {
+    findings.push(toUnified('body', 'Time-of-day pattern', f));
+  }
+  for (const f of bodyEventFrequencyFindings(data.bodyEventFrequencyPatterns ?? [])) {
+    findings.push(toUnified('body', 'Event frequency', f));
+  }
+  for (const f of bodyEventImpactFindings(data.bodyEventImpacts ?? [])) {
+    findings.push(toUnified('body', 'Cross-domain impact', f));
   }
 
   findings.sort((a, b) => {
