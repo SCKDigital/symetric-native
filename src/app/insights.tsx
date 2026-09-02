@@ -280,15 +280,24 @@ function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
 // the same generic detectors mind uses (both were domain-agnostic already —
 // widened to TrackedFactor = DomainType | BodyDomainType this chunk).
 //
-// Deliberately NOT done this chunk (real, separable follow-up work, not
-// part of the original body-detector plan): merging mind+body day-scores
-// for day-of-week-pattern/lag-relationship/intervention-impact detection —
-// each would need the same TrackedFactor widening PLUS updates to the raw
-// (non-PatternFinding) DayOfWeekSection/LagRelationshipSection/
-// MedicationSection rendering below, which currently assume mind-only
-// input. Those three sections still show mind-only content; only cluster/
-// pattern-evolution/rare-event detection and the four dedicated body
-// detectors are body-aware.
+// Mind+body day-score merge pass (later same day): day-of-week-pattern,
+// lag-relationship, and intervention-impact detection now run against
+// merged mind+body day-scores (mergeDays, defined inside load()) and a
+// combined domain list, closing the gap flagged above. day-of-week-
+// patterns.ts/lag-relationships.ts/intervention-impact.ts all had their
+// TrackedFactor widened to DomainType | BodyDomainType — each was already
+// domain-agnostic, so this was a type-level unlock, not new detection
+// logic. The raw (non-PatternFinding) DayOfWeekSection/LagRelationshipSection/
+// MedicationSection below needed no changes: they already render whatever
+// domain a pattern carries via domainLabel() (body-aware since the body
+// detector series), so body-domain entries just started appearing once the
+// detectors themselves started producing them. Findings composition
+// (mindFindings/bodyFindings) needed no changes either — the area-split
+// filters added in the body detector series were already forward-looking
+// for exactly this moment. Pattern evolution and rare-event detection
+// intentionally stay un-merged (separate per-area passes, own baseline
+// maps) — merging is only for detectors whose whole point is cross-area
+// pairs or a shared per-day domain list.
 export default function InsightsScreen() {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -396,22 +405,9 @@ export default function InsightsScreen() {
     setActiveDomains(resolvedDomains);
     const days90d = buildDayScores(checkIns90d as CheckIn[] | null, sleepLogs90d as SleepLog[] | null);
     setDays90dCount(days90d.length);
-    setDayOfWeekPatterns(detectDayOfWeekPatterns(days90d, resolvedDomains));
-    setLagRelationships(detectLagRelationships(days90d, resolvedDomains));
 
-    const baselineMap: Partial<Record<DomainType, number>> = {};
-    (baselines as Baseline[] | null)?.forEach(b => {
-      baselineMap[b.domain] = b.baseline_score;
-    });
-    setBaselineMap(baselineMap);
-    setPatternEvolutions(detectPatternEvolution(days90d, resolvedDomains, baselineMap));
-    setRareEvents(detectRareEvents(days90d, resolvedDomains, baselineMap));
-    setMarkers(markersData);
-
-    const impacts = detectInterventionImpacts(markersData, days90d, resolvedDomains);
-    setInterventionImpacts(impacts);
-
-    // ── Body: day-scores, baseline, pattern evolution + rare events ─────────
+    // ── Body day-scores + baseline — computed early so day-of-week/lag-
+    // relationship/intervention-impact detection below can merge them in.
     // Filter rather than cast — see body-cluster-detection.ts for why
     // 'exertion' (a legacy value still in body_domains_active's DB default)
     // is excluded.
@@ -440,8 +436,50 @@ export default function InsightsScreen() {
       const history = bodyDays90d.map(bd => bd.scores[d]).filter((v): v is number => v !== undefined);
       bodyBaselineMap[d] = rollingBodyBaseline(history);
     }
+
+    // Merge mind + body day-scores by date, for detectors whose math is
+    // per-domain/per-pair independent (safe to merge without changing
+    // mind-only results) and where cross-area pairs are exactly the point:
+    // day-of-week patterns, lag relationships, and medication impact.
+    // Pattern evolution and rare events stay un-merged — each runs a
+    // separate pass per area (own baseline map), same as clusters already
+    // do via the shared detected_clusters table.
+    function mergeDays<A extends string, B extends string>(
+      mindDays: { date: string; scores: Partial<Record<A, number>> }[],
+      bodyDaysToMerge: { date: string; scores: Partial<Record<B, number>> }[],
+    ): { date: string; scores: Partial<Record<A | B, number>> }[] {
+      const byDate = new Map<string, Partial<Record<A | B, number>>>();
+      for (const d of mindDays) byDate.set(d.date, { ...d.scores } as Partial<Record<A | B, number>>);
+      for (const d of bodyDaysToMerge) {
+        const existing = byDate.get(d.date) ?? {};
+        byDate.set(d.date, { ...existing, ...d.scores } as Partial<Record<A | B, number>>);
+      }
+      return [...byDate.entries()].map(([date, scores]) => ({ date, scores })).sort((a, b) => a.date.localeCompare(b.date));
+    }
+    const merged90d = mergeDays(days90d, bodyDays90d);
+    const combinedDomains = [...resolvedDomains, ...resolvedBodyDomains];
+
+    setDayOfWeekPatterns(detectDayOfWeekPatterns(merged90d, combinedDomains));
+    setLagRelationships(detectLagRelationships(merged90d, combinedDomains));
+
+    const baselineMap: Partial<Record<DomainType, number>> = {};
+    (baselines as Baseline[] | null)?.forEach(b => {
+      baselineMap[b.domain] = b.baseline_score;
+    });
+    setBaselineMap(baselineMap);
+    setPatternEvolutions(detectPatternEvolution(days90d, resolvedDomains, baselineMap));
+    setRareEvents(detectRareEvents(days90d, resolvedDomains, baselineMap));
     setBodyPatternEvolutions(detectPatternEvolution(bodyDays90d, resolvedBodyDomains, bodyBaselineMap));
     setBodyRareEvents(detectRareEvents(bodyDays90d, resolvedBodyDomains, bodyBaselineMap));
+    setMarkers(markersData);
+
+    // Merged mind+body window, matching the merge rationale above — a
+    // medication/therapy marker's before/after effect can land on either
+    // side. Window stays 90d, not the selected range — an existing native
+    // choice from the mind-only intervention-impact chunk, predating this
+    // merge pass and left as-is (out of scope to also change here).
+    const impacts = detectInterventionImpacts(markersData, merged90d, combinedDomains);
+    setInterventionImpacts(impacts);
 
     // ── Body: time-of-day (morning vs evening) ───────────────────────────────
     const moPairs: MorningEveningPair[] = [];

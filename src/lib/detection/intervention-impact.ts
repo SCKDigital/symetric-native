@@ -1,12 +1,13 @@
 import { addDays } from '@/lib/date-utils';
 import { debug } from '@/lib/debug';
-import { DomainType } from '@/lib/supabase';
+import { BodyDomainType, DomainType } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
-// Ported from the web app's src/lib/detection/interventionImpact.ts —
-// mind-only for now, same TrackedFactor note as the other detection modules
-// in this series. Unblocked now that intervention markers are ported.
-export type TrackedFactor = DomainType;
+// Ported from the web app's src/lib/detection/interventionImpact.ts.
+// Widened to cover body domains too (mind+body day-score merge pass) —
+// already domain-agnostic (a generic loop over activeDomains, no mind-
+// specific logic), so this is a type-level unlock only.
+export type TrackedFactor = DomainType | BodyDomainType;
 
 export interface DomainImpact {
   domain: TrackedFactor;

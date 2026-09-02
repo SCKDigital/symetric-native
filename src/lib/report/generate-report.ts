@@ -93,15 +93,26 @@ function buildBodyDayScores(rows: Record<string, unknown>[], domains: BodyDomain
  * range (hasBodyContent below, mirroring the web app's SymetricReport.tsx
  * gate) — domain sparklines, a dated event table, a ranked pain/instability
  * site list, and body-only rare-event/pattern-evolution detection, reusing
- * page2-findings-html.ts's already-generic section builders. Page 1's own
- * "Mind domain summary"/"Patterns detected" sections stay mind-only for
- * now — folding body clusters/findings into that ranked list is a real,
- * separable follow-up (same scope boundary as insights.tsx's own deferred
- * mind+body day-score merge for day-of-week/lag/medication detection), not
- * done this pass. flaggedClusters IS now correctly split into mind-only/
- * body-only (previously unfiltered — see the split below), fixing a latent
- * bug where a flagged body cluster could have leaked into the mind-only
- * Page 1/Page 2 sections with an unlabelled domain key.
+ * page2-findings-html.ts's already-generic section builders. flaggedClusters
+ * IS correctly split into mind-only/body-only (previously unfiltered — see
+ * the split below), fixing a latent bug where a flagged body cluster could
+ * have leaked into the mind-only Page 1/Page 2 sections with an unlabelled
+ * domain key.
+ *
+ * Mind+body day-score merge (a still-later pass, after insights.tsx's own
+ * merge shipped): deliberately NOT mirrored here. insights.tsx could merge
+ * day-of-week/lag-relationship/intervention-impact detection safely because
+ * pattern-findings.ts's finding functions already split results by area
+ * (`.areas.includes('mind'|'body')`) before they reach any UI. This file's
+ * Page 1 ranking (report-findings.ts's buildUnifiedFindings) has no such
+ * split — it dumps dayOfWeekPatterns/lagRelationships/interventionImpacts
+ * straight into one ranked list with no domain-type filter. Merging body
+ * domains into those inputs here would leak body-domain findings into
+ * Page 1's "Mind domain summary" section unlabelled — worse than the
+ * current mind-only state, not better. Giving Page 1 real body-awareness
+ * needs report-findings.ts to gain the same area-split pattern-findings.ts
+ * already has, which is its own separate piece of work, not a mechanical
+ * copy of insights.tsx's merge.
  */
 export async function generateReport(input: GenerateReportInput): Promise<{ uri: string }> {
   const { userId, userName, dateFrom, dateTo, clusters, appointmentId, bodyTrackingEnabled = false } = input;

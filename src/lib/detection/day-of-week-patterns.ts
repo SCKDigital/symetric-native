@@ -1,13 +1,12 @@
 import { debug } from '@/lib/debug';
-import { DomainType } from '@/lib/supabase';
+import { BodyDomainType, DomainType } from '@/lib/supabase';
 
-// Ported from the web app's src/lib/detection/dayOfWeekPatterns.ts. The web
-// version's TrackedFactor is `DomainType | BodyDomainType` since it runs
-// against merged mind+body day-scores; body tracking isn't ported yet, so
-// this is mind-only for now — extend TrackedFactor to include body domains
-// once body check-ins exist on native, the detection math itself doesn't
-// change (it's already generic over whatever factor keys the scores use).
-export type TrackedFactor = DomainType;
+// Ported from the web app's src/lib/detection/dayOfWeekPatterns.ts. Widened
+// to cover body domains too (mind+body day-score merge pass, insights.tsx
+// now calls this with merged mind+body day-scores) — the detection math
+// itself is unchanged, already generic over whatever factor keys the
+// scores use.
+export type TrackedFactor = DomainType | BodyDomainType;
 
 export interface DayOfWeekPattern {
   domain: TrackedFactor;

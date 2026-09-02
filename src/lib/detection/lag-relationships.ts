@@ -1,13 +1,13 @@
 import { median as medianOf } from '@/lib/baseline-stats';
 import { addDays } from '@/lib/date-utils';
 import { debug } from '@/lib/debug';
-import { DomainType } from '@/lib/supabase';
+import { BodyDomainType, DomainType } from '@/lib/supabase';
 
 import { pearson as pearsonR } from './pearson';
 
-// Ported from the web app's src/lib/detection/lagRelationships.ts — mind-only
-// for now, same TrackedFactor note as day-of-week-patterns.ts.
-export type TrackedFactor = DomainType;
+// Ported from the web app's src/lib/detection/lagRelationships.ts. Widened
+// to cover body domains too, same reasoning as day-of-week-patterns.ts.
+export type TrackedFactor = DomainType | BodyDomainType;
 
 export interface LagRelationship {
   predictor: TrackedFactor | 'sleep';
