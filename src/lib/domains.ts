@@ -88,6 +88,15 @@ export function getDomainColorFromProfile(domain: string, profile: Profile | nul
   return getDomainColor(domain, profile?.simplified_colors ?? false);
 }
 
+/** Returns a heading label for one or more domains. Ported from the web
+ *  app's src/utils/domainColors.ts, unchanged. */
+export function domainHeadingLabel(domains: string[], domainLabels: Record<string, string>): string {
+  if (domains.length === 0) return 'Pattern';
+  if (domains.length === 1) return domainLabels[domains[0]] ?? domains[0];
+  if (domains.length <= 3) return domains.map(d => domainLabels[d] ?? d).join(' + ');
+  return `${domains.length} domains`;
+}
+
 // ── Slider anchor copy ───────────────────────────────────────────────────────
 
 export const SLIDER_LABELS: Record<DomainType, { low: string; high: string }> = {

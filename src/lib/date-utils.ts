@@ -49,6 +49,10 @@ export function addDays(dateStr: string, n: number): string {
 
 /** Every 'YYYY-MM-DD' string from `from` to `to` inclusive. Ported from the
  *  web app's src/utils/dateUtils.ts, unchanged. */
+export function formatShortDate(dateStr: string): string {
+  return parseDateString(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
 export function getDatesInRange(from: string, to: string): string[] {
   const dates: string[] = [];
   const cur = parseDateString(from);
