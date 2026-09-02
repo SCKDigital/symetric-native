@@ -7,8 +7,10 @@ import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
 import MorningBodyCheckIn from '@/components/body/morning-body-check-in';
 import MarkerModal from '@/components/marker-modal';
 import { CalendarIcon, PillIcon, PinIcon } from '@/components/marker-icons';
+import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
+import { generateSalt, hashPin } from '@/lib/app-lock';
 import { CHECKIN_BODY_DOMAIN_ORDER, BODY_DOMAINS } from '@/lib/body/constants';
 import { BODY_COLOR } from '@/lib/domains';
 import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
@@ -31,16 +33,17 @@ function formatMarkerDate(dateStr: string): string {
 }
 
 // Settings' real features so far: intervention marker CRUD (ported from
-// the web app's Settings marker section + MarkerModal.tsx) and body
-// tracking — a real master toggle (chunk 4 of the body-tracking port,
-// replacing the temporary "auto-enable on first check-in" wiring from
-// earlier chunks), domain toggle pills + timing sheet
+// the web app's Settings marker section + MarkerModal.tsx), body
+// tracking — a real master toggle, domain toggle pills + timing sheet
 // (use-body-tracking-settings.ts/BodyTrackingSheet, ported from the web
 // app's useBodyTrackingSettings.ts/BodyTrackingSheet.tsx), and both check-in
-// entry points (evening, and — chunk 5, gated on body_morning_enabled —
-// the optional morning check-in). Everything else the web Settings screen
-// has (push opt-in, PDF report generation, PIN lock) is still a
-// placeholder note below.
+// entry points (evening + optional morning) — and now app lock: a toggle +
+// change-PIN row (AppLockPinSheet, this screen's handleSetAppLockPin/
+// handleDisableAppLock mirror the web app's SettingsScreen.tsx handlers
+// exactly), with the actual lock gate living in _layout.tsx's AuthGate, not
+// here — this screen only manages the PIN, it never renders the lock
+// screen itself. Push notifications are still the one gap — the
+// footerNote below is the only placeholder left.
 export default function SettingsScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -51,6 +54,8 @@ export default function SettingsScreen() {
   const [showMorningCheckIn, setShowMorningCheckIn] = useState(false);
   const [showBodyTrackingSheet, setShowBodyTrackingSheet] = useState(false);
   const [bodyToggleError, setBodyToggleError] = useState<string | null>(null);
+  const [appLockSheetMode, setAppLockSheetMode] = useState<'enable' | 'disable' | 'change' | null>(null);
+  const [appLockError, setAppLockError] = useState<string | null>(null);
 
   const {
     bodyDomainsActive, bodyAvailableFrom, bodyReminderTime, bodyMorningEnabled, bodyMorningTime,
@@ -98,6 +103,31 @@ export default function SettingsScreen() {
       setBodyToggleError('Failed to save changes. Please try again.');
       return;
     }
+    await refreshProfile();
+  };
+
+  const handleToggleAppLock = () => {
+    setAppLockError(null);
+    setAppLockSheetMode(profile?.app_lock_enabled ? 'disable' : 'enable');
+  };
+
+  const handleSetAppLockPin = async (pin: string) => {
+    if (!user) return;
+    const salt = generateSalt();
+    const hash = await hashPin(pin, salt);
+    const { error } = await supabase.from('profiles').update({
+      app_lock_enabled: true, app_lock_pin_hash: hash, app_lock_pin_salt: salt,
+    }).eq('id', user.id);
+    if (error) { setAppLockError('Failed to save changes. Please try again.'); return; }
+    await refreshProfile();
+  };
+
+  const handleDisableAppLock = async () => {
+    if (!user) return;
+    const { error } = await supabase.from('profiles').update({
+      app_lock_enabled: false, app_lock_pin_hash: null, app_lock_pin_salt: null,
+    }).eq('id', user.id);
+    if (error) { setAppLockError('Failed to save changes. Please try again.'); return; }
     await refreshProfile();
   };
 
@@ -201,7 +231,26 @@ export default function SettingsScreen() {
               )}
             </View>
 
-            <Text style={styles.footerNote}>Push notifications, PDF report generation, and PIN lock aren’t built yet — this screen covers markers and body tracking so far.</Text>
+            <View style={styles.securitySection}>
+              <View style={styles.bodyToggleRow}>
+                <View style={styles.bodyToggleTextWrap}>
+                  <Text style={styles.sectionLabel}>App lock</Text>
+                  <Text style={styles.bodyToggleSubtitle}>Require a PIN to open Symetric.</Text>
+                </View>
+                <Switch value={profile?.app_lock_enabled ?? false} onValueChange={handleToggleAppLock} trackColor={{ true: '#818cf8' }} />
+              </View>
+
+              {appLockError && <Text style={styles.bodyErrorText}>{appLockError}</Text>}
+
+              {profile?.app_lock_enabled && (
+                <Pressable onPress={() => setAppLockSheetMode('change')} style={styles.bodyTimingRow}>
+                  <Text style={styles.bodyTimingLabel}>PIN</Text>
+                  <Text style={styles.bodyTimingValue}>Change PIN</Text>
+                </Pressable>
+              )}
+            </View>
+
+            <Text style={styles.footerNote}>Push notifications aren’t built yet — this screen covers markers, body tracking, and app lock so far. PDF reports generate from the Prepare tab.</Text>
             <Pressable onPress={() => signOut()} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>
@@ -234,6 +283,17 @@ export default function SettingsScreen() {
           onClose={() => setShowBodyTrackingSheet(false)}
         />
       )}
+
+      {appLockSheetMode && (
+        <AppLockPinSheet
+          mode={appLockSheetMode}
+          currentPinHash={profile?.app_lock_pin_hash}
+          currentPinSalt={profile?.app_lock_pin_salt}
+          onClose={() => setAppLockSheetMode(null)}
+          onSetPin={handleSetAppLockPin}
+          onDisable={handleDisableAppLock}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -257,6 +317,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 13, color: '#4a5568' },
   footer: { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#1e2533', gap: 16 },
   bodySection: { gap: 14 },
+  securitySection: { gap: 14, marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#1e2533' },
   bodyToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bodyToggleTextWrap: { flex: 1, marginRight: 12, gap: 4 },
   bodyToggleSubtitle: { fontSize: 12.5, color: '#4a5568', lineHeight: 18 },

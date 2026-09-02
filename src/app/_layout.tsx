@@ -6,10 +6,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthScreen } from '@/components/auth/auth-screen';
 import AppTabs from '@/components/app-tabs';
+import AppLockScreen from '@/components/lock/app-lock-screen';
 import Onboarding from '@/components/onboarding/onboarding';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
+import { useAppLock } from '@/hooks/use-app-lock';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -30,10 +32,11 @@ export default function RootLayout() {
   );
 }
 
-// Mirrors the web app's App.tsx: a top-level conditional on auth/onboarding
-// state rather than route guards — same four gates, in the same order (no
-// session -> AuthScreen, profile still resolving -> pulse logo, onboarding
-// incomplete -> Onboarding, else the tab shell). The `profile === undefined`
+// Mirrors the web app's App.tsx: a top-level conditional on auth/onboarding/
+// lock state rather than route guards — same five gates, in the same order
+// (no session -> AuthScreen, profile still resolving -> pulse logo,
+// onboarding incomplete -> Onboarding, app lock engaged -> AppLockScreen,
+// else the tab shell). The `profile === undefined`
 // gate matters even though `loading` already covers the *first* profile
 // fetch: onAuthStateChange sets profile back to undefined on every fresh
 // sign-in event (including the one the magic-link deep link fires) without
@@ -46,7 +49,8 @@ export default function RootLayout() {
 // while already running (the 'url' event), and handing it to Supabase via
 // trySetSessionFromUrl.
 function AuthGate() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, user } = useAuth();
+  const { locked, unlock } = useAppLock(user?.id, profile?.app_lock_enabled ?? false);
 
   useEffect(() => {
     Linking.getInitialURL().then(url => {
@@ -68,6 +72,10 @@ function AuthGate() {
   if (!session) return <AuthScreen />;
   if (profile === undefined) return <PulseLoadingScreen />;
   if (!profile?.onboarding_complete) return <Onboarding />;
+
+  if (locked && profile.app_lock_pin_hash && profile.app_lock_pin_salt) {
+    return <AppLockScreen pinHash={profile.app_lock_pin_hash} pinSalt={profile.app_lock_pin_salt} onUnlock={unlock} />;
+  }
 
   return <AppTabs />;
 }
