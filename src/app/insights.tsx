@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BodyAreaDetail from '@/components/insights/body-area-detail';
 import MedicationAreaDetail from '@/components/insights/medication-area-detail';
 import MindAreaDetail from '@/components/insights/mind-area-detail';
+import PatternDetailScreen from '@/components/insights/pattern-detail-screen';
 import SleepAreaDetail from '@/components/insights/sleep-area-detail';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
@@ -35,6 +36,7 @@ import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { computeBodySummaries } from '@/lib/report/body-summary';
 import type { BodyDomainSummary, BodyEventSummary } from '@/lib/report/types';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
+import type { VolatilityGroup } from '@/lib/volatility-aggregation';
 import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
@@ -320,6 +322,8 @@ export default function InsightsScreen() {
   const [rangeCheckInRows, setRangeCheckInRows] = useState<CheckIn[]>([]);
   const [timeFormat, setTimeFormat] = useState<'12hr' | '24hr'>('12hr');
   const [baselineMap, setBaselineMap] = useState<Partial<Record<DomainType, number>>>({});
+  const [viewingCluster, setViewingCluster] = useState<DetectedCluster | null>(null);
+  const [viewingVolatilityGroup, setViewingVolatilityGroup] = useState<VolatilityGroup | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -513,9 +517,25 @@ export default function InsightsScreen() {
     const { error } = await supabase.from('detected_clusters').update({ flagged_for_report: !cluster.flagged_for_report }).eq('id', clusterId);
     if (error) { console.error('[InsightsScreen] toggleFlag:', error); return; }
     setClusters(prev => prev.map(c => c.id === clusterId ? { ...c, flagged_for_report: !c.flagged_for_report } : c));
+    setViewingCluster(prev => prev?.id === clusterId ? { ...prev, flagged_for_report: !prev.flagged_for_report } : prev);
   };
 
   if (loading) return <PulseLoadingScreen />;
+
+  if (viewingCluster) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <PatternDetailScreen
+          cluster={viewingCluster}
+          baselines={baselineMap}
+          contextTags={contextTags.filter(t => t.cluster_id === viewingCluster.id)}
+          onBack={() => { setViewingCluster(null); setViewingVolatilityGroup(null); }}
+          onToggleFlag={() => toggleFlag(viewingCluster.id)}
+          volatilityGroup={viewingVolatilityGroup ?? undefined}
+        />
+      </SafeAreaView>
+    );
+  }
 
   const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0
     && lagRelationships.length === 0 && rareEvents.length === 0 && interventionImpacts.length === 0
@@ -593,12 +613,11 @@ export default function InsightsScreen() {
           circadianPatterns={circadianPatterns}
           days90dCount={days90dCount}
           timeFormat={timeFormat}
-          // View-cluster/view-volatility-group navigation is chunk 3 of this
-          // series (PatternDetailScreen) — no-ops for now, matching the
-          // "explicit, documented gap" pattern used throughout this rewrite
-          // rather than faking a destination that doesn't exist yet.
-          onViewCluster={() => {}}
-          onViewVolatilityGroup={() => {}}
+          onViewCluster={setViewingCluster}
+          onViewVolatilityGroup={group => {
+            setViewingVolatilityGroup(group);
+            setViewingCluster(group.clusters[group.clusters.length - 1]);
+          }}
           onToggleFlag={toggleFlag}
         />
       </SafeAreaView>
