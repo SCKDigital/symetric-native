@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BodyAreaDetail from '@/components/insights/body-area-detail';
 import MedicationAreaDetail from '@/components/insights/medication-area-detail';
+import MindAreaDetail from '@/components/insights/mind-area-detail';
 import SleepAreaDetail from '@/components/insights/sleep-area-detail';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
@@ -11,7 +12,7 @@ import { AreaRow, buildAreaRows } from '@/lib/area-rows';
 import { BODY_DOMAIN_ORDER, BODY_DOMAINS, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
 import { CircadianPattern, fetchCircadianPatterns, formatCircadianPattern } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
-import { buildDayScores } from '@/lib/day-scores';
+import { buildDayScores, DayScores } from '@/lib/day-scores';
 import { parseDateString } from '@/lib/date-utils';
 import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
 import { dailyBodyValue } from '@/lib/detection/body-daily-value';
@@ -34,7 +35,7 @@ import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { computeBodySummaries } from '@/lib/report/body-summary';
 import type { BodyDomainSummary, BodyEventSummary } from '@/lib/report/types';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
-import { Baseline, BodyDomainType, CheckIn, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
+import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
 type RangeDays = 7 | 14 | 30 | 60 | 90;
@@ -105,15 +106,12 @@ function RangeControl({ range, onChange, fromDate, toDate, checkInCount, daysWit
   );
 }
 
-// "The evidence" — one row per tracked area, ported from AreaIndex.tsx. The
-// web version makes every row tappable (opens a per-area detail view); on
-// native, Body/Sleep/Medication now have real detail screens (BodyAreaDetail
-// from the body detector sub-series, SleepAreaDetail/MedicationAreaDetail
-// from this pass) — only "Mind" stays informational-only until
-// MindAreaDetail is ported, rather than tapping through to a blank screen.
+// "The evidence" — one row per tracked area, ported from AreaIndex.tsx. All
+// four rows are now tappable (BodyAreaDetail from the body detector sub-
+// series; Sleep/Medication/MindAreaDetail from this area-detail series).
 function AreaIndex({ rows, onSelect }: { rows: AreaRow[]; onSelect: (area: Area) => void }) {
   if (rows.length === 0) return null;
-  const TAPPABLE: Area[] = ['body', 'sleep', 'medication'];
+  const TAPPABLE: Area[] = ['mind', 'body', 'sleep', 'medication'];
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>The evidence</Text>
@@ -316,6 +314,12 @@ export default function InsightsScreen() {
   const [bodyMindConnectionRows, setBodyMindConnectionRows] = useState<BodyMindConnectionRow[]>([]);
   const [avgSleepScore, setAvgSleepScore] = useState<number | null>(null);
   const [sleepDaysLogged, setSleepDaysLogged] = useState(0);
+  const [days, setDays] = useState<DayScores[]>([]);
+  const [days90dCount, setDays90dCount] = useState(0);
+  const [contextTags, setContextTags] = useState<ContextTag[]>([]);
+  const [rangeCheckInRows, setRangeCheckInRows] = useState<CheckIn[]>([]);
+  const [timeFormat, setTimeFormat] = useState<'12hr' | '24hr'>('12hr');
+  const [baselineMap, setBaselineMap] = useState<Partial<Record<DomainType, number>>>({});
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -346,7 +350,7 @@ export default function InsightsScreen() {
 
     const [
       clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines },
-      { data: rangeCheckIns }, { data: rangeSleepLogs }, markersData,
+      { data: rangeCheckIns }, { data: rangeSleepLogs }, markersData, { data: tagData },
       { data: bodyCheckIns90dRaw }, { data: bodyEvents90dRaw },
       { data: bodyCheckInsRangeRaw }, { data: bodyEventsRangeRaw },
       { data: domainConnectionsData },
@@ -355,11 +359,12 @@ export default function InsightsScreen() {
       fetchCircadianPatterns(user.id, from30),
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
       supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', from90).lte('log_date', to).order('log_date', { ascending: true }),
-      supabase.from('check_in_settings').select('active_domains, quick_checkin_domains').eq('user_id', user.id).maybeSingle(),
+      supabase.from('check_in_settings').select('active_domains, quick_checkin_domains, time_format').eq('user_id', user.id).maybeSingle(),
       supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true),
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', `${fromRange}T00:00:00`).order('scheduled_at', { ascending: true }),
       supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', fromRange).lte('log_date', to).order('log_date', { ascending: true }),
       fetchMarkersInRange(from90, to).catch(() => [] as InterventionMarker[]),
+      supabase.from('context_tags').select('*').eq('user_id', user.id),
       bodyTrackingEnabled
         ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', from90).lte('entry_date', to).order('entry_date', { ascending: true })
         : Promise.resolve({ data: [] as Record<string, unknown>[] }),
@@ -380,10 +385,13 @@ export default function InsightsScreen() {
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
     setClusters(sorted as DetectedCluster[]);
     setCircadianPatterns(circadianData);
+    setContextTags(tagData ?? []);
+    if (settings?.time_format) setTimeFormat(settings.time_format as '12hr' | '24hr');
 
     const resolvedDomains = resolveActiveDomains(settings);
     setActiveDomains(resolvedDomains);
     const days90d = buildDayScores(checkIns90d as CheckIn[] | null, sleepLogs90d as SleepLog[] | null);
+    setDays90dCount(days90d.length);
     setDayOfWeekPatterns(detectDayOfWeekPatterns(days90d, resolvedDomains));
     setLagRelationships(detectLagRelationships(days90d, resolvedDomains));
 
@@ -391,6 +399,7 @@ export default function InsightsScreen() {
     (baselines as Baseline[] | null)?.forEach(b => {
       baselineMap[b.domain] = b.baseline_score;
     });
+    setBaselineMap(baselineMap);
     setPatternEvolutions(detectPatternEvolution(days90d, resolvedDomains, baselineMap));
     setRareEvents(detectRareEvents(days90d, resolvedDomains, baselineMap));
     setMarkers(markersData);
@@ -482,6 +491,8 @@ export default function InsightsScreen() {
 
     const daysRange = buildDayScores(rangeCheckIns as CheckIn[] | null, rangeSleepLogs as SleepLog[] | null);
     setRangeStats({ from: fromRange, to, checkInCount: rangeCheckIns?.length ?? 0, daysWithCheckIn: daysRange.length });
+    setDays(daysRange);
+    setRangeCheckInRows((rangeCheckIns as CheckIn[] | null) ?? []);
 
     const sleepDaysList = daysRange.filter(d => d.scores['sleep'] !== undefined);
     setAvgSleepScore(sleepDaysList.length > 0 ? sleepDaysList.reduce((s, d) => s + d.scores['sleep']!, 0) / sleepDaysList.length : null);
@@ -495,6 +506,14 @@ export default function InsightsScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
+
+  const toggleFlag = async (clusterId: string) => {
+    const cluster = clusters.find(c => c.id === clusterId);
+    if (!cluster) return;
+    const { error } = await supabase.from('detected_clusters').update({ flagged_for_report: !cluster.flagged_for_report }).eq('id', clusterId);
+    if (error) { console.error('[InsightsScreen] toggleFlag:', error); return; }
+    setClusters(prev => prev.map(c => c.id === clusterId ? { ...c, flagged_for_report: !c.flagged_for_report } : c));
+  };
 
   if (loading) return <PulseLoadingScreen />;
 
@@ -556,6 +575,35 @@ export default function InsightsScreen() {
     sleep: { findings: sleepFindings },
     medication: { markerCount: eligibleMarkerCount, tooRecentLabel, findings: medicationFindings },
   });
+
+  if (activeArea === 'mind') {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <MindAreaDetail
+          onBack={() => setActiveArea(null)}
+          days={days}
+          baselines={baselineMap}
+          clusters={clusters.filter(c => !isBodyDomain(c.domains_involved?.[0] ?? ''))}
+          contextTags={contextTags}
+          checkIns={rangeCheckInRows}
+          trackedDomains={activeDomains}
+          dayOfWeekPatterns={dayOfWeekPatterns}
+          lagRelationships={lagRelationships}
+          rareEvents={rareEvents}
+          circadianPatterns={circadianPatterns}
+          days90dCount={days90dCount}
+          timeFormat={timeFormat}
+          // View-cluster/view-volatility-group navigation is chunk 3 of this
+          // series (PatternDetailScreen) — no-ops for now, matching the
+          // "explicit, documented gap" pattern used throughout this rewrite
+          // rather than faking a destination that doesn't exist yet.
+          onViewCluster={() => {}}
+          onViewVolatilityGroup={() => {}}
+          onToggleFlag={toggleFlag}
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (activeArea === 'body') {
     return (
