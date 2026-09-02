@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Symetric",
-    "slug": "symetric",
+    "slug": "symetric-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -43,6 +43,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2022f709-2563-49c9-b08a-6698130ffb60"
+      }
+    },
+    "owner": "sckdigital-team"
   }
 }
