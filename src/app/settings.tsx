@@ -16,6 +16,7 @@ import { BODY_COLOR } from '@/lib/domains';
 import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
 import { parseDateString } from '@/lib/date-utils';
 import { markerColors, markerTypeLabels, MarkerType } from '@/lib/marker-colors';
+import { subscribeToPushNotifications, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
 import { createMarker, deleteMarker, fetchMarkers, updateMarker } from '@/lib/queries/markers';
 import { supabase } from '@/lib/supabase';
 import type { BodyDomainType } from '@/lib/supabase';
@@ -37,13 +38,17 @@ function formatMarkerDate(dateStr: string): string {
 // tracking — a real master toggle, domain toggle pills + timing sheet
 // (use-body-tracking-settings.ts/BodyTrackingSheet, ported from the web
 // app's useBodyTrackingSettings.ts/BodyTrackingSheet.tsx), and both check-in
-// entry points (evening + optional morning) — and now app lock: a toggle +
-// change-PIN row (AppLockPinSheet, this screen's handleSetAppLockPin/
-// handleDisableAppLock mirror the web app's SettingsScreen.tsx handlers
-// exactly), with the actual lock gate living in _layout.tsx's AuthGate, not
-// here — this screen only manages the PIN, it never renders the lock
-// screen itself. Push notifications are still the one gap — the
-// footerNote below is the only placeholder left.
+// entry points (evening + optional morning); app lock: a toggle + change-PIN
+// row (AppLockPinSheet, this screen's handleSetAppLockPin/handleDisableAppLock
+// mirror the web app's SettingsScreen.tsx handlers exactly), with the actual
+// lock gate living in _layout.tsx's AuthGate, not here — this screen only
+// manages the PIN, it never renders the lock screen itself; and now push
+// notifications — a single toggle (handleTogglePush) wrapping
+// lib/push-notifications.ts's subscribe/unsubscribe, which is a mechanic
+// swap from the web app's Web Push/VAPID flow, not a line-for-line port
+// (see that file's own header comment). Real end-to-end delivery still
+// needs the send-side edge functions to gain an Expo-push code path — see
+// project_rn_rewrite_scoping.md for that half of this feature.
 export default function SettingsScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -56,6 +61,8 @@ export default function SettingsScreen() {
   const [bodyToggleError, setBodyToggleError] = useState<string | null>(null);
   const [appLockSheetMode, setAppLockSheetMode] = useState<'enable' | 'disable' | 'change' | null>(null);
   const [appLockError, setAppLockError] = useState<string | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
 
   const {
     bodyDomainsActive, bodyAvailableFrom, bodyReminderTime, bodyMorningEnabled, bodyMorningTime,
@@ -109,6 +116,20 @@ export default function SettingsScreen() {
   const handleToggleAppLock = () => {
     setAppLockError(null);
     setAppLockSheetMode(profile?.app_lock_enabled ? 'disable' : 'enable');
+  };
+
+  const handleTogglePush = async (next: boolean) => {
+    if (!user) return;
+    setPushError(null);
+    setPushBusy(true);
+    if (next) {
+      const result = await subscribeToPushNotifications(user.id);
+      if (!result.success) setPushError(result.message);
+    } else {
+      await unsubscribeFromPushNotifications(user.id);
+    }
+    setPushBusy(false);
+    await refreshProfile();
   };
 
   const handleSetAppLockPin = async (pin: string) => {
@@ -250,7 +271,19 @@ export default function SettingsScreen() {
               )}
             </View>
 
-            <Text style={styles.footerNote}>Push notifications aren’t built yet — this screen covers markers, body tracking, and app lock so far. PDF reports generate from the Prepare tab.</Text>
+            <View style={styles.securitySection}>
+              <View style={styles.bodyToggleRow}>
+                <View style={styles.bodyToggleTextWrap}>
+                  <Text style={styles.sectionLabel}>Notifications</Text>
+                  <Text style={styles.bodyToggleSubtitle}>Reminders when a check-in is due.</Text>
+                </View>
+                <Switch value={profile?.push_enabled ?? false} onValueChange={handleTogglePush} disabled={pushBusy} trackColor={{ true: '#818cf8' }} />
+              </View>
+
+              {pushError && <Text style={styles.bodyErrorText}>{pushError}</Text>}
+            </View>
+
+            <Text style={styles.footerNote}>PDF reports generate from the Prepare tab.</Text>
             <Pressable onPress={() => signOut()} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>

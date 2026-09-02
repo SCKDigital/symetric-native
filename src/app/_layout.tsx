@@ -1,6 +1,7 @@
 import { DarkTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -14,6 +15,19 @@ import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
 import { useAppLock } from '@/hooks/use-app-lock';
 
 SplashScreen.preventAutoHideAsync();
+
+// Standard Expo boilerplate, no web equivalent (the web app's foreground
+// notification display is the browser's own, driven by public/sw.js's
+// `push` handler) — without this, a push that arrives while the app is
+// already open and foregrounded is silently dropped rather than shown.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 // Symetric has no light theme (see src/constants/theme.ts) — always DarkTheme,
 // not driven by useColorScheme like the template default was.
