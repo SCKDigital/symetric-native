@@ -3,6 +3,8 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BodyAreaDetail from '@/components/insights/body-area-detail';
+import MedicationAreaDetail from '@/components/insights/medication-area-detail';
+import SleepAreaDetail from '@/components/insights/sleep-area-detail';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { AreaRow, buildAreaRows } from '@/lib/area-rows';
@@ -105,12 +107,13 @@ function RangeControl({ range, onChange, fromDate, toDate, checkInCount, daysWit
 
 // "The evidence" — one row per tracked area, ported from AreaIndex.tsx. The
 // web version makes every row tappable (opens a per-area detail view); on
-// native only "Body" has a detail screen so far (BodyAreaDetail, body
-// detector sub-series chunk 5) — Mind/Sleep/Medication stay informational-
-// only until MindAreaDetail/SleepAreaDetail/MedicationAreaDetail are ported,
-// rather than tapping through to a blank screen.
-function AreaIndex({ rows, onSelectBody }: { rows: AreaRow[]; onSelectBody: () => void }) {
+// native, Body/Sleep/Medication now have real detail screens (BodyAreaDetail
+// from the body detector sub-series, SleepAreaDetail/MedicationAreaDetail
+// from this pass) — only "Mind" stays informational-only until
+// MindAreaDetail is ported, rather than tapping through to a blank screen.
+function AreaIndex({ rows, onSelect }: { rows: AreaRow[]; onSelect: (area: Area) => void }) {
   if (rows.length === 0) return null;
+  const TAPPABLE: Area[] = ['body', 'sleep', 'medication'];
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>The evidence</Text>
@@ -125,9 +128,9 @@ function AreaIndex({ rows, onSelectBody }: { rows: AreaRow[]; onSelectBody: () =
               </View>
             </>
           );
-          if (row.area === 'body') {
+          if (TAPPABLE.includes(row.area)) {
             return (
-              <Pressable key={row.area} onPress={onSelectBody} style={[styles.areaRow, row.state !== 'active' && styles.areaRowMuted]}>
+              <Pressable key={row.area} onPress={() => onSelect(row.area)} style={[styles.areaRow, row.state !== 'active' && styles.areaRowMuted]}>
                 {rowContent}
               </Pressable>
             );
@@ -311,6 +314,8 @@ export default function InsightsScreen() {
   const [bodyEventFrequencyPatterns, setBodyEventFrequencyPatterns] = useState<BodyEventFrequencyPattern[]>([]);
   const [bodyEventImpacts, setBodyEventImpacts] = useState<BodyEventMindImpact[]>([]);
   const [bodyMindConnectionRows, setBodyMindConnectionRows] = useState<BodyMindConnectionRow[]>([]);
+  const [avgSleepScore, setAvgSleepScore] = useState<number | null>(null);
+  const [sleepDaysLogged, setSleepDaysLogged] = useState(0);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -478,6 +483,10 @@ export default function InsightsScreen() {
     const daysRange = buildDayScores(rangeCheckIns as CheckIn[] | null, rangeSleepLogs as SleepLog[] | null);
     setRangeStats({ from: fromRange, to, checkInCount: rangeCheckIns?.length ?? 0, daysWithCheckIn: daysRange.length });
 
+    const sleepDaysList = daysRange.filter(d => d.scores['sleep'] !== undefined);
+    setAvgSleepScore(sleepDaysList.length > 0 ? sleepDaysList.reduce((s, d) => s + d.scores['sleep']!, 0) / sleepDaysList.length : null);
+    setSleepDaysLogged(sleepDaysList.length);
+
     setLoading(false);
   }, [user, profile, range]);
 
@@ -556,6 +565,22 @@ export default function InsightsScreen() {
     );
   }
 
+  if (activeArea === 'sleep') {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <SleepAreaDetail onBack={() => setActiveArea(null)} findings={sleepFindings} avgSleepScore={avgSleepScore} nightsLogged={sleepDaysLogged} />
+      </SafeAreaView>
+    );
+  }
+
+  if (activeArea === 'medication') {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <MedicationAreaDetail onBack={() => setActiveArea(null)} markers={markers} impacts={interventionImpacts} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <FlatList
@@ -567,7 +592,7 @@ export default function InsightsScreen() {
             <Text style={styles.heading}>Insights</Text>
             <RangeControl range={range} onChange={r => { setRange(r); setActiveArea(null); }} fromDate={rangeStats.from} toDate={rangeStats.to} checkInCount={rangeStats.checkInCount} daysWithCheckIn={rangeStats.daysWithCheckIn} />
             <WhatStandsOut findings={standoutFindings} />
-            <AreaIndex rows={areaRows} onSelectBody={() => setActiveArea('body')} />
+            <AreaIndex rows={areaRows} onSelect={setActiveArea} />
             <CircadianSection patterns={circadianPatterns} />
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
             <LagRelationshipSection relationships={lagRelationships} />
