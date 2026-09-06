@@ -61,7 +61,15 @@ const TYPE_PRIORITY: Record<PatternEvolution['evolution_type'], number> = {
 // Body domains are intentionally absent — all of them run "higher = worse"
 // (symptom severity), so the default (not in this set) already gives the
 // correct improving/worsening direction without listing them explicitly.
-const HIGHER_IS_BETTER = new Set<TrackedFactor>(['mood', 'energy', 'concentration', 'social_battery', 'motivation']);
+// `social_battery` is absent for the same reason the body domains are, and
+// used not to be. It was once framed as a battery — full meant good — but the
+// domain now asks "how drained do you feel by social interaction", and its
+// slider runs from "Fully recharged" to "Completely depleted". While it sat in
+// this set, someone getting steadily more socially drained was told that
+// domain was improving. Same trap as end of day exhaustion: a relabelled scale
+// that left a polarity assumption behind. See lib/domain-polarity.ts, which
+// this set agrees with.
+const HIGHER_IS_BETTER = new Set<TrackedFactor>(['mood', 'energy', 'concentration', 'motivation']);
 
 function stdDev(arr: number[]): number {
   if (arr.length < 2) return 0;
