@@ -8,6 +8,7 @@ import MarkerModal from '@/components/marker-modal';
 import MindSetup from '@/components/onboarding/mind-setup';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
+import { BodyCheckInCard, MorningBodyCheckInCard } from '@/components/today/body-check-in-cards';
 import BonusCheckInCard from '@/components/today/bonus-check-in-card';
 import SleepCard from '@/components/today/sleep-card';
 import { useAuth } from '@/contexts/auth-context';
@@ -72,9 +73,8 @@ export default function TodayScreen() {
 // Still not ported from the web screen, roughly in order of how much they
 // matter: rescue/snooze windows and the late-check-in card, rescheduling (the
 // web "Reschedule" link and its two sheets), the info sheet, day summaries,
-// milestones, gap recovery, notification prompts, the appointment reminder
-// card, and the body check-in cards — body logging lives on Settings here
-// rather than on Today.
+// milestones, gap recovery, notification prompts, and the appointment
+// reminder card.
 function TodayHome() {
   const { profile } = useAuth();
   const {
@@ -161,6 +161,12 @@ function TodayHome() {
         )}
 
         <BonusCheckInCard activeDomains={activeDomains} onLogged={refresh} />
+
+        {/* Body logging, in the web app's own order: the optional morning
+            prompt, then the evening card. Both were only reachable from
+            Settings here until the Settings rebuild moved them out. */}
+        <MorningBodyCheckInCard />
+        <BodyCheckInCard />
       </ScrollView>
 
       {showMarkerModal && (

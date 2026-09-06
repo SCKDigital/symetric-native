@@ -1,86 +1,142 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import BodyCheckIn from '@/components/body/body-check-in';
 import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
-import MorningBodyCheckIn from '@/components/body/morning-body-check-in';
-import MarkerModal from '@/components/marker-modal';
-import { CalendarIcon, PillIcon, PinIcon } from '@/components/marker-icons';
-import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
-import AppLogoHeader from '@/components/shared/app-logo-header';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
+import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
+import { DeleteAllSheet, DeleteRangeSheet, ExportSheet, ResetBaselineSheet } from '@/components/settings/data-sheets';
+import {
+  BellIcon, BellSlashIcon, BodyIcon, BrainIcon, CalendarIcon, ClockIcon, ClockSimpleIcon,
+  CycleIcon, DownloadIcon, EyeIcon, LockIcon, PaletteIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
+} from '@/components/settings/settings-icons';
+import {
+  ChevronRight, InlineMessage, RowValue, SectionCard, SectionLabel, SettingsRow, RowDivider,
+  Toast,
+} from '@/components/settings/settings-primitives';
+import {
+  ActiveWindowSheet, BaselineModal, ConfirmDisableSheet, DndSheet, FrequencySheet,
+  TimeFormatSheet, formatWindowTime,
+} from '@/components/settings/settings-sheets';
+import AppLogoHeader from '@/components/shared/app-logo-header';
 import { useAuth } from '@/contexts/auth-context';
-import { generateSalt, hashPin } from '@/lib/app-lock';
-import { CHECKIN_BODY_DOMAIN_ORDER, BODY_DOMAINS } from '@/lib/body/constants';
-import { BODY_COLOR } from '@/lib/domains';
 import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
-import { parseDateString } from '@/lib/date-utils';
-import { markerColors, markerTypeLabels, MarkerType } from '@/lib/marker-colors';
+import { generateSalt, hashPin } from '@/lib/app-lock';
+import { BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { resolveActiveDomains } from '@/lib/domains';
 import { subscribeToPushNotifications, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
-import { createMarker, deleteMarker, fetchMarkers, updateMarker } from '@/lib/queries/markers';
+import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
+import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
-import type { BodyDomainType } from '@/lib/supabase';
-import type { InterventionMarker } from '@/types/marker';
+import type { TimeFormat } from '@/lib/time-format';
 
-const MARKER_ICON: Record<MarkerType, typeof PillIcon> = {
-  medication: PillIcon,
-  therapy: CalendarIcon,
-  life_event: PinIcon,
-  cycle_phase: PinIcon,
-};
+// Rebuilt against the web app's SettingsScreen.tsx. This screen previously
+// carried four of its controls (markers, body tracking, app lock, push) in a
+// marker FlatList with hand-rolled rows in its footer — no sections, no shared
+// row layout, and none of Mind tracking, cycle tracking, do not disturb,
+// comfort mode, simplified colours, time format, export, delete a date range,
+// reset baselines or delete account, all of which shipped to the stores
+// missing.
+//
+// The Markers section is gone rather than ported: the web app has never had
+// one here, and marker CRUD already lives on Prepare's notable-changes-section
+// (and Today's "+ Add an event") natively, so nothing is lost by matching.
+//
+// Not ported: the domain suggestion cards (an additive prompt, not a control),
+// haptic feedback (needs expo-haptics, which this app doesn't depend on yet),
+// and the dev-only push diagnostics panel. The Mind Tracking row's full-screen
+// domain sheet is also absent — the pills under it toggle the same domains,
+// which is what the web sheet does, so the row is a label here rather than a
+// dead tap target.
 
-function formatMarkerDate(dateStr: string): string {
-  return parseDateString(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+type SheetType = 'activeWindow' | 'frequency' | 'bodyTracking' | 'dnd' | 'timeFormat'
+  | 'export' | 'deleteRange' | 'deleteAll' | 'resetBaseline' | null;
+
+function Toggle({ value, onValueChange, disabled }: { value: boolean; onValueChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <Switch
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+      trackColor={{ true: '#6366f1', false: '#252b3b' }}
+      thumbColor="#ffffff"
+    />
+  );
 }
 
-// Settings' real features so far: intervention marker CRUD (ported from
-// the web app's Settings marker section + MarkerModal.tsx), body
-// tracking — a real master toggle, domain toggle pills + timing sheet
-// (use-body-tracking-settings.ts/BodyTrackingSheet, ported from the web
-// app's useBodyTrackingSettings.ts/BodyTrackingSheet.tsx), and both check-in
-// entry points (evening + optional morning); app lock: a toggle + change-PIN
-// row (AppLockPinSheet, this screen's handleSetAppLockPin/handleDisableAppLock
-// mirror the web app's SettingsScreen.tsx handlers exactly), with the actual
-// lock gate living in _layout.tsx's AuthGate, not here — this screen only
-// manages the PIN, it never renders the lock screen itself; and now push
-// notifications — a single toggle (handleTogglePush) wrapping
-// lib/push-notifications.ts's subscribe/unsubscribe, which is a mechanic
-// swap from the web app's Web Push/VAPID flow, not a line-for-line port
-// (see that file's own header comment). Real end-to-end delivery still
-// needs the send-side edge functions to gain an Expo-push code path — see
-// project_rn_rewrite_scoping.md for that half of this feature.
+function DomainPills({ activeDomains, onToggle }: { activeDomains: DomainType[]; onToggle: (d: DomainType) => void }) {
+  return (
+    <View style={styles.pillRow}>
+      {ALL_DOMAINS.map(d => {
+        const active = activeDomains.includes(d.type);
+        return (
+          <Pressable key={d.type} onPress={() => onToggle(d.type)} style={[styles.pill, active && styles.pillActive]}>
+            <Text style={[styles.pillText, active && styles.pillTextActive]}>{d.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function BodyDomainPills({ activeDomains, onToggle }: { activeDomains: BodyDomainType[]; onToggle: (d: BodyDomainType) => void }) {
+  return (
+    <View style={styles.pillRow}>
+      {CHECKIN_BODY_DOMAIN_ORDER.filter(d => !BODY_DOMAINS[d].required).map(d => {
+        const active = activeDomains.includes(d);
+        return (
+          <Pressable key={d} onPress={() => onToggle(d)} style={[styles.pill, active && styles.pillActiveBody]}>
+            <Text style={[styles.pillText, active && styles.pillTextActiveBody]}>{BODY_DOMAINS[d].label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
+
   const [loading, setLoading] = useState(true);
-  const [markers, setMarkers] = useState<InterventionMarker[]>([]);
-  const [showModal, setShowModal] = useState(false);
-  const [editingMarker, setEditingMarker] = useState<InterventionMarker | undefined>(undefined);
-  const [showBodyCheckIn, setShowBodyCheckIn] = useState(false);
-  const [showMorningCheckIn, setShowMorningCheckIn] = useState(false);
-  const [showBodyTrackingSheet, setShowBodyTrackingSheet] = useState(false);
-  const [bodyToggleError, setBodyToggleError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [checkInSettings, setCheckInSettings] = useState<CheckInSettings | null>(null);
+  const [activeDomains, setActiveDomains] = useState<DomainType[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [sheet, setSheet] = useState<SheetType>(null);
   const [appLockSheetMode, setAppLockSheetMode] = useState<'enable' | 'disable' | 'change' | null>(null);
-  const [appLockError, setAppLockError] = useState<string | null>(null);
-  const [pushError, setPushError] = useState<string | null>(null);
+  const [pendingEnable, setPendingEnable] = useState<DomainType | null>(null);
+  const [pendingDisable, setPendingDisable] = useState<DomainType | null>(null);
+
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [showMoreExpanded, setShowMoreExpanded] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
+  const [testPushResult, setTestPushResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const {
     bodyDomainsActive, bodyAvailableFrom, bodyReminderTime, bodyMorningEnabled, bodyMorningTime,
-    handleToggleBodyDomain, handleSaveBodyTiming,
+    setBodyMorningEnabled, handleToggleBodyDomain, handleSaveBodyTiming,
   } = useBodyTrackingSettings(user?.id, profile, refreshProfile, {
-    onError: setBodyToggleError,
+    defaultDomains: CHECKIN_BODY_DOMAIN_ORDER,
+    onError: setToastMessage,
   });
 
   const load = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
-    try {
-      setMarkers(await fetchMarkers());
-    } catch (e) {
-      console.error('[Settings] fetch markers error:', e);
+    setLoadError(null);
+    const { data, error } = await supabase.from('check_in_settings').select('*').eq('user_id', user.id).maybeSingle();
+    if (error) {
+      console.error('[Settings] load error:', error);
+      setLoadError('Failed to load settings. Pull down or reopen the tab to try again.');
+      setLoading(false);
+      return;
     }
+    setCheckInSettings(data as CheckInSettings | null);
+    setActiveDomains(resolveActiveDomains(data));
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     // See use-today-check-ins.ts for why this needs the disable comment.
@@ -88,36 +144,121 @@ export default function SettingsScreen() {
     load();
   }, [load]);
 
-  const handleSave = async (input: Parameters<typeof createMarker>[0]) => {
-    if (editingMarker) {
-      const updated = await updateMarker({ id: editingMarker.id, ...input });
-      setMarkers(prev => prev.map(m => (m.id === updated.id ? updated : m)).sort((a, b) => b.marker_date.localeCompare(a.marker_date)));
-    } else {
-      const created = await createMarker(input);
-      setMarkers(prev => [created, ...prev].sort((a, b) => b.marker_date.localeCompare(a.marker_date)));
-    }
-  };
+  const timeFormat: TimeFormat = checkInSettings?.time_format ?? '12hr';
+  const dndEnabled = checkInSettings?.dnd_enabled ?? false;
+  const dndStartTime = checkInSettings?.dnd_start_time?.slice(0, 5) ?? '14:00';
+  const dndEndTime = checkInSettings?.dnd_end_time?.slice(0, 5) ?? '16:00';
 
-  const handleDelete = async (id: string) => {
-    await deleteMarker(id);
-    setMarkers(prev => prev.filter(m => m.id !== id));
-  };
+  // ── Mind domains ───────────────────────────────────────────────────────────
 
-  const handleToggleBodyTracking = async (next: boolean) => {
+  const updateActiveDomains = async (next: DomainType[], prev: DomainType[]) => {
     if (!user) return;
-    setBodyToggleError(null);
-    const { error } = await supabase.from('profiles').update({ body_tracking_enabled: next }).eq('id', user.id);
+    setActiveDomains(next);
+    const { error } = await supabase.from('check_in_settings')
+      .update({ active_domains: next, updated_at: new Date().toISOString() }).eq('user_id', user.id);
     if (error) {
-      setBodyToggleError('Failed to save changes. Please try again.');
+      setActiveDomains(prev);
+      setToastMessage('Failed to save changes. Please try again.');
+      return;
+    }
+    setCheckInSettings(p => (p ? { ...p, active_domains: next } : p));
+  };
+
+  const handleToggleDomain = async (domain: DomainType) => {
+    if (!user) return;
+    if (activeDomains.includes(domain)) {
+      if (activeDomains.length <= MIN_DOMAINS) { setToastMessage('You must track at least 2 domains'); return; }
+      setPendingDisable(domain);
+      return;
+    }
+    // Turning a domain back on only needs a baseline if it has never had one —
+    // otherwise the old one still applies and asking again would overwrite it.
+    const { data: existing } = await supabase.from('baselines')
+      .select('id').eq('user_id', user.id).eq('domain', domain).eq('is_current', true).limit(1);
+    if (existing && existing.length > 0) await updateActiveDomains([...activeDomains, domain], activeDomains);
+    else setPendingEnable(domain);
+  };
+
+  const handleConfirmDisable = async () => {
+    if (!pendingDisable) return;
+    await updateActiveDomains(activeDomains.filter(d => d !== pendingDisable), activeDomains);
+    setPendingDisable(null);
+  };
+
+  const handleBaselineSubmit = async (score: number) => {
+    if (!pendingEnable || !user) return;
+    await supabase.from('baselines').update({ is_current: false })
+      .eq('user_id', user.id).eq('domain', pendingEnable).eq('is_current', true);
+    await supabase.from('baselines').insert({
+      user_id: user.id, domain: pendingEnable, baseline_score: score, source: 'manual_reset', is_current: true,
+    });
+    await updateActiveDomains([...activeDomains, pendingEnable], activeDomains);
+    setPendingEnable(null);
+  };
+
+  // ── Profile booleans ───────────────────────────────────────────────────────
+
+  const toggleProfileField = async (field: keyof Profile, current: boolean, onOptimistic?: (v: boolean) => void) => {
+    if (!user) return;
+    const next = !current;
+    onOptimistic?.(next);
+    const { error } = await supabase.from('profiles').update({ [field]: next }).eq('id', user.id);
+    if (error) {
+      onOptimistic?.(current);
+      setToastMessage('Failed to save changes. Please try again.');
       return;
     }
     await refreshProfile();
   };
 
-  const handleToggleAppLock = () => {
-    setAppLockError(null);
-    setAppLockSheetMode(profile?.app_lock_enabled ? 'disable' : 'enable');
+  // ── check_in_settings fields ───────────────────────────────────────────────
+
+  const handleSetTimeFormat = async (next: TimeFormat) => {
+    if (!user || next === timeFormat) return;
+    const prev = checkInSettings;
+    setCheckInSettings(p => (p ? { ...p, time_format: next } : p));
+    const { error } = await supabase.from('check_in_settings').update({ time_format: next }).eq('user_id', user.id);
+    if (error) { setCheckInSettings(prev); setToastMessage('Failed to save changes. Please try again.'); }
   };
+
+  const handleToggleDND = async (next: boolean) => {
+    if (!user) return;
+    const prev = checkInSettings;
+    const patch = {
+      dnd_enabled: next,
+      dnd_start_time: next ? `${dndStartTime}:00` : null,
+      dnd_end_time: next ? `${dndEndTime}:00` : null,
+    };
+    setCheckInSettings(p => (p ? { ...p, ...patch } : p));
+    const { error } = await supabase.from('check_in_settings').update(patch).eq('user_id', user.id);
+    if (error) { setCheckInSettings(prev); setToastMessage('Failed to save changes. Please try again.'); }
+  };
+
+  const handleDNDTimeChange = async (start: string, end: string) => {
+    if (!user) return;
+    const patch = { dnd_start_time: `${start}:00`, dnd_end_time: `${end}:00` };
+    setCheckInSettings(p => (p ? { ...p, ...patch } : p));
+    const { error } = await supabase.from('check_in_settings').update(patch).eq('user_id', user.id);
+    if (error) setToastMessage('Failed to save times. Please try again.');
+  };
+
+  const handleSaveActiveWindow = async (start: string, end: string) => {
+    if (!user) return;
+    const { error } = await supabase.from('check_in_settings')
+      .update({ window_start: start, window_end: end }).eq('user_id', user.id);
+    if (error) throw error;
+    setCheckInSettings(p => (p ? { ...p, window_start: start, window_end: end } : p));
+  };
+
+  const handleSaveFrequency = async (freq: number) => {
+    if (!user) return;
+    const { error } = await supabase.from('check_in_settings')
+      .update({ check_ins_per_day: freq }).eq('user_id', user.id);
+    if (error) throw error;
+    setCheckInSettings(p => (p ? { ...p, check_ins_per_day: freq } : p));
+  };
+
+  // ── Notifications, security ────────────────────────────────────────────────
 
   const handleTogglePush = async (next: boolean) => {
     if (!user) return;
@@ -133,6 +274,17 @@ export default function SettingsScreen() {
     await refreshProfile();
   };
 
+  const handleSendTestNotification = async () => {
+    if (!user || testingPush) return;
+    setTestingPush(true);
+    setTestPushResult(null);
+    const { error } = await supabase.functions.invoke('send-test-notification');
+    setTestPushResult(error
+      ? { ok: false, message: 'Failed to send. Try toggling notifications off and on.' }
+      : { ok: true, message: 'Notification sent - check your device.' });
+    setTestingPush(false);
+  };
+
   const handleSetAppLockPin = async (pin: string) => {
     if (!user) return;
     const salt = generateSalt();
@@ -140,7 +292,8 @@ export default function SettingsScreen() {
     const { error } = await supabase.from('profiles').update({
       app_lock_enabled: true, app_lock_pin_hash: hash, app_lock_pin_salt: salt,
     }).eq('id', user.id);
-    if (error) { setAppLockError('Failed to save changes. Please try again.'); return; }
+    if (error) { setToastMessage('Failed to save changes. Please try again.'); return; }
+    setToastMessage(appLockSheetMode === 'change' ? 'PIN updated' : 'App lock enabled');
     await refreshProfile();
   };
 
@@ -149,164 +302,279 @@ export default function SettingsScreen() {
     const { error } = await supabase.from('profiles').update({
       app_lock_enabled: false, app_lock_pin_hash: null, app_lock_pin_salt: null,
     }).eq('id', user.id);
-    if (error) { setAppLockError('Failed to save changes. Please try again.'); return; }
+    if (error) { setToastMessage('Failed to save changes. Please try again.'); return; }
     await refreshProfile();
   };
 
   if (loading) return <PulseLoadingScreen />;
 
+  const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
+  const appLockEnabled = profile?.app_lock_enabled ?? false;
+  const pushEnabled = profile?.push_enabled ?? false;
+  const pendingDisableLabel = ALL_DOMAINS.find(d => d.type === pendingDisable)?.label;
+  const pendingEnableLabel = ALL_DOMAINS.find(d => d.type === pendingEnable)?.label;
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <FlatList
-        data={markers}
-        keyExtractor={m => m.id}
-        contentContainerStyle={styles.list}
-        ListHeaderComponent={
-          <>
-            <AppLogoHeader />
-            <Text style={styles.heading}>Settings</Text>
+      <ScrollView contentContainerStyle={styles.page}>
+        <AppLogoHeader />
+        <Text style={styles.heading}>Settings</Text>
 
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>Markers</Text>
-              <Pressable
-                onPress={() => {
-                  setEditingMarker(undefined);
-                  setShowModal(true);
-                }}
-                style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}>
-                <Text style={styles.addButtonText}>+ Add marker</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.sectionHint}>Medication changes, appointments, and life events show as dots on History and feed pattern detection on Insights.</Text>
-          </>
-        }
-        renderItem={({ item }) => {
-          const Icon = MARKER_ICON[item.marker_type];
-          const color = markerColors[item.marker_type];
-          return (
-            <Pressable
-              onPress={() => {
-                setEditingMarker(item);
-                setShowModal(true);
-              }}
-              style={({ pressed }) => [styles.markerRow, pressed && styles.pressed]}>
-              <View style={[styles.markerIcon, { backgroundColor: `${color}22` }]}>
-                <Icon size={16} color={color} />
-              </View>
-              <View style={styles.markerText}>
-                <Text style={styles.markerLabel}>{item.label}</Text>
-                <Text style={styles.markerMeta}>
-                  {markerTypeLabels[item.marker_type]} · {formatMarkerDate(item.marker_date)}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>No markers yet</Text>
-          </View>
-        }
-        ListFooterComponent={
-          <View style={styles.footer}>
-            <View style={styles.bodySection}>
-              <View style={styles.bodyToggleRow}>
-                <View style={styles.bodyToggleTextWrap}>
-                  <Text style={styles.sectionLabel}>Body tracking</Text>
-                  <Text style={styles.bodyToggleSubtitle}>Alpha — fatigue, pain, and other physical symptoms, tracked separately from mind check-ins.</Text>
-                </View>
-                <Switch value={profile?.body_tracking_enabled ?? false} onValueChange={handleToggleBodyTracking} trackColor={{ true: BODY_COLOR }} />
-              </View>
+        {loadError && (
+          <View style={styles.loadError}><Text style={styles.loadErrorText}>{loadError}</Text></View>
+        )}
 
-              {bodyToggleError && <Text style={styles.bodyErrorText}>{bodyToggleError}</Text>}
+        {/* ── Your tracking setup ─────────────────────────────────────────── */}
+        <SectionLabel>Your tracking setup</SectionLabel>
+        <SectionCard>
+          <SettingsRow
+            icon={<BrainIcon />}
+            label="Mind Tracking"
+            subtitle={`${activeDomains.length} of ${ALL_DOMAINS.length} active`}
+          />
+          <DomainPills activeDomains={activeDomains} onToggle={handleToggleDomain} />
+          <RowDivider />
+          <SettingsRow
+            icon={<ClockIcon />}
+            label="Active window"
+            subtitle={checkInSettings
+              ? `${formatWindowTime(checkInSettings.window_start, timeFormat)} - ${formatWindowTime(checkInSettings.window_end, timeFormat)}`
+              : undefined}
+            right={<RowValue>Edit</RowValue>}
+            onPress={() => setSheet('activeWindow')}
+          />
+          <RowDivider />
+          <SettingsRow
+            icon={<ClockSimpleIcon />}
+            label="Mind check-ins per day"
+            right={<RowValue>{checkInSettings?.check_ins_per_day ?? '-'}</RowValue>}
+            onPress={() => setSheet('frequency')}
+          />
+        </SectionCard>
 
-              {profile?.body_tracking_enabled && (
+        {/* ── Body tracking ───────────────────────────────────────────────── */}
+        <SectionLabel>Body tracking</SectionLabel>
+        <SectionCard>
+          <SettingsRow
+            icon={<BodyIcon />}
+            label="Body tracking"
+            subtitle="Fatigue, pain, and other physical symptoms"
+            right={<Toggle value={bodyTrackingEnabled} onValueChange={() => toggleProfileField('body_tracking_enabled', bodyTrackingEnabled)} />}
+          />
+          {bodyTrackingEnabled && (
+            <>
+              <RowDivider />
+              <BodyDomainPills activeDomains={bodyDomainsActive} onToggle={handleToggleBodyDomain} />
+              <RowDivider />
+              <SettingsRow
+                icon={<ClockIcon />} label="Available from"
+                subtitle={formatWindowTime(bodyAvailableFrom, timeFormat)}
+                right={<RowValue>Edit</RowValue>} onPress={() => setSheet('bodyTracking')}
+              />
+              <RowDivider />
+              <SettingsRow
+                icon={<ClockSimpleIcon />} label="Remind me at"
+                subtitle={formatWindowTime(bodyReminderTime, timeFormat)}
+                right={<RowValue>Edit</RowValue>} onPress={() => setSheet('bodyTracking')}
+              />
+              <RowDivider />
+              <SettingsRow
+                icon={<BellIcon />} label="Morning check-in"
+                subtitle="Optional: fatigue, pain, and standing up, before the day starts"
+                right={<Toggle value={bodyMorningEnabled} onValueChange={() => toggleProfileField('body_morning_enabled', bodyMorningEnabled, setBodyMorningEnabled)} />}
+              />
+              {bodyMorningEnabled && (
                 <>
-                  <View style={styles.pillRow}>
-                    {CHECKIN_BODY_DOMAIN_ORDER.filter(d => !BODY_DOMAINS[d].required).map((d: BodyDomainType) => {
-                      const active = bodyDomainsActive.includes(d);
-                      return (
-                        <Pressable key={d} onPress={() => handleToggleBodyDomain(d)} style={[styles.domainPill, active && styles.domainPillActive]}>
-                          <Text style={[styles.domainPillText, active && styles.domainPillTextActive]}>{BODY_DOMAINS[d].label}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-
-                  <Pressable onPress={() => setShowBodyTrackingSheet(true)} style={styles.bodyTimingRow}>
-                    <Text style={styles.bodyTimingLabel}>Timing</Text>
-                    <Text style={styles.bodyTimingValue}>
-                      Opens {bodyAvailableFrom} · Reminds {bodyReminderTime}{bodyMorningEnabled ? ` · Morning ${bodyMorningTime}` : ''}
-                    </Text>
-                  </Pressable>
-
-                  <View style={styles.bodyButtonRow}>
-                    <Pressable onPress={() => setShowBodyCheckIn(true)} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
-                      <Text style={styles.bodyCheckInButtonText}>Log body check-in</Text>
-                    </Pressable>
-                    {bodyMorningEnabled && (
-                      <Pressable onPress={() => setShowMorningCheckIn(true)} style={({ pressed }) => [styles.bodyCheckInButton, pressed && styles.pressed]}>
-                        <Text style={styles.bodyCheckInButtonText}>Log morning check-in</Text>
-                      </Pressable>
-                    )}
-                  </View>
+                  <RowDivider />
+                  <SettingsRow
+                    icon={<ClockIcon />} label="Opens at"
+                    subtitle={formatWindowTime(bodyMorningTime, timeFormat)}
+                    right={<RowValue>Edit</RowValue>} onPress={() => setSheet('bodyTracking')}
+                  />
                 </>
               )}
-            </View>
+            </>
+          )}
+        </SectionCard>
 
-            <View style={styles.securitySection}>
-              <View style={styles.bodyToggleRow}>
-                <View style={styles.bodyToggleTextWrap}>
-                  <Text style={styles.sectionLabel}>App lock</Text>
-                  <Text style={styles.bodyToggleSubtitle}>Require a PIN to open Symetric.</Text>
+        {/* ── Cycle tracking ──────────────────────────────────────────────── */}
+        <SectionLabel>Cycle tracking</SectionLabel>
+        <SectionCard>
+          <SettingsRow
+            icon={<CycleIcon />}
+            label="Cycle tracking"
+            subtitle="Log Day 1 as an event, see the cycle day in History"
+            right={<Toggle
+              value={profile?.cycle_tracking_enabled ?? false}
+              onValueChange={() => toggleProfileField('cycle_tracking_enabled', profile?.cycle_tracking_enabled ?? false)}
+            />}
+          />
+        </SectionCard>
+
+        {/* ── Notifications ───────────────────────────────────────────────── */}
+        <SectionLabel>Notifications</SectionLabel>
+        <SectionCard>
+          <SettingsRow
+            icon={<BellSlashIcon />}
+            label="Do not disturb"
+            subtitle="Check-ins still appear when you open the app"
+            right={<Toggle value={dndEnabled} onValueChange={() => handleToggleDND(!dndEnabled)} />}
+          />
+          {dndEnabled && (
+            <>
+              <RowDivider />
+              <SettingsRow
+                icon={<ClockIcon />} label="Do not disturb hours"
+                subtitle={`${formatWindowTime(dndStartTime, timeFormat)} - ${formatWindowTime(dndEndTime, timeFormat)}`}
+                right={<RowValue>Edit</RowValue>} onPress={() => setSheet('dnd')}
+              />
+            </>
+          )}
+          <RowDivider />
+          <SettingsRow
+            icon={<BellIcon />}
+            label="Push notifications"
+            subtitle="How Symetric reaches you for check-ins"
+            right={<Toggle value={pushEnabled} onValueChange={handleTogglePush} disabled={pushBusy} />}
+          />
+          {pushError && <View style={styles.inlineWrap}><InlineMessage type="error">{pushError}</InlineMessage></View>}
+
+          <Pressable onPress={() => setShowMoreExpanded(p => !p)} style={styles.showMore}>
+            <Text style={styles.showMoreLabel}>Notification test</Text>
+            <Text style={styles.showMoreAction}>{showMoreExpanded ? 'Hide ›' : 'Show ›'}</Text>
+          </Pressable>
+
+          {showMoreExpanded && (
+            <>
+              <RowDivider />
+              <SettingsRow
+                icon={<PaperPlaneIcon />} iconColor="slate"
+                label="Send test notification"
+                subtitle={pushEnabled ? 'Check that delivery is working on this device' : 'Enable push notifications first'}
+                right={
+                  <Pressable
+                    onPress={handleSendTestNotification}
+                    disabled={testingPush || !pushEnabled}
+                    style={[styles.smallButton, (testingPush || !pushEnabled) && styles.smallButtonDisabled]}>
+                    <Text style={[styles.smallButtonText, (testingPush || !pushEnabled) && styles.smallButtonTextDisabled]}>
+                      {testingPush ? 'Sending...' : 'Send'}
+                    </Text>
+                  </Pressable>
+                }
+              />
+              {testPushResult && (
+                <View style={styles.inlineWrap}>
+                  <InlineMessage type={testPushResult.ok ? 'info' : 'error'}>{testPushResult.message}</InlineMessage>
                 </View>
-                <Switch value={profile?.app_lock_enabled ?? false} onValueChange={handleToggleAppLock} trackColor={{ true: '#818cf8' }} />
-              </View>
-
-              {appLockError && <Text style={styles.bodyErrorText}>{appLockError}</Text>}
-
-              {profile?.app_lock_enabled && (
-                <Pressable onPress={() => setAppLockSheetMode('change')} style={styles.bodyTimingRow}>
-                  <Text style={styles.bodyTimingLabel}>PIN</Text>
-                  <Text style={styles.bodyTimingValue}>Change PIN</Text>
-                </Pressable>
               )}
-            </View>
+            </>
+          )}
+        </SectionCard>
 
-            <View style={styles.securitySection}>
-              <View style={styles.bodyToggleRow}>
-                <View style={styles.bodyToggleTextWrap}>
-                  <Text style={styles.sectionLabel}>Notifications</Text>
-                  <Text style={styles.bodyToggleSubtitle}>Reminders when a check-in is due.</Text>
-                </View>
-                <Switch value={profile?.push_enabled ?? false} onValueChange={handleTogglePush} disabled={pushBusy} trackColor={{ true: '#818cf8' }} />
-              </View>
+        {/* ── Security ────────────────────────────────────────────────────── */}
+        <SectionLabel>Security</SectionLabel>
+        <SectionCard>
+          <SettingsRow
+            icon={<LockIcon />}
+            label="App lock"
+            subtitle="Require a PIN to open Symetric"
+            right={<Toggle value={appLockEnabled} onValueChange={() => setAppLockSheetMode(appLockEnabled ? 'disable' : 'enable')} />}
+          />
+          {appLockEnabled && (
+            <>
+              <RowDivider />
+              <SettingsRow
+                icon={<LockIcon />} label="Change PIN"
+                right={<ChevronRight />} onPress={() => setAppLockSheetMode('change')}
+              />
+            </>
+          )}
+        </SectionCard>
 
-              {pushError && <Text style={styles.bodyErrorText}>{pushError}</Text>}
-            </View>
+        {/* ── Preferences ─────────────────────────────────────────────────── */}
+        <SectionLabel>Preferences</SectionLabel>
+        <SectionCard>
+          <SettingsRow
+            icon={<EyeIcon />}
+            label="Comfort mode"
+            subtitle="Larger text, reduced brightness"
+            right={<Toggle
+              value={profile?.comfort_mode ?? false}
+              onValueChange={() => toggleProfileField('comfort_mode', profile?.comfort_mode ?? false)}
+            />}
+          />
+          <RowDivider />
+          <SettingsRow
+            icon={<PaletteIcon />}
+            label="Simplified colours"
+            subtitle="Uses one colour instead of per-domain colours"
+            right={<Toggle
+              value={profile?.simplified_colors ?? false}
+              onValueChange={() => toggleProfileField('simplified_colors', profile?.simplified_colors ?? false)}
+            />}
+          />
+          <RowDivider />
+          <SettingsRow
+            icon={<ClockSimpleIcon />}
+            label="Time format"
+            right={<RowValue>{timeFormat === '12hr' ? '12-hour' : '24-hour'}</RowValue>}
+            onPress={() => setSheet('timeFormat')}
+          />
+        </SectionCard>
 
-            <Text style={styles.footerNote}>PDF reports generate from the Prepare tab.</Text>
-            <Pressable onPress={() => signOut()} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}>
-              <Text style={styles.signOutText}>Sign out</Text>
-            </Pressable>
-          </View>
-        }
-      />
+        {/* ── Your data ───────────────────────────────────────────────────── */}
+        <SectionLabel>Your data</SectionLabel>
+        <SectionCard>
+          <SettingsRow
+            icon={<DownloadIcon />} label="Export my data"
+            subtitle="CSV or JSON · your data, take it anytime"
+            right={<ChevronRight />} onPress={() => setSheet('export')}
+          />
+          <RowDivider />
+          <SettingsRow
+            icon={<CalendarIcon />} label="Delete a date range"
+            subtitle="Remove a specific period from your record"
+            right={<ChevronRight />} onPress={() => setSheet('deleteRange')}
+          />
+          <RowDivider />
+          <SettingsRow
+            icon={<RefreshIcon />} label="Reset baselines"
+            subtitle="Recalculate what's normal for you"
+            right={<ChevronRight />} onPress={() => setSheet('resetBaseline')}
+          />
+        </SectionCard>
 
-      {showModal && (
-        <MarkerModal
-          marker={editingMarker}
-          onSave={handleSave}
-          onDelete={editingMarker ? handleDelete : undefined}
-          onClose={() => setShowModal(false)}
-          cycleTrackingEnabled={profile?.cycle_tracking_enabled ?? false}
+        {/* ── Account ─────────────────────────────────────────────────────── */}
+        <SectionLabel danger>Account</SectionLabel>
+        <SectionCard>
+          <SettingsRow
+            icon={<XDangerIcon />} danger
+            label="Delete all data and account"
+            subtitle="Permanent. Cannot be undone."
+            right={<ChevronRight color="#b05050" />}
+            onPress={() => setSheet('deleteAll')}
+          />
+        </SectionCard>
+
+        <Pressable onPress={() => signOut()} style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+      </ScrollView>
+
+      {/* ── Sheets ── */}
+      {sheet === 'activeWindow' && checkInSettings && (
+        <ActiveWindowSheet
+          currentStart={checkInSettings.window_start}
+          currentEnd={checkInSettings.window_end}
+          timeFormat={timeFormat}
+          onSave={handleSaveActiveWindow}
+          onClose={() => setSheet(null)}
         />
       )}
-
-      <BodyCheckIn visible={showBodyCheckIn} onClose={() => setShowBodyCheckIn(false)} />
-      <MorningBodyCheckIn visible={showMorningCheckIn} onClose={() => setShowMorningCheckIn(false)} />
-
-      {showBodyTrackingSheet && (
+      {sheet === 'frequency' && checkInSettings && (
+        <FrequencySheet current={checkInSettings.check_ins_per_day} onSave={handleSaveFrequency} onClose={() => setSheet(null)} />
+      )}
+      {sheet === 'bodyTracking' && (
         <BodyTrackingSheet
           activeDomains={bodyDomainsActive}
           onToggleDomain={handleToggleBodyDomain}
@@ -315,9 +583,24 @@ export default function SettingsScreen() {
           currentMorningEnabled={bodyMorningEnabled}
           currentMorningTime={bodyMorningTime}
           onSaveTiming={handleSaveBodyTiming}
-          onClose={() => setShowBodyTrackingSheet(false)}
+          onClose={() => setSheet(null)}
         />
       )}
+      {sheet === 'dnd' && (
+        <DndSheet
+          dndStartTime={dndStartTime} dndEndTime={dndEndTime} timeFormat={timeFormat}
+          onTimeChange={handleDNDTimeChange} onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet === 'timeFormat' && (
+        <TimeFormatSheet current={timeFormat} onChange={handleSetTimeFormat} onClose={() => setSheet(null)} />
+      )}
+      {sheet === 'export' && <ExportSheet onClose={() => setSheet(null)} />}
+      {sheet === 'deleteRange' && user && (
+        <DeleteRangeSheet userId={user.id} onClose={() => setSheet(null)} onDeleted={() => setToastMessage('That period has been deleted.')} />
+      )}
+      {sheet === 'deleteAll' && <DeleteAllSheet onClose={() => setSheet(null)} />}
+      {sheet === 'resetBaseline' && user && <ResetBaselineSheet userId={user.id} onClose={() => setSheet(null)} />}
 
       {appLockSheetMode && (
         <AppLockPinSheet
@@ -329,46 +612,56 @@ export default function SettingsScreen() {
           onDisable={handleDisableAppLock}
         />
       )}
+
+      {pendingDisable && pendingDisableLabel && (
+        <ConfirmDisableSheet domainLabel={pendingDisableLabel} onConfirm={handleConfirmDisable} onClose={() => setPendingDisable(null)} />
+      )}
+      {pendingEnable && pendingEnableLabel && (
+        <BaselineModal domainLabel={pendingEnableLabel} onSubmit={handleBaselineSubmit} onClose={() => setPendingEnable(null)} />
+      )}
+
+      {toastMessage && <Toast message={toastMessage} onDone={() => setToastMessage(null)} />}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0a0c12' },
-  list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
-  heading: { fontSize: 26, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.6, marginBottom: 24 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  sectionLabel: { fontSize: 11, color: '#818cf8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9 },
-  sectionHint: { fontSize: 12.5, color: '#4a5568', lineHeight: 18, marginBottom: 16 },
-  addButton: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999, backgroundColor: 'rgba(99,102,241,0.15)' },
-  addButtonText: { fontSize: 12.5, fontWeight: '600', color: '#818cf8' },
+  root: { flex: 1, backgroundColor: '#0f1117' },
+  page: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 60 },
   pressed: { opacity: 0.7 },
-  markerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 14, padding: 12, paddingHorizontal: 14, marginBottom: 8 },
-  markerIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  markerText: { flex: 1 },
-  markerLabel: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
-  markerMeta: { fontSize: 12, color: '#8892a4' },
-  empty: { paddingVertical: 24, alignItems: 'center' },
-  emptyText: { fontSize: 13, color: '#4a5568' },
-  footer: { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#1e2533', gap: 16 },
-  bodySection: { gap: 14 },
-  securitySection: { gap: 14, marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#1e2533' },
-  bodyToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bodyToggleTextWrap: { flex: 1, marginRight: 12, gap: 4 },
-  bodyToggleSubtitle: { fontSize: 12.5, color: '#4a5568', lineHeight: 18 },
-  bodyErrorText: { fontSize: 12, color: '#f87171' },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  domainPill: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
-  domainPillActive: { backgroundColor: 'rgba(188,129,47,0.15)', borderColor: 'rgba(188,129,47,0.4)' },
-  domainPillText: { fontSize: 12, fontWeight: '500', color: '#555c72' },
-  domainPillTextActive: { color: '#BC812F' },
-  bodyTimingRow: { paddingVertical: 6 },
-  bodyTimingLabel: { fontSize: 11, color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
-  bodyTimingValue: { fontSize: 13, color: '#8892a4' },
-  bodyButtonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  bodyCheckInButton: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: 'rgba(188,129,47,0.15)', alignSelf: 'flex-start' },
-  bodyCheckInButtonText: { fontSize: 13, fontWeight: '600', color: '#BC812F' },
-  footerNote: { fontSize: 12, color: '#4a5568', lineHeight: 18 },
-  signOutButton: { alignItems: 'center', padding: 12 },
-  signOutText: { fontSize: 14, color: '#f87171' },
+  heading: { fontSize: 22, fontWeight: '600', color: '#e2e4ec', letterSpacing: -0.3, marginBottom: 4 },
+
+  loadError: {
+    backgroundColor: '#1a0e0e', borderWidth: 1, borderColor: '#3b1515',
+    borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 16,
+  },
+  loadErrorText: { fontSize: 13, color: '#f87171' },
+
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
+  pill: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 20, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
+  pillActive: { backgroundColor: 'rgba(123,131,240,0.15)', borderColor: 'rgba(123,131,240,0.4)' },
+  pillActiveBody: { backgroundColor: 'rgba(188,129,47,0.15)', borderColor: 'rgba(188,129,47,0.4)' },
+  pillText: { fontSize: 12, fontWeight: '500', color: '#555c72' },
+  pillTextActive: { color: '#a5b4fc' },
+  pillTextActiveBody: { color: '#BC812F' },
+
+  inlineWrap: { paddingHorizontal: 16, paddingBottom: 14 },
+
+  showMore: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: '#252b3b',
+  },
+  showMoreLabel: { fontSize: 13, color: '#8b90a4' },
+  showMoreAction: { fontSize: 13, color: '#555c72' },
+
+  smallButton: { paddingVertical: 7, paddingHorizontal: 14, borderWidth: 1, borderColor: '#252b3b', borderRadius: 8 },
+  smallButtonDisabled: { opacity: 0.6 },
+  smallButtonText: { fontSize: 13, fontWeight: '500', color: '#8b90a4' },
+  smallButtonTextDisabled: { color: '#555c72' },
+
+  signOut: {
+    marginTop: 8, paddingVertical: 14, backgroundColor: '#181c26',
+    borderWidth: 1, borderColor: '#252b3b', borderRadius: 12, alignItems: 'center',
+  },
+  signOutText: { fontSize: 15, color: '#8b90a4' },
 });
