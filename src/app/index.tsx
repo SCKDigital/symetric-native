@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@/lib/edit-window';
+import { forcePatternDetection, runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
 import { createMarker } from '@/lib/queries/markers';
 import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 import { formatTime } from '@/lib/time-format';
@@ -77,7 +78,7 @@ export default function TodayScreen() {
 // matter: the info sheet, day summaries, milestones, gap recovery,
 // notification prompts, and the appointment reminder card.
 function TodayHome() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const {
     loading, activeCheckIn, rescuableCheckIn, allDone, activeDomains, baselines,
     completedCount, totalCount, nextScheduled, afterNextScheduled, lastCompleted,
@@ -104,6 +105,16 @@ function TodayHome() {
     return () => clearInterval(id);
   }, []);
 
+  // Detection is throttled internally (daily for clusters, weekly for
+  // connections and the baseline recalc), so this is a cheap call that mostly
+  // no-ops. It belongs here rather than only on Insights — which is where
+  // native had it, and Insights is a tab a daily user may never open, so their
+  // clusters, connections and baselines would never have been computed at all.
+  useEffect(() => {
+    if (!user) return;
+    runPatternDetectionIfNeeded(user.id).catch(e => console.error('[Today] pattern detection:', e));
+  }, [user]);
+
   if (loading) return <PulseLoadingScreen />;
 
   const snoozeActive = snoozedUntil !== null && snoozedUntil > nowMs;
@@ -120,7 +131,13 @@ function TodayHome() {
         baselines={baselines}
         completedCount={completedCount}
         totalCount={totalCount}
-        onComplete={() => { setStartedCheckIn(null); refresh(); }}
+        onComplete={() => {
+          setStartedCheckIn(null);
+          refresh();
+          // Re-run detection so today's answers are included rather than
+          // waiting for tomorrow's throttle window.
+          if (user) forcePatternDetection(user.id).catch(e => console.error('[Today] force detection:', e));
+        }}
       />
     );
   }
@@ -203,7 +220,13 @@ function TodayHome() {
         </Pressable>
         {markerError && <Text style={styles.error}>{markerError}</Text>}
 
-        <SleepCard onLogged={refresh} />
+        {/* Sleep isn't a scheduled check-in, so it doesn't go through the
+            check-in completion path — but it feeds sleep-connection and lag
+            detection just the same. */}
+        <SleepCard onLogged={() => {
+          refresh();
+          if (user) forcePatternDetection(user.id).catch(e => console.error('[Today] force detection:', e));
+        }} />
 
         <View style={styles.statusBlock}>
           {allDone ? (

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { recalculateRollingBaseline } from '@/lib/baseline/rolling-baseline-recalc';
 import { runClusterDetection } from '@/lib/cluster-detection';
 import { runBodyClusterDetection } from '@/lib/body-cluster-detection';
 import { detectBodyMindConnections } from '@/lib/detection/body-mind-connections';
@@ -12,11 +13,11 @@ import { supabase } from '@/lib/supabase';
  * and body (runBodyClusterDetection, a no-op for users without body tracking
  * enabled) — same "independent detectors, disjoint domain sets, no shared
  * writes" Promise.all as the web version — plus the weekly body-mind
- * connection detection throttle. NOT ported yet: weekly mind-domain and
- * sleep connection detection, rolling baseline recalculation, baseline
- * shift detection, and pinned-connection re-evaluation — each depends on
- * detector modules not ported to native yet (a later chunk of the
- * multi-session Insights port).
+ * connection detection throttle, plus the weekly rolling baseline
+ * recalculation. NOT ported yet: weekly mind-domain and sleep connection
+ * detection, baseline shift detection, and pinned-connection re-evaluation —
+ * each depends on detector modules not ported to native yet (a later chunk of
+ * the multi-session Insights port).
  *
  * Mechanic swap: `localStorage` → `AsyncStorage`, so this needs `await`
  * where the web version reads/writes synchronously. The weekly throttle
@@ -30,6 +31,7 @@ const MS_PER_DAY = 86_400_000;
 
 const lastPatternDetectionKey = (userId: string) => `lastPatternDetection_${userId}`;
 const lastConnectionDetectionKey = (userId: string) => `lastConnectionDetection_${userId}`;
+const lastBaselineRecalcKey = (userId: string) => `lastBaselineRecalc_${userId}`;
 
 function todayStr(): string {
   return new Date().toISOString().split('T')[0];
@@ -64,6 +66,26 @@ export async function runPatternDetectionIfNeeded(userId: string): Promise<boole
     debug.log('Pattern Detection', 'Running weekly body-mind connection detection');
     await detectBodyMindConnections(userId).catch(e => debug.error('Pattern Detection', 'body-mind connection detection failed:', e));
     await AsyncStorage.setItem(lastConnectionDetectionKey(userId), Date.now().toString());
+  }
+
+  // Weekly: rolling median baseline recalculation. Cadence is
+  // user-activity-driven, so baselines can be up to 7 days stale for active
+  // users and arbitrarily stale for inactive ones — the same accepted
+  // tradeoff the web app documents, and the same cadence as everything above.
+  const lastBaselineRecalcTs = await AsyncStorage.getItem(lastBaselineRecalcKey(userId));
+  const msSinceLastBaselineRecalc = lastBaselineRecalcTs ? Date.now() - parseInt(lastBaselineRecalcTs, 10) : Infinity;
+  if (msSinceLastBaselineRecalc >= CONNECTION_DETECTION_INTERVAL_DAYS * MS_PER_DAY) {
+    debug.log('Pattern Detection', 'Running weekly rolling baseline recalculation');
+    const recalcResult = await recalculateRollingBaseline(userId)
+      .catch(e => { debug.error('Pattern Detection', 'baseline recalc failed:', e); return null; });
+    if (recalcResult?.reason) {
+      debug.log('Pattern Detection', `Baseline recalc skipped: ${recalcResult.reason}`);
+    } else if (recalcResult) {
+      debug.log('Pattern Detection', `Baseline recalc done — updated: [${recalcResult.updated.join(', ')}]`);
+    }
+    // Stamped even on failure, so a persistently failing recalc retries weekly
+    // rather than on every single app open.
+    await AsyncStorage.setItem(lastBaselineRecalcKey(userId), Date.now().toString());
   }
 
   return ranClusters;
