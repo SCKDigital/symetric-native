@@ -1,13 +1,26 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import CheckInForm from '@/components/checkin/check-in-form';
+import EditCheckInModal from '@/components/checkin/edit-check-in-modal';
+import MarkerModal from '@/components/marker-modal';
 import MindSetup from '@/components/onboarding/mind-setup';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
+import BonusCheckInCard from '@/components/today/bonus-check-in-card';
+import SleepCard from '@/components/today/sleep-card';
+import { useAuth } from '@/contexts/auth-context';
 import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
+import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@/lib/edit-window';
+import { createMarker } from '@/lib/queries/markers';
+import { formatTime } from '@/lib/time-format';
+import type { CheckIn } from '@/lib/supabase';
+
+function formatDate(): string {
+  return new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
+}
 
 export default function TodayScreen() {
   const { mindSetupComplete, markComplete } = useMindSetupStatus();
@@ -29,18 +42,18 @@ export default function TodayScreen() {
   if (!mindSetupComplete) {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
-        <View style={styles.page}>
-        <AppLogoHeader />
-        <View style={styles.setupPrompt}>
-          <Text style={styles.setupHeading}>Set up Mind tracking</Text>
-          <Text style={styles.setupBody}>
-            Pick the domains you want to track, answer a few baseline questions, and choose when check-ins should
-            happen — takes about two minutes.
-          </Text>
-          <Pressable onPress={() => setShowMindSetup(true)} style={({ pressed }) => [styles.setupButton, pressed && styles.pressed]}>
-            <Text style={styles.setupButtonText}>Get started</Text>
-          </Pressable>
-        </View>
+        <View style={styles.staticPage}>
+          <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
+          <View style={styles.setupPrompt}>
+            <Text style={styles.setupHeading}>Set up Mind tracking</Text>
+            <Text style={styles.setupBody}>
+              Pick the domains you want to track, answer a few baseline questions, and choose when check-ins should
+              happen — takes about two minutes.
+            </Text>
+            <Pressable onPress={() => setShowMindSetup(true)} style={({ pressed }) => [styles.setupButton, pressed && styles.pressed]}>
+              <Text style={styles.setupButtonText}>Get started</Text>
+            </Pressable>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -49,13 +62,28 @@ export default function TodayScreen() {
   return <TodayHome />;
 }
 
-// Deliberately scoped down from the web app's 999-line TodayScreen.tsx: just
-// "find the current pending check-in and let it be completed." Not ported —
-// separate work, not forgotten: expiring stale pending check-ins, rescue/
-// snooze windows, late-check-in handling, editing past check-ins, body
-// check-ins, sleep prompts, day summaries, milestones, appointment reminders.
+// The homescreen the web app's TodayScreen.tsx renders when nothing is due:
+// header, "+ Add an event", the sleep card, the next-check-in block, the
+// ten-minute edit affordance and the bonus check-in row. This was previously a
+// single centred "Nothing due right now" paragraph and nothing else, so there
+// was no way to log sleep, add an event, correct a check-in, or add an
+// unscheduled one from the app at all.
+//
+// Still not ported from the web screen, roughly in order of how much they
+// matter: rescue/snooze windows and the late-check-in card, rescheduling (the
+// web "Reschedule" link and its two sheets), the info sheet, day summaries,
+// milestones, gap recovery, notification prompts, the appointment reminder
+// card, and the body check-in cards — body logging lives on Settings here
+// rather than on Today.
 function TodayHome() {
-  const { loading, pendingCheckIn, activeDomains, baselines, completedCount, totalCount, nextScheduled, refresh } = useTodayCheckIns();
+  const { profile } = useAuth();
+  const {
+    loading, pendingCheckIn, activeDomains, baselines, completedCount, totalCount,
+    nextScheduled, afterNextScheduled, lastCompleted, timeFormat, refresh,
+  } = useTodayCheckIns();
+  const [editingCheckIn, setEditingCheckIn] = useState<CheckIn | null>(null);
+  const [showMarkerModal, setShowMarkerModal] = useState(false);
+  const [markerError, setMarkerError] = useState<string | null>(null);
 
   if (loading) return <PulseLoadingScreen />;
 
@@ -73,35 +101,130 @@ function TodayHome() {
   }
 
   const allDone = totalCount > 0 && completedCount === totalCount;
+  const lastCompletedAt = lastCompleted?.completed_at ?? null;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.page}>
-      <AppLogoHeader />
-      <View style={styles.setupPrompt}>
-        <Text style={styles.setupHeading}>{allDone ? "You're all caught up" : 'Nothing due right now'}</Text>
-        <Text style={styles.setupBody}>
-          {allDone
-            ? `All ${totalCount} check-ins done for today.`
-            : nextScheduled
-              ? `Next check-in at ${new Date(nextScheduled.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
-              : "No check-ins scheduled for today yet — this should resolve shortly."}
-        </Text>
-      </View>
-      </View>
+      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+        <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
+
+        {/* Logging a past event, not a today-task — kept first and full width so
+            it reads as a persistent utility rather than buried content. */}
+        <Pressable
+          onPress={() => { setMarkerError(null); setShowMarkerModal(true); }}
+          style={({ pressed }) => [styles.addEvent, pressed && styles.pressed]}>
+          <Text style={styles.addEventText}>+ Add an event</Text>
+        </Pressable>
+        {markerError && <Text style={styles.error}>{markerError}</Text>}
+
+        <SleepCard onLogged={refresh} />
+
+        <View style={styles.statusBlock}>
+          {allDone ? (
+            <>
+              <Text style={styles.statusHeading}>All done for today</Text>
+              <Text style={styles.statusBody}>See you tomorrow</Text>
+            </>
+          ) : nextScheduled ? (
+            <>
+              <Text style={styles.nextLabel}>NEXT MIND CHECK-IN</Text>
+              <Text style={styles.nextTime}>{formatTime(nextScheduled.scheduled_at, timeFormat)}</Text>
+              {afterNextScheduled && (
+                <Text style={styles.nextThen}>then {formatTime(afterNextScheduled.scheduled_at, timeFormat)}</Text>
+              )}
+            </>
+          ) : totalCount === 0 ? (
+            <>
+              <Text style={styles.statusHeading}>Your mind check-ins are coming</Text>
+              <Text style={styles.statusBody}>
+                Nothing is scheduled for today yet — this should resolve shortly.
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.statusBody}>Your mind check-in window has closed for today</Text>
+          )}
+        </View>
+
+        {lastCompletedAt && isWithinEditWindow(lastCompletedAt) && (
+          <Pressable
+            onPress={() => setEditingCheckIn(lastCompleted)}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit last check-in, ${getMinutesRemaining(lastCompletedAt)} minutes remaining`}
+            style={({ pressed }) => [styles.editButton, pressed && styles.pressed]}>
+            <Text style={styles.editButtonText}>Edit last check-in</Text>
+            <Text style={styles.editButtonMeta}>{getMinutesRemaining(lastCompletedAt)} min remaining</Text>
+          </Pressable>
+        )}
+
+        {lastCompletedAt && wasRecentlyCompleted(lastCompletedAt) && (
+          <Text style={styles.windowClosed}>(Editing window closed)</Text>
+        )}
+
+        <BonusCheckInCard activeDomains={activeDomains} onLogged={refresh} />
+      </ScrollView>
+
+      {showMarkerModal && (
+        <MarkerModal
+          onSave={async input => {
+            try {
+              await createMarker(input);
+              refresh();
+            } catch (e) {
+              console.error('[Today] createMarker error:', e);
+              setMarkerError("Couldn't save that event. Check your connection and try again.");
+            }
+          }}
+          onClose={() => setShowMarkerModal(false)}
+          cycleTrackingEnabled={profile?.cycle_tracking_enabled ?? false}
+        />
+      )}
+
+      {editingCheckIn && (
+        <EditCheckInModal
+          checkIn={editingCheckIn}
+          activeDomains={activeDomains}
+          baselines={baselines}
+          onClose={() => setEditingCheckIn(null)}
+          onSaved={() => { setEditingCheckIn(null); refresh(); }}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
-  // The wordmark sits at the top of the tab the way it does on the web app's
-  // Today screen; the body keeps its own vertical centring beneath it.
-  page: { flex: 1, paddingHorizontal: 24, paddingTop: 20 },
+  page: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 60 },
+  staticPage: { flex: 1, paddingHorizontal: 24, paddingTop: 20 },
+  pressed: { opacity: 0.7 },
+  date: { fontSize: 12, color: '#8892a4', letterSpacing: 0.5 },
+
+  addEvent: {
+    borderWidth: 1, borderColor: 'rgba(165,180,252,0.25)', borderRadius: 8,
+    paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center', marginBottom: 20,
+  },
+  addEventText: { fontSize: 13, fontWeight: '500', color: '#a5b4fc' },
+  error: { fontSize: 13, color: '#f87171', marginBottom: 12 },
+
+  statusBlock: { paddingTop: 12, marginBottom: 24 },
+  nextLabel: { fontSize: 13, color: '#b0b8c8', letterSpacing: 1, marginBottom: 6 },
+  nextTime: { fontSize: 32, fontWeight: '700', color: '#dde4f0', letterSpacing: -1 },
+  nextThen: { fontSize: 14, color: '#8892a4', marginTop: 4 },
+  statusHeading: { fontSize: 20, fontWeight: '600', color: '#c8d0e0', marginBottom: 6 },
+  statusBody: { fontSize: 15, color: '#b0b8c8', lineHeight: 22 },
+
+  editButton: {
+    backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.15)',
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  editButtonText: { fontSize: 13, color: '#818cf8' },
+  editButtonMeta: { fontSize: 11, color: '#4a5568' },
+  windowClosed: { fontSize: 12, color: '#4a5568', marginBottom: 16 },
+
   setupPrompt: { flex: 1, justifyContent: 'center', gap: 16 },
   setupHeading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0' },
   setupBody: { fontSize: 15, color: '#8892a4', lineHeight: 22 },
   setupButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4f46e5', alignItems: 'center' },
   setupButtonText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
-  pressed: { opacity: 0.85 },
 });

@@ -17,6 +17,7 @@ export function trackOnboardingStepCompleted(_step: number, _stepName: string) {
 export function trackOnboardingAbandoned(_step: number, _stepName: string) {}
 export function trackOnboardingCompleted(_durationSeconds: number, _domainCount: number) {}
 export function trackCheckInCompleted(_domainCount: number) {}
+export function trackSleepLogged() {}
 export function trackPrepareTabOpened() {}
 export function trackAppointmentCreated(_daysUntil: number) {}
 export function trackPatternMarkedForDiscussion() {}

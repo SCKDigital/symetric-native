@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { resolveActiveDomains } from '@/lib/domains';
 import { ensureTodayCheckIns } from '@/lib/scheduler';
 import { Baseline, CheckIn, DomainType, supabase } from '@/lib/supabase';
+import type { TimeFormat } from '@/lib/time-format';
 
 interface State {
   loading: boolean;
@@ -13,6 +14,15 @@ interface State {
   totalCount: number;
   pendingCheckIn: CheckIn | null;
   nextScheduled: CheckIn | null;
+  /** The one after nextScheduled — Today shows it as "then HH:MM". */
+  afterNextScheduled: CheckIn | null;
+  /** Most recently completed check-in today, for the edit-window affordance. */
+  lastCompleted: CheckIn | null;
+  /** Every check-in scheduled for today, in time order. */
+  allCheckIns: CheckIn[];
+  /** From check_in_settings, not the profile — every clock time on Today is
+   *  rendered through lib/time-format.ts with this. */
+  timeFormat: TimeFormat;
 }
 
 const EMPTY: State = {
@@ -23,15 +33,20 @@ const EMPTY: State = {
   totalCount: 0,
   pendingCheckIn: null,
   nextScheduled: null,
+  afterNextScheduled: null,
+  lastCompleted: null,
+  allCheckIns: [],
+  timeFormat: '12hr',
 };
 
 /**
  * Scoped port of the data-fetching slice of the web app's TodayScreen.tsx —
- * NOT the full screen. Deliberately does not port: expiring stale pending
- * check-ins, rescue/snooze windows, "late" check-in handling, editing past
- * check-ins, body check-ins, sleep prompts, day summaries, or milestones.
- * Just enough to find the current pending mind check-in and let it be
- * completed — the rest is real work still ahead, not forgotten.
+ * NOT the full screen. Now also returns what the homescreen needs to render
+ * the next-check-in block and the ten-minute edit affordance: the check-in
+ * after next, the most recent completed one, and the full day's list.
+ *
+ * Still not ported: expiring stale pending check-ins, rescue/snooze windows,
+ * "late" check-in handling, rescheduling, day summaries, and milestones.
  */
 export function useTodayCheckIns() {
   const { user, profile } = useAuth();
@@ -48,7 +63,7 @@ export function useTodayCheckIns() {
 
     const [checkInsRes, settingsRes, baselinesRes] = await Promise.all([
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('scheduled_date', todayLocal).order('scheduled_at', { ascending: true }),
-      supabase.from('check_in_settings').select('active_domains, quick_checkin_domains').eq('user_id', user.id).maybeSingle(),
+      supabase.from('check_in_settings').select('active_domains, quick_checkin_domains, time_format').eq('user_id', user.id).maybeSingle(),
       supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true).order('set_at', { ascending: false }),
     ]);
 
@@ -66,7 +81,16 @@ export function useTodayCheckIns() {
     // than a live-ticking clock, which is fine for this scoped port.
     const now = Date.now();
     const pendingCheckIn = todaysCheckIns.find(c => c.status === 'pending' && new Date(c.scheduled_at).getTime() <= now) ?? null;
-    const nextScheduled = todaysCheckIns.find(c => c.status === 'pending' && new Date(c.scheduled_at).getTime() > now) ?? null;
+    const upcoming = todaysCheckIns.filter(c => c.status === 'pending' && new Date(c.scheduled_at).getTime() > now);
+    const nextScheduled = upcoming[0] ?? null;
+    const afterNextScheduled = upcoming[1] ?? null;
+    // Latest completion, not the last row in schedule order — a bonus check-in
+    // is inserted with scheduled_at = now, so schedule order and completion
+    // order can disagree, and the edit window belongs to whatever was actually
+    // filled in most recently.
+    const lastCompleted = todaysCheckIns
+      .filter(c => c.status === 'completed' && c.completed_at)
+      .sort((a, b) => new Date(b.completed_at!).getTime() - new Date(a.completed_at!).getTime())[0] ?? null;
 
     setState({
       loading: false,
@@ -76,6 +100,10 @@ export function useTodayCheckIns() {
       totalCount: todaysCheckIns.length,
       pendingCheckIn,
       nextScheduled,
+      afterNextScheduled,
+      lastCompleted,
+      allCheckIns: todaysCheckIns,
+      timeFormat: (settingsRes.data?.time_format as TimeFormat | undefined) ?? '12hr',
     });
   }, [user, profile?.timezone]);
 

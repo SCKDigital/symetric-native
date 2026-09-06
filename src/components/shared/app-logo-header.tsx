@@ -10,16 +10,22 @@ import { SymetricLogo } from '@/components/symetric-logo';
 //
 // The web wordmark is set in DM Sans; no custom font is loaded here yet, so
 // this falls back to the platform sans. Weight, size and tracking match.
-export default function AppLogoHeader() {
+/** Optional right-hand content. Today puts the date (and, once ported, its
+ *  info button) here; the other three screens pass nothing. */
+export default function AppLogoHeader({ trailing }: { trailing?: React.ReactNode }) {
   return (
     <View style={styles.row}>
-      <SymetricLogo size={28} />
-      <Text style={styles.wordmark}>symetric</Text>
+      <View style={styles.brand}>
+        <SymetricLogo size={28} />
+        <Text style={styles.wordmark}>symetric</Text>
+      </View>
+      {trailing}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 24 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   wordmark: { fontSize: 18, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.36 },
 });
