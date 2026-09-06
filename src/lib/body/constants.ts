@@ -40,9 +40,8 @@ export const PAIN_SPLIT_BOUNDARY_DATE = '2026-08-20';
 // so History and detection keep iterating it for pre-boundary rows; it's
 // filtered out of the check-in form and Settings toggle list via
 // CHECKIN_BODY_DOMAIN_ORDER below. `exhaustion` is deliberately LAST despite
-// being one of the earliest domains added — it's the "where you've landed,
-// at the end of it" wrap-up question and reads oddly asked (or shown)
-// anywhere but last. Nothing else in the codebase depends on array
+// being one of the earliest domains added — it is the end-of-day exhaustion
+// wrap-up question and reads oddly asked (or shown) anywhere but last. Nothing else in the codebase depends on array
 // position, only on which domains are present, so this one repositioning
 // is safe; still, don't reorder further without checking.
 export const BODY_DOMAIN_ORDER: BodyDomainType[] = [
@@ -117,7 +116,7 @@ export const BODY_DOMAINS: Record<BodyDomainType, BodyDomainConfig> = {
   },
   exhaustion: {
     key: 'exhaustion',
-    label: "Where you've landed",
+    label: 'End of day exhaustion',
     hint: 'Right now, this evening, at the end of it.',
     lowAnchor: 'Fine',
     highAnchor: 'Wrung out',

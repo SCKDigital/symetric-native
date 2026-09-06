@@ -16,6 +16,7 @@ import type { RareEvent } from '@/lib/detection/rare-events';
 import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import type { CircadianPattern } from '@/lib/circadian-detection';
 import type { DetectedCluster } from '@/lib/supabase';
+import { movesTogetherForReader } from '@/lib/domain-polarity';
 
 // Scoped port of the web app's lib/report/sections/reportFindings.tsx —
 // buildUnifiedFindings' mind-domain sections (clusters, domain connections,
@@ -148,7 +149,8 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
     findings.push({
       id: `connection:${i}`,
       tier: 'moderate',
-      headline: `${domA} & ${domB} - ${c.direction === 'positive' ? 'move together' : 'move inversely'}`,
+      // Reader direction, not the raw coefficient sign — see domainPolarity.
+      headline: `${domA} & ${domB} - ${movesTogetherForReader(c.domainA, c.domainB, c.direction === 'positive') ? 'move together' : 'move inversely'}`,
       statLine: `${c.n} overlapping check-ins · above correlation threshold`,
       sortKey: c.n,
       domains: [c.domainA, c.domainB],

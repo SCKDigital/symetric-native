@@ -24,6 +24,7 @@ import { BodyEventMindImpact } from '@/lib/detection/body-event-impact';
 import { parseDateString } from '@/lib/date-utils';
 import { DOMAIN_COPY } from '@/lib/domains';
 import { BODY_DOMAINS, BODY_EVENTS } from '@/lib/body/constants';
+import { movesTogetherForReader } from '@/lib/domain-polarity';
 import { BodyDomainType, DetectedCluster, PatternSource } from '@/lib/supabase';
 
 /** True for any of the body-tracking domains (fatigue, pain, joint_instability, orthostatic, gut, exhaustion, ...). */
@@ -301,7 +302,12 @@ export function bodyMindConnectionFindings(rows: BodyMindConnectionRow[]): Patte
     const labelA = factorLabel(r.domain_a);
     const labelB = factorLabel(r.domain_b);
     const areas: Area[] = [...new Set([areaFor(r.domain_a), areaFor(r.domain_b)])];
-    const verb = r.moves_together ? 'tend to move together' : 'tend to move in opposite directions';
+    // Reader direction, not raw: see domain-polarity.ts. Energy and end of day
+    // exhaustion score opposite ways round, so their raw negative correlation
+    // is one bad day showing up twice — "move together" to the person living it.
+    const verb = movesTogetherForReader(r.domain_a, r.domain_b, r.moves_together)
+      ? 'tend to move together'
+      : 'tend to move in opposite directions';
     return {
       id: `conn-${r.domain_a}-${r.domain_b}`,
       patternSource: null,
