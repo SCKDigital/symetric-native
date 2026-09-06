@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import MindSetup from '@/components/onboarding/mind-setup';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
 import { BodyCheckInCard, MorningBodyCheckInCard } from '@/components/today/body-check-in-cards';
+import { ActiveCheckInCard, LateCheckInCard, PendingCheckInCard } from '@/components/today/check-in-cards';
 import BonusCheckInCard from '@/components/today/bonus-check-in-card';
 import { RescheduleListSheet, RescheduleTimePickerSheet } from '@/components/today/reschedule-sheets';
 import SleepCard from '@/components/today/sleep-card';
@@ -73,37 +74,57 @@ export default function TodayScreen() {
 // unscheduled one from the app at all.
 //
 // Still not ported from the web screen, roughly in order of how much they
-// matter: rescue/snooze windows and the late-check-in card, the info sheet,
-// day summaries, milestones, gap recovery, notification prompts, and the
-// appointment reminder card.
+// matter: the info sheet, day summaries, milestones, gap recovery,
+// notification prompts, and the appointment reminder card.
 function TodayHome() {
   const { profile } = useAuth();
   const {
-    loading, pendingCheckIn, activeDomains, baselines, completedCount, totalCount,
-    nextScheduled, afterNextScheduled, lastCompleted, timeFormat, allCheckIns, checkInSettings, refresh,
+    loading, activeCheckIn, rescuableCheckIn, allDone, activeDomains, baselines,
+    completedCount, totalCount, nextScheduled, afterNextScheduled, lastCompleted,
+    timeFormat, allCheckIns, checkInSettings, refresh,
   } = useTodayCheckIns();
   const [editingCheckIn, setEditingCheckIn] = useState<CheckIn | null>(null);
   const [showMarkerModal, setShowMarkerModal] = useState(false);
   const [markerError, setMarkerError] = useState<string | null>(null);
   const [showRescheduleList, setShowRescheduleList] = useState(false);
   const [reschedulingCheckIn, setReschedulingCheckIn] = useState<CheckIn | null>(null);
+  const [startedCheckIn, setStartedCheckIn] = useState<CheckIn | null>(null);
+  // A snooze is per check-in id, not just a timer: if a snoozed check-in
+  // crosses from active into the rescue window while still snoozed, it should
+  // stay a dashboard card rather than suddenly seize the screen again.
+  const [snoozedId, setSnoozedId] = useState<string | null>(null);
+  const [snoozedUntil, setSnoozedUntil] = useState<number | null>(null);
+  // Ticked rather than read during render: the expiry countdown on the hero
+  // card has to move on its own, and reading the clock mid-render is impure.
+  // Thirty seconds is enough for a minute-resolution countdown.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   if (loading) return <PulseLoadingScreen />;
 
-  if (pendingCheckIn) {
+  const snoozeActive = snoozedUntil !== null && snoozedUntil > nowMs;
+  const activeIsSnoozed = snoozeActive && activeCheckIn?.id === snoozedId;
+  const rescuableIsSnoozed = snoozeActive && rescuableCheckIn?.id === snoozedId;
+  const snoozedCheckIn = activeIsSnoozed ? activeCheckIn : rescuableIsSnoozed ? rescuableCheckIn : null;
+
+  // The form itself only opens once the user chooses to start it.
+  if (startedCheckIn) {
     return (
       <CheckInForm
-        checkIn={pendingCheckIn}
+        checkIn={startedCheckIn}
         activeDomains={activeDomains}
         baselines={baselines}
         completedCount={completedCount}
         totalCount={totalCount}
-        onComplete={refresh}
+        onComplete={() => { setStartedCheckIn(null); refresh(); }}
       />
     );
   }
 
-  const allDone = totalCount > 0 && completedCount === totalCount;
   const lastCompletedAt = lastCompleted?.completed_at ?? null;
   const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -125,10 +146,53 @@ function TodayHome() {
     refresh();
   };
 
+  // A check-in that is due, or one from earlier still inside its rescue
+  // window, takes the whole screen — the same "one thing to do" treatment the
+  // web app gives it, rather than being buried in the dashboard.
+  if (activeCheckIn && !activeIsSnoozed) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <View style={styles.staticPage}>
+          <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
+          <View style={styles.heroWrap}>
+            <ActiveCheckInCard
+              checkIn={activeCheckIn}
+              nowMs={nowMs}
+              onStart={() => setStartedCheckIn(activeCheckIn)}
+              onSnooze={() => { setSnoozedId(activeCheckIn.id); setSnoozedUntil(Date.now() + 5 * 60_000); }}
+            />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (rescuableCheckIn && !rescuableIsSnoozed) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <View style={styles.staticPage}>
+          <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
+          <View style={styles.heroWrap}>
+            <LateCheckInCard onStart={() => setStartedCheckIn(rescuableCheckIn)} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
+
+        {snoozedCheckIn && (
+          <PendingCheckInCard
+            checkIn={snoozedCheckIn}
+            nowMs={nowMs}
+            isLate={rescuableIsSnoozed}
+            onResume={() => { setSnoozedId(null); setSnoozedUntil(null); setStartedCheckIn(snoozedCheckIn); }}
+          />
+        )}
 
         {/* Logging a past event, not a today-task — kept first and full width so
             it reads as a persistent utility rather than buried content. */}
@@ -251,6 +315,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   page: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 60 },
   staticPage: { flex: 1, paddingHorizontal: 24, paddingTop: 20 },
+  heroWrap: { flex: 1, justifyContent: 'center', paddingBottom: 40 },
   pressed: { opacity: 0.7 },
   date: { fontSize: 12, color: '#8892a4', letterSpacing: 0.5 },
 
