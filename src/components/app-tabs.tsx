@@ -59,6 +59,13 @@ export default function AppTabs() {
           tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
         }}
       />
+
+      {/*
+        The magic-link deep-link target (src/app/auth/callback.tsx). It lands in
+        this navigator like any other route file, so it needs declaring — with
+        href: null, or expo-router would give it a sixth tab button.
+      */}
+      <Tabs.Screen name="auth/callback" options={{ href: null }} />
     </Tabs>
   );
 }
