@@ -4,6 +4,8 @@ import { recalculateRollingBaseline } from '@/lib/baseline/rolling-baseline-reca
 import { runClusterDetection } from '@/lib/cluster-detection';
 import { runBodyClusterDetection } from '@/lib/body-cluster-detection';
 import { detectBodyMindConnections } from '@/lib/detection/body-mind-connections';
+import { detectDomainConnections } from '@/lib/detection/domain-connections';
+import { detectSleepConnections } from '@/lib/detection/sleep-connections';
 import { debug } from '@/lib/debug';
 import { supabase } from '@/lib/supabase';
 
@@ -13,11 +15,10 @@ import { supabase } from '@/lib/supabase';
  * and body (runBodyClusterDetection, a no-op for users without body tracking
  * enabled) — same "independent detectors, disjoint domain sets, no shared
  * writes" Promise.all as the web version — plus the weekly body-mind
- * connection detection throttle, plus the weekly rolling baseline
- * recalculation. NOT ported yet: weekly mind-domain and sleep connection
- * detection, baseline shift detection, and pinned-connection re-evaluation —
- * each depends on detector modules not ported to native yet (a later chunk of
- * the multi-session Insights port).
+ * connection detection throttle — now covering mind-domain, sleep and
+ * body-mind connections, as the web scheduler does — plus the weekly rolling
+ * baseline recalculation. NOT ported yet: baseline shift detection and
+ * pinned-connection re-evaluation.
  *
  * Mechanic swap: `localStorage` → `AsyncStorage`, so this needs `await`
  * where the web version reads/writes synchronously. The weekly throttle
@@ -39,7 +40,7 @@ function todayStr(): string {
 
 /**
  * Run cluster detection only if it hasn't already run today for this user.
- * Also runs body-mind connection detection weekly. Returns true if cluster
+ * Also runs connection detection and the baseline recalc weekly. Returns true if cluster
  * detection was actually run, false if skipped (already run today, or the
  * user has no completed check-ins yet).
  */
@@ -63,7 +64,11 @@ export async function runPatternDetectionIfNeeded(userId: string): Promise<boole
   const lastConnectionTs = await AsyncStorage.getItem(lastConnectionDetectionKey(userId));
   const msSinceLastConnection = lastConnectionTs ? Date.now() - parseInt(lastConnectionTs, 10) : Infinity;
   if (msSinceLastConnection >= CONNECTION_DETECTION_INTERVAL_DAYS * MS_PER_DAY) {
-    debug.log('Pattern Detection', 'Running weekly body-mind connection detection');
+    debug.log('Pattern Detection', 'Running weekly connection detection');
+    // Same order as the web scheduler. Each is caught separately so one
+    // failing detector doesn't cost the others their weekly run.
+    await detectDomainConnections(userId).catch(e => debug.error('Pattern Detection', 'domain connection detection failed:', e));
+    await detectSleepConnections(userId).catch(e => debug.error('Pattern Detection', 'sleep connection detection failed:', e));
     await detectBodyMindConnections(userId).catch(e => debug.error('Pattern Detection', 'body-mind connection detection failed:', e));
     await AsyncStorage.setItem(lastConnectionDetectionKey(userId), Date.now().toString());
   }
@@ -91,7 +96,7 @@ export async function runPatternDetectionIfNeeded(userId: string): Promise<boole
   return ranClusters;
 }
 
-/** Force cluster and body-mind connection detection regardless of throttle state. */
+/** Force cluster and connection detection regardless of throttle state. */
 export async function forcePatternDetection(userId: string): Promise<void> {
   await Promise.all([
     runClusterDetection(userId),
@@ -99,6 +104,8 @@ export async function forcePatternDetection(userId: string): Promise<void> {
   ]);
   await AsyncStorage.setItem(lastPatternDetectionKey(userId), todayStr());
 
+  await detectDomainConnections(userId).catch(e => debug.error('Pattern Detection', 'domain connection detection failed:', e));
+  await detectSleepConnections(userId).catch(e => debug.error('Pattern Detection', 'sleep connection detection failed:', e));
   await detectBodyMindConnections(userId).catch(e => debug.error('Pattern Detection', 'body-mind connection detection failed:', e));
   await AsyncStorage.setItem(lastConnectionDetectionKey(userId), Date.now().toString());
 }

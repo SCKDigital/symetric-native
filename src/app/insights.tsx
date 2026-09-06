@@ -30,10 +30,11 @@ import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, Patte
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
 import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
+import { fetchLatestSleepConnections, type SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import {
   Area, BodyMindConnectionRow, PatternFinding,
   bodyEventFrequencyFindings, bodyEventImpactFindings, bodyMindConnectionFindings, bodyTimeOfDayFindings,
-  clusterFindings, dayOfWeekFindings, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings,
+  clusterFindings, dayOfWeekFindings, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings, sleepConnectionFindings,
 } from '@/lib/pattern-findings';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { computeBodySummaries } from '@/lib/report/body-summary';
@@ -368,6 +369,7 @@ export default function InsightsScreen() {
   const [bodyEventFrequencyPatterns, setBodyEventFrequencyPatterns] = useState<BodyEventFrequencyPattern[]>([]);
   const [bodyEventImpacts, setBodyEventImpacts] = useState<BodyEventMindImpact[]>([]);
   const [bodyMindConnectionRows, setBodyMindConnectionRows] = useState<BodyMindConnectionRow[]>([]);
+  const [sleepConnections, setSleepConnections] = useState<SleepSymptomConnection[]>([]);
   const [avgSleepScore, setAvgSleepScore] = useState<number | null>(null);
   const [sleepDaysLogged, setSleepDaysLogged] = useState(0);
   const [days, setDays] = useState<DayScores[]>([]);
@@ -546,6 +548,11 @@ export default function InsightsScreen() {
     }
     setBodyMindConnectionRows(latestConnections.filter(r => isBodyDomain(r.domain_a) || isBodyDomain(r.domain_b)));
 
+    // Written by the weekly sleep detector — a separate table from
+    // domain_connections, with its own good/poor-sleep grouping rather than a
+    // correlation coefficient.
+    setSleepConnections(await fetchLatestSleepConnections(user.id, fromRange).catch(() => []));
+
     const bodySummary = computeBodySummaries(bodyCheckInsRangeRaw ?? [], bodyEventsRangeRaw ?? []);
     setBodyDomains(bodySummary.domains);
     setBodyEvents(bodySummary.events);
@@ -651,7 +658,10 @@ export default function InsightsScreen() {
     ...bodyEventImpactFindings(bodyEventImpacts),
     ...bodyMindConnectionFindings(bodyMindConnectionInput),
   ];
-  const sleepFindings = allLagFindings.filter(f => f.areas.includes('sleep'));
+  const sleepFindings = [
+    ...sleepConnectionFindings(sleepConnections),
+    ...allLagFindings.filter(f => f.areas.includes('sleep')),
+  ];
   const medicationFindings = interventionImpactFindings(interventionImpacts);
   const eligibleMarkerCount = markers.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy').length;
 

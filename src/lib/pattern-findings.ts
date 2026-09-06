@@ -26,6 +26,7 @@ import { DOMAIN_COPY } from '@/lib/domains';
 import { BODY_DOMAINS, BODY_EVENTS } from '@/lib/body/constants';
 import { movesTogetherForReader } from '@/lib/domain-polarity';
 import { BodyDomainType, DetectedCluster, PatternSource } from '@/lib/supabase';
+import type { SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 
 /** True for any of the body-tracking domains (fatigue, pain, joint_instability, orthostatic, gut, exhaustion, ...). */
 export function isBodyDomain(d: string): d is BodyDomainType {
@@ -278,6 +279,36 @@ export function interventionImpactFindings(impacts: InterventionImpact[]): Patte
     });
   }
   return results;
+}
+
+// ── Sleep × domain connections (persisted to sleep_symptom_connections) ─────
+
+/**
+ * One finding per domain the weekly sleep detector marked as affected. The
+ * direction here is the raw score direction, deliberately — "higher after good
+ * sleep" describes what the number did, and unlike a two-domain correlation
+ * there's no second polarity to reconcile it against.
+ */
+export function sleepConnectionFindings(conns: SleepSymptomConnection[]): PatternFinding[] {
+  return conns
+    .filter(c => c.affected_by_sleep)
+    .map(c => {
+      const grade: Grade = c.sample_size >= 30 ? 'solid' : c.sample_size >= 14 ? 'partial' : 'limited';
+      const label = factorLabel(c.domain);
+      const direction = c.avg_after_good_sleep > c.avg_after_poor_sleep ? 'higher' : 'lower';
+      return {
+        id: c.id,
+        patternSource: 'sleep_connection' as PatternSource,
+        patternId: c.id,
+        areas: ['sleep', 'mind'] as Area[],
+        grade,
+        onsetDate: c.window_end,
+        effectSize: c.difference,
+        sentence: `Your ${label} tends to be ${direction} after good sleep.`,
+        sentenceHighlights: [{ text: label, factor: c.domain }, { text: 'sleep', factor: 'sleep' }],
+        evidenceLine: `${c.sample_size} check-in${c.sample_size !== 1 ? 's' : ''} with sleep data`,
+      };
+    });
 }
 
 // ── Body × mind: same-day correlations (persisted to domain_connections) ─────

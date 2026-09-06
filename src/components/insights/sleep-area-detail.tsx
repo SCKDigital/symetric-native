@@ -5,19 +5,16 @@ import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { DOMAIN_COLORS } from '@/lib/domains';
 import { CONFIDENCE_COPY, PatternFinding } from '@/lib/pattern-findings';
 
-// Ported from the web app's components/insights/SleepAreaDetail.tsx, with
-// one deliberate data-shape change: the web version takes raw
-// SleepSymptomConnection[] from a dedicated weekly-computed detector
-// (queries/sleepConnections.ts) that isn't ported to native — that
-// detector's own weekly scheduler cadence was deferred back in Insights
-// chunk 1 and never picked back up. Native's insights.tsx already computes
-// sleepFindings (PatternFinding[], the lag-relationship findings tagged
-// 'sleep') for the area-index row and "What stands out", so this screen
-// renders those instead — same "Connections" intent (a plain-language
-// sentence + evidence line), built from a detector already live on native
-// rather than blocking this chunk on porting a whole new one. Revisit if
-// sleepConnections.ts ever gets ported — this screen would then take real
-// SleepSymptomConnection[] like the web version does.
+// Ported from the web app's components/insights/SleepAreaDetail.tsx, with one
+// deliberate data-shape difference: the web version takes raw
+// SleepSymptomConnection[] and turns them into sentences itself, while this
+// screen takes PatternFinding[] already shaped by pattern-findings.ts.
+//
+// The substance is the same either way now. detection/sleep-connections.ts is
+// ported and scheduled, so insights.tsx's sleepFindings carries real
+// sleepConnectionFindings alongside the sleep-tagged lag relationships —
+// where it used to carry only the latter, because the detector didn't exist
+// here at all.
 
 interface Props {
   onBack: () => void;
