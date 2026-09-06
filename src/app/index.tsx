@@ -10,14 +10,16 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
 import { BodyCheckInCard, MorningBodyCheckInCard } from '@/components/today/body-check-in-cards';
 import BonusCheckInCard from '@/components/today/bonus-check-in-card';
+import { RescheduleListSheet, RescheduleTimePickerSheet } from '@/components/today/reschedule-sheets';
 import SleepCard from '@/components/today/sleep-card';
 import { useAuth } from '@/contexts/auth-context';
 import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@/lib/edit-window';
 import { createMarker } from '@/lib/queries/markers';
+import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 import { formatTime } from '@/lib/time-format';
-import type { CheckIn } from '@/lib/supabase';
+import { supabase, type CheckIn } from '@/lib/supabase';
 
 function formatDate(): string {
   return new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
@@ -71,19 +73,20 @@ export default function TodayScreen() {
 // unscheduled one from the app at all.
 //
 // Still not ported from the web screen, roughly in order of how much they
-// matter: rescue/snooze windows and the late-check-in card, rescheduling (the
-// web "Reschedule" link and its two sheets), the info sheet, day summaries,
-// milestones, gap recovery, notification prompts, and the appointment
-// reminder card.
+// matter: rescue/snooze windows and the late-check-in card, the info sheet,
+// day summaries, milestones, gap recovery, notification prompts, and the
+// appointment reminder card.
 function TodayHome() {
   const { profile } = useAuth();
   const {
     loading, pendingCheckIn, activeDomains, baselines, completedCount, totalCount,
-    nextScheduled, afterNextScheduled, lastCompleted, timeFormat, refresh,
+    nextScheduled, afterNextScheduled, lastCompleted, timeFormat, allCheckIns, checkInSettings, refresh,
   } = useTodayCheckIns();
   const [editingCheckIn, setEditingCheckIn] = useState<CheckIn | null>(null);
   const [showMarkerModal, setShowMarkerModal] = useState(false);
   const [markerError, setMarkerError] = useState<string | null>(null);
+  const [showRescheduleList, setShowRescheduleList] = useState(false);
+  const [reschedulingCheckIn, setReschedulingCheckIn] = useState<CheckIn | null>(null);
 
   if (loading) return <PulseLoadingScreen />;
 
@@ -102,6 +105,25 @@ function TodayHome() {
 
   const allDone = totalCount > 0 && completedCount === totalCount;
   const lastCompletedAt = lastCompleted?.completed_at ?? null;
+  const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // Moves one check-in. notified_at is cleared so the reminder fires again at
+  // the new time rather than counting as already sent, and scheduled_date is
+  // recomputed in the user's zone because a late-evening move can cross
+  // midnight in UTC while still being the same local day.
+  const handleReschedule = async (target: CheckIn, newTimeIso: string) => {
+    const newScheduledAt = new Date(newTimeIso);
+    const { error } = await supabase.from('check_ins').update({
+      scheduled_at: newTimeIso,
+      expires_at: new Date(newScheduledAt.getTime() + CHECK_IN_EXPIRY_MINUTES * 60_000).toISOString(),
+      scheduled_date: new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(newScheduledAt),
+      rescheduled_at: new Date().toISOString(),
+      notified_at: null,
+    }).eq('id', target.id);
+    if (error) console.error('[Today] reschedule error:', error);
+    setReschedulingCheckIn(null);
+    refresh();
+  };
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -131,6 +153,11 @@ function TodayHome() {
               <Text style={styles.nextTime}>{formatTime(nextScheduled.scheduled_at, timeFormat)}</Text>
               {afterNextScheduled && (
                 <Text style={styles.nextThen}>then {formatTime(afterNextScheduled.scheduled_at, timeFormat)}</Text>
+              )}
+              {checkInSettings && (
+                <Pressable onPress={() => setShowRescheduleList(true)} style={({ pressed }) => pressed && styles.pressed}>
+                  <Text style={styles.reschedule}>Reschedule</Text>
+                </Pressable>
               )}
             </>
           ) : totalCount === 0 ? (
@@ -185,6 +212,28 @@ function TodayHome() {
         />
       )}
 
+      {showRescheduleList && checkInSettings && (
+        <RescheduleListSheet
+          allCheckIns={allCheckIns}
+          timeFormat={timeFormat}
+          onSelect={ci => { setShowRescheduleList(false); setReschedulingCheckIn(ci); }}
+          onClose={() => setShowRescheduleList(false)}
+        />
+      )}
+
+      {reschedulingCheckIn && checkInSettings && (
+        <RescheduleTimePickerSheet
+          checkIn={reschedulingCheckIn}
+          settings={checkInSettings}
+          allCheckIns={allCheckIns}
+          timeFormat={timeFormat}
+          timezone={timezone}
+          onConfirm={newTime => handleReschedule(reschedulingCheckIn, newTime)}
+          onBack={() => { setReschedulingCheckIn(null); setShowRescheduleList(true); }}
+          onClose={() => setReschedulingCheckIn(null)}
+        />
+      )}
+
       {editingCheckIn && (
         <EditCheckInModal
           checkIn={editingCheckIn}
@@ -216,6 +265,7 @@ const styles = StyleSheet.create({
   nextLabel: { fontSize: 13, color: '#b0b8c8', letterSpacing: 1, marginBottom: 6 },
   nextTime: { fontSize: 32, fontWeight: '700', color: '#dde4f0', letterSpacing: -1 },
   nextThen: { fontSize: 14, color: '#8892a4', marginTop: 4 },
+  reschedule: { fontSize: 13, color: '#4a5568', paddingTop: 10 },
   statusHeading: { fontSize: 20, fontWeight: '600', color: '#c8d0e0', marginBottom: 6 },
   statusBody: { fontSize: 15, color: '#b0b8c8', lineHeight: 22 },
 

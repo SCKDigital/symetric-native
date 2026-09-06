@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { resolveActiveDomains } from '@/lib/domains';
 import { ensureTodayCheckIns } from '@/lib/scheduler';
-import { Baseline, CheckIn, DomainType, supabase } from '@/lib/supabase';
+import { Baseline, CheckIn, CheckInSettings, DomainType, supabase } from '@/lib/supabase';
 import type { TimeFormat } from '@/lib/time-format';
 
 interface State {
@@ -23,6 +23,8 @@ interface State {
   /** From check_in_settings, not the profile — every clock time on Today is
    *  rendered through lib/time-format.ts with this. */
   timeFormat: TimeFormat;
+  /** The whole row: rescheduling validates against window_start/window_end. */
+  checkInSettings: CheckInSettings | null;
 }
 
 const EMPTY: State = {
@@ -37,6 +39,7 @@ const EMPTY: State = {
   lastCompleted: null,
   allCheckIns: [],
   timeFormat: '12hr',
+  checkInSettings: null,
 };
 
 /**
@@ -63,7 +66,7 @@ export function useTodayCheckIns() {
 
     const [checkInsRes, settingsRes, baselinesRes] = await Promise.all([
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('scheduled_date', todayLocal).order('scheduled_at', { ascending: true }),
-      supabase.from('check_in_settings').select('active_domains, quick_checkin_domains, time_format').eq('user_id', user.id).maybeSingle(),
+      supabase.from('check_in_settings').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true).order('set_at', { ascending: false }),
     ]);
 
@@ -104,6 +107,7 @@ export function useTodayCheckIns() {
       lastCompleted,
       allCheckIns: todaysCheckIns,
       timeFormat: (settingsRes.data?.time_format as TimeFormat | undefined) ?? '12hr',
+      checkInSettings: (settingsRes.data as CheckInSettings | null) ?? null,
     });
   }, [user, profile?.timezone]);
 
