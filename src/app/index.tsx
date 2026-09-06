@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import CheckInForm from '@/components/checkin/check-in-form';
 import MindSetup from '@/components/onboarding/mind-setup';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
+import AppLogoHeader from '@/components/shared/app-logo-header';
 import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 
@@ -28,6 +29,8 @@ export default function TodayScreen() {
   if (!mindSetupComplete) {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
+        <View style={styles.page}>
+        <AppLogoHeader />
         <View style={styles.setupPrompt}>
           <Text style={styles.setupHeading}>Set up Mind tracking</Text>
           <Text style={styles.setupBody}>
@@ -37,6 +40,7 @@ export default function TodayScreen() {
           <Pressable onPress={() => setShowMindSetup(true)} style={({ pressed }) => [styles.setupButton, pressed && styles.pressed]}>
             <Text style={styles.setupButtonText}>Get started</Text>
           </Pressable>
+        </View>
         </View>
       </SafeAreaView>
     );
@@ -72,6 +76,8 @@ function TodayHome() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
+      <View style={styles.page}>
+      <AppLogoHeader />
       <View style={styles.setupPrompt}>
         <Text style={styles.setupHeading}>{allDone ? "You're all caught up" : 'Nothing due right now'}</Text>
         <Text style={styles.setupBody}>
@@ -82,13 +88,17 @@ function TodayHome() {
               : "No check-ins scheduled for today yet — this should resolve shortly."}
         </Text>
       </View>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
-  setupPrompt: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, gap: 16 },
+  // The wordmark sits at the top of the tab the way it does on the web app's
+  // Today screen; the body keeps its own vertical centring beneath it.
+  page: { flex: 1, paddingHorizontal: 24, paddingTop: 20 },
+  setupPrompt: { flex: 1, justifyContent: 'center', gap: 16 },
   setupHeading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0' },
   setupBody: { fontSize: 15, color: '#8892a4', lineHeight: 22 },
   setupButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4f46e5', alignItems: 'center' },

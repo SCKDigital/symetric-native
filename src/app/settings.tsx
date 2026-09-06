@@ -8,6 +8,7 @@ import MorningBodyCheckIn from '@/components/body/morning-body-check-in';
 import MarkerModal from '@/components/marker-modal';
 import { CalendarIcon, PillIcon, PinIcon } from '@/components/marker-icons';
 import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
+import AppLogoHeader from '@/components/shared/app-logo-header';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { generateSalt, hashPin } from '@/lib/app-lock';
@@ -162,6 +163,7 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <>
+            <AppLogoHeader />
             <Text style={styles.heading}>Settings</Text>
 
             <View style={styles.sectionHeader}>

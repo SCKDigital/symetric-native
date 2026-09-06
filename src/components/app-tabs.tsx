@@ -1,8 +1,14 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
+import { HistoryIcon, InsightsIcon, PrepareIcon, SettingsIcon, TodayIcon } from '@/components/nav-icons';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+
+// Nav chrome is matched to the web app's <nav> in App.tsx rather than to the
+// theme: indigo active, slate inactive, 10px labels that bold when selected.
+// The app tint stays the body-domain accent for everything else.
+const NAV_ACTIVE = '#818cf8';
+const NAV_INACTIVE = '#4a5568';
 
 // Standard expo-router Tabs rather than the (still-unstable) NativeTabs API —
 // five screens matching the web app's Screen union in App.tsx (today / history
@@ -17,8 +23,9 @@ export default function AppTabs() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.tint,
-        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarActiveTintColor: NAV_ACTIVE,
+        tabBarInactiveTintColor: NAV_INACTIVE,
+        tabBarLabelStyle: { fontSize: 10, letterSpacing: 0.2 },
         tabBarStyle: {
           backgroundColor: colors.background,
           borderTopColor: colors.border,
@@ -28,35 +35,35 @@ export default function AppTabs() {
         name="index"
         options={{
           title: 'Today',
-          tabBarIcon: ({ color, size }) => <Ionicons name="today-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <TodayIcon color={color} />,
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
           title: 'History',
-          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <HistoryIcon color={color} />,
         }}
       />
       <Tabs.Screen
         name="insights"
         options={{
           title: 'Insights',
-          tabBarIcon: ({ color, size }) => <Ionicons name="analytics-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <InsightsIcon color={color} />,
         }}
       />
       <Tabs.Screen
         name="prepare"
         options={{
           title: 'Prepare',
-          tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <PrepareIcon color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <SettingsIcon color={color} />,
         }}
       />
 

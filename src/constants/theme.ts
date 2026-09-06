@@ -28,7 +28,11 @@ export const Colors = {
     backgroundSelected: '#1e2533',
     textSecondary: '#8892a4',
     border: '#1e2533',
-    /** BODY_COLOR from src/utils/domainColors.ts — the body-domain accent, reused as the app tint. */
+    /** BODY_COLOR from src/utils/domainColors.ts — the body-domain accent.
+     *  Not the tab bar's colour: that follows the web app's <nav>, which is
+     *  indigo (see NAV_ACTIVE in components/app-tabs.tsx). Using the body
+     *  accent there tinted the whole shell amber and read as a body-tracking
+     *  app rather than the web app's indigo chrome. */
     tint: '#BC812F',
   },
 } as const;

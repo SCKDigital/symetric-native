@@ -3,6 +3,7 @@ import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import DayCard from '@/components/history/day-card';
+import AppLogoHeader from '@/components/shared/app-logo-header';
 import MarkerModal from '@/components/marker-modal';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
@@ -46,7 +47,12 @@ export default function HistoryScreen() {
         data={days}
         keyExtractor={d => d.date}
         contentContainerStyle={styles.list}
-        ListHeaderComponent={<Text style={styles.heading}>History</Text>}
+        ListHeaderComponent={
+          <>
+            <AppLogoHeader />
+            <Text style={styles.heading}>History</Text>
+          </>
+        }
         renderItem={({ item }: { item: DayData }) => (
           <DayCard
             date={item.date}
