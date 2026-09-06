@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BodyAreaDetail from '@/components/insights/body-area-detail';
@@ -8,6 +8,9 @@ import MindAreaDetail from '@/components/insights/mind-area-detail';
 import PatternDetailScreen from '@/components/insights/pattern-detail-screen';
 import SleepAreaDetail from '@/components/insights/sleep-area-detail';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
+import AppLogoHeader from '@/components/shared/app-logo-header';
+import { ChevronDownIcon, ChevronRightIcon } from '@/components/shared/chevrons';
+import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { useAuth } from '@/contexts/auth-context';
 import { AreaRow, buildAreaRows } from '@/lib/area-rows';
 import { BODY_DOMAIN_ORDER, BODY_DOMAINS, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
@@ -91,19 +94,43 @@ function fmtDate(dateStr: string): string {
 
 // A single dropdown, defaulting to 30 days — ported behavior from the web
 // app's RangeControl.tsx. Deliberately no completion percentage anywhere.
+//
+// This said "dropdown" while rendering a row of 7d/14d/30d/60d/90d pills, which
+// is a different control from the web app's <select> and reads as five
+// competing options rather than one current selection. RN has no <select>, so
+// the select is a button plus a modal sheet; the label, the stat line under it
+// and the option wording all match the web control exactly.
 function RangeControl({ range, onChange, fromDate, toDate, checkInCount, daysWithCheckIn }: { range: RangeDays; onChange: (r: RangeDays) => void; fromDate: string; toDate: string; checkInCount: number; daysWithCheckIn: number }) {
+  const [open, setOpen] = useState(false);
   return (
     <View style={styles.rangeControl}>
-      <View style={styles.rangePillRow}>
-        {RANGE_OPTIONS.map(r => (
-          <Pressable key={r} onPress={() => onChange(r)} style={[styles.rangePill, r === range && styles.rangePillActive]}>
-            <Text style={[styles.rangePillText, r === range && styles.rangePillTextActive]}>{r}d</Text>
-          </Pressable>
-        ))}
-      </View>
+      <Pressable
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`Date range, last ${range} days`}
+        style={({ pressed }) => [styles.rangeSelect, pressed && styles.pressed]}>
+        <Text style={styles.rangeSelectText}>Last {range} days</Text>
+        <ChevronDownIcon />
+      </Pressable>
+
       <Text style={styles.rangeStats}>
         {fmtDate(fromDate)} to {fmtDate(toDate)} · {checkInCount} check-in{checkInCount !== 1 ? 's' : ''} · {daysWithCheckIn} day{daysWithCheckIn !== 1 ? 's' : ''} with a check-in
       </Text>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.rangeBackdrop} onPress={() => setOpen(false)}>
+          <View style={styles.rangeMenu}>
+            {RANGE_OPTIONS.map(r => (
+              <Pressable
+                key={r}
+                onPress={() => { onChange(r); setOpen(false); }}
+                style={({ pressed }) => [styles.rangeOption, pressed && styles.pressed]}>
+                <Text style={[styles.rangeOptionText, r === range && styles.rangeOptionTextActive]}>Last {r} days</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -119,6 +146,7 @@ function AreaIndex({ rows, onSelect }: { rows: AreaRow[]; onSelect: (area: Area)
       <Text style={styles.sectionLabel}>The evidence</Text>
       <View style={styles.sectionList}>
         {rows.map(row => {
+          const tappable = TAPPABLE.includes(row.area);
           const rowContent = (
             <>
               <View style={styles.areaDot} />
@@ -126,9 +154,13 @@ function AreaIndex({ rows, onSelect }: { rows: AreaRow[]; onSelect: (area: Area)
                 <Text style={styles.areaRowLabel}>{row.label}</Text>
                 <Text style={styles.areaRowSubtitle}>{row.subtitle}</Text>
               </View>
+              {/* The web row is a button with a disclosure chevron; without it a
+                  tappable row reads as a static summary. Only on rows that go
+                  somewhere. */}
+              {tappable && <ChevronRightIcon />}
             </>
           );
-          if (TAPPABLE.includes(row.area)) {
+          if (tappable) {
             return (
               <Pressable key={row.area} onPress={() => onSelect(row.area)} style={[styles.areaRow, row.state !== 'active' && styles.areaRowMuted]}>
                 {rowContent}
@@ -146,19 +178,32 @@ function AreaIndex({ rows, onSelect }: { rows: AreaRow[]; onSelect: (area: Area)
   );
 }
 
-function WhatStandsOut({ findings }: { findings: PatternFinding[] }) {
-  if (findings.length === 0) return null;
+const STANDOUT_EMPTY =
+  "Nothing stands out yet across these 30 days. Patterns usually need about a month of check-ins before they're worth reading.";
+
+// Prose, not cards. Ported from the web app's WhatStandsOut.tsx, whose header
+// comment calls this the point of the redesign: findings sit above the fold as
+// sentences rather than behind bordered panels. Native had them as boxed cards
+// with an evidence line underneath and no domain colouring, which buried three
+// short sentences under three screens of chrome. The evidence line is dropped
+// here for the same reason the web drops it — the grading lives in Prepare.
+function WhatStandsOut({ findings, rangeDays }: { findings: PatternFinding[]; rangeDays: RangeDays }) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>What stands out</Text>
-      <View style={styles.sectionList}>
-        {findings.map(f => (
-          <View key={f.id} style={styles.standoutCard}>
-            <Text style={styles.standoutSentence}>{f.sentence}</Text>
-            <Text style={styles.standoutEvidence}>{f.evidenceLine}</Text>
-          </View>
-        ))}
-      </View>
+      {findings.length === 0 ? (
+        <Text style={styles.standoutEmpty}>
+          {rangeDays === 30 ? STANDOUT_EMPTY : `Nothing stands out yet across these ${rangeDays} days.`}
+        </Text>
+      ) : (
+        <View style={styles.standoutList}>
+          {findings.map(f => (
+            <Text key={`${f.patternSource ?? 'x'}-${f.id}`} style={styles.standoutSentence}>
+              <HighlightedSentence sentence={f.sentence} highlights={f.sentenceHighlights} />
+            </Text>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -682,9 +727,10 @@ export default function InsightsScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <>
+            <AppLogoHeader />
             <Text style={styles.heading}>Insights</Text>
             <RangeControl range={range} onChange={r => { setRange(r); setActiveArea(null); }} fromDate={rangeStats.from} toDate={rangeStats.to} checkInCount={rangeStats.checkInCount} daysWithCheckIn={rangeStats.daysWithCheckIn} />
-            <WhatStandsOut findings={standoutFindings} />
+            <WhatStandsOut findings={standoutFindings} rangeDays={range} />
             <AreaIndex rows={areaRows} onSelect={setActiveArea} />
             <CircadianSection patterns={circadianPatterns} />
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
@@ -726,16 +772,19 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40, gap: 8 },
   heading: { fontSize: 26, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.6, marginBottom: 20 },
-  sectionLabel: { fontSize: 11, color: '#818cf8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 10 },
+  // Slate, not indigo — matches the web app's section labels on this screen.
+  sectionLabel: { fontSize: 11, color: '#8892a4', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1.1, marginBottom: 12 },
   section: { marginBottom: 24 },
   sectionList: { gap: 8 },
   rangeControl: { marginBottom: 24 },
-  rangePillRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
-  rangePill: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533' },
-  rangePillActive: { backgroundColor: 'rgba(129,140,248,0.15)', borderColor: 'rgba(129,140,248,0.4)' },
-  rangePillText: { fontSize: 13, fontWeight: '500', color: '#8892a4' },
-  rangePillTextActive: { color: '#e2e8f0' },
-  rangeStats: { fontSize: 12, color: '#6b7a99' },
+  rangeSelect: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533' },
+  rangeSelectText: { fontSize: 14, fontWeight: '500', color: '#e2e8f0' },
+  rangeStats: { fontSize: 12, color: '#6b7a99', marginTop: 10 },
+  rangeBackdrop: { flex: 1, backgroundColor: 'rgba(10,12,18,0.85)', justifyContent: 'center', paddingHorizontal: 40 },
+  rangeMenu: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 14, overflow: 'hidden' },
+  rangeOption: { paddingVertical: 14, paddingHorizontal: 18 },
+  rangeOptionText: { fontSize: 15, color: '#8892a4' },
+  rangeOptionTextActive: { color: '#e2e8f0', fontWeight: '600' },
   areaRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 14, padding: 14, paddingHorizontal: 16 },
   areaRowMuted: { opacity: 0.7 },
   areaDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#818cf8', flexShrink: 0 },
@@ -746,9 +795,10 @@ const styles = StyleSheet.create({
   smallCardTitle: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   smallCardBody: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
   smallCardSubtext: { marginTop: 4, color: '#6b7690', fontStyle: 'italic' },
-  standoutCard: { backgroundColor: '#1a1f3a', borderWidth: 1, borderColor: 'rgba(129,140,248,0.3)', borderRadius: 16, padding: 18, paddingHorizontal: 20 },
-  standoutSentence: { fontSize: 15, color: '#e2e8f0', lineHeight: 22, marginBottom: 6 },
-  standoutEvidence: { fontSize: 12, color: '#6b7690' },
+  pressed: { opacity: 0.7 },
+  standoutList: { gap: 10 },
+  standoutSentence: { fontSize: 15, color: '#e2e8f0', lineHeight: 23 },
+  standoutEmpty: { fontSize: 14, color: '#8892a4', lineHeight: 22 },
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 18, paddingHorizontal: 20, marginBottom: 8 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
   cardDomains: { fontSize: 15, fontWeight: '500', color: '#e2e8f0' },
