@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -367,6 +367,7 @@ const MIN_RANGE_FOR_WINDOWED_DETECTORS = 30;
 export default function InsightsScreen() {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnce = useRef(false);
   const [range, setRange] = useState<RangeDays>(30);
   const [clusters, setClusters] = useState<DetectedCluster[]>([]);
   const [circadianPatterns, setCircadianPatterns] = useState<CircadianPattern[]>([]);
@@ -403,13 +404,10 @@ export default function InsightsScreen() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
-
-    try {
-      await runPatternDetectionIfNeeded(user.id);
-    } catch (e) {
-      console.error('[InsightsScreen] pattern detection error:', e);
-    }
+    // Only the first load blacks the screen out. load() re-runs on every range
+    // change, and resetting to the full-screen pulse each time is what made
+    // switching range look like the app had hung and gone back to a splash.
+    setLoading(prev => prev || !hasLoadedOnce.current);
 
     const to = new Date().toLocaleDateString('en-CA');
     const from30 = (() => {
@@ -617,12 +615,23 @@ export default function InsightsScreen() {
     setAvgSleepScore(sleepDaysList.length > 0 ? sleepDaysList.reduce((s, d) => s + d.scores['sleep']!, 0) / sleepDaysList.length : null);
     setSleepDaysLogged(sleepDaysList.length);
 
+    hasLoadedOnce.current = true;
     setLoading(false);
   }, [user, profile, range]);
 
+  // Detection used to be awaited at the top of load(), so every Insights mount
+  // — and every range change — waited on a round trip (and, on the day the
+  // weekly throttle fires, on cluster/connection/baseline passes) before any
+  // of the fifteen queries below even started. Today already runs this at
+  // launch, so by the time Insights is opened it has normally run today
+  // already; it doesn't need to block this screen as well.
   useEffect(() => {
-    // See use-today-check-ins.ts for why this needs the disable comment.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!user) return;
+    runPatternDetectionIfNeeded(user.id).catch(e =>
+      console.error('[InsightsScreen] pattern detection error:', e));
+  }, [user]);
+
+  useEffect(() => {
     load();
   }, [load]);
 
