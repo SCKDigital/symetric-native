@@ -61,7 +61,7 @@ function largestRange(checkIns: DaySummaryCheckIn[]): number {
 
 function variabilityClause(checkIns: DaySummaryCheckIn[]): string {
   const range = largestRange(checkIns);
-  if (range >= SWING_RANGE) return 'A swinging day';
+  if (range >= SWING_RANGE) return 'Up and down';
   if (range > LEVEL_RANGE) return 'Some movement today';
   return 'A fairly level day';
 }

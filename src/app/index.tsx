@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import CheckInForm from '@/components/checkin/check-in-form';
@@ -20,6 +20,7 @@ import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@
 import { forcePatternDetection, runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
 import { createMarker } from '@/lib/queries/markers';
 import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
+import { formatWindowTime } from '@/components/settings/settings-sheets';
 import { formatTime } from '@/lib/time-format';
 import { supabase, type CheckIn } from '@/lib/supabase';
 
@@ -104,6 +105,30 @@ function TodayHome() {
     const id = setInterval(() => setNowMs(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
+
+  // A check-in becoming due is a clock event, not a user action, and
+  // activeCheckIn is decided inside the hook at fetch time. Without this the
+  // screen sat on "NEXT MIND CHECK-IN 08:24" well past 08:24 — the check-in
+  // came due and nothing re-evaluated, so it never opened. Re-fetching once
+  // the tick passes the next scheduled time lets the hook's own active/expiry
+  // logic run again. It can't loop: after the refetch, nextScheduled is the
+  // one after it.
+  const nextScheduledAtMs = nextScheduled ? new Date(nextScheduled.scheduled_at).getTime() : null;
+  useEffect(() => {
+    if (nextScheduledAtMs !== null && nowMs >= nextScheduledAtMs) refresh();
+  }, [nowMs, nextScheduledAtMs, refresh]);
+
+  // Same problem across a backgrounded app: resuming hours later would show
+  // whatever was true when it was last foregrounded.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        setNowMs(Date.now());
+        refresh();
+      }
+    });
+    return () => sub.remove();
+  }, [refresh]);
 
   // Detection is throttled internally (daily for clusters, weekly for
   // connections and the baseline recalc), so this is a cheap call that mostly
@@ -250,8 +275,14 @@ function TodayHome() {
           ) : totalCount === 0 ? (
             <>
               <Text style={styles.statusHeading}>Your mind check-ins are coming</Text>
+              {/* Before the active window opens there is genuinely nothing
+                  scheduled yet, which used to read as "this should resolve
+                  shortly" — indistinguishable from something being broken.
+                  Say when they'll start instead. */}
               <Text style={styles.statusBody}>
-                Nothing is scheduled for today yet — this should resolve shortly.
+                {checkInSettings
+                  ? `Your check-in window opens at ${formatWindowTime(checkInSettings.window_start, timeFormat)}.`
+                  : 'Nothing is scheduled for today yet.'}
               </Text>
             </>
           ) : (

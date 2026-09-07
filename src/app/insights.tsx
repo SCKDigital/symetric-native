@@ -209,12 +209,38 @@ function WhatStandsOut({ findings, rangeDays }: { findings: PatternFinding[]; ra
   );
 }
 
+// The detail sections below sit under "What stands out" and "The evidence",
+// which are the summary. Left expanded they pushed the summary off the top of
+// a phone screen and made Insights a very long scroll of individually minor
+// findings. Collapsed by default, with the count on the header so it's still
+// obvious there's something in there.
+function CollapsibleSection({ label, count, children }: {
+  label: string; count: number; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  if (count === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Pressable
+        onPress={() => setOpen(o => !o)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        style={({ pressed }) => [styles.collapsibleHeader, pressed && styles.pressed]}>
+        <Text style={styles.sectionLabel}>{label}</Text>
+        <View style={styles.collapsibleMeta}>
+          <Text style={styles.collapsibleCount}>{count}</Text>
+          <Text style={styles.collapsibleChevron}>{open ? '⌃' : '⌄'}</Text>
+        </View>
+      </Pressable>
+      {open && <View style={styles.sectionList}>{children}</View>}
+    </View>
+  );
+}
+
 function CircadianSection({ patterns }: { patterns: CircadianPattern[] }) {
   if (patterns.length === 0) return null;
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>Time of day</Text>
-      <View style={styles.sectionList}>
+    <CollapsibleSection label="Time of day" count={patterns.length}>
         {patterns.map(p => {
           const formatted = formatCircadianPattern(p);
           return (
@@ -226,66 +252,54 @@ function CircadianSection({ patterns }: { patterns: CircadianPattern[] }) {
             </View>
           );
         })}
-      </View>
-    </View>
+    </CollapsibleSection>
   );
 }
 
 function DayOfWeekSection({ patterns }: { patterns: DayOfWeekPattern[] }) {
   if (patterns.length === 0) return null;
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>Day of week</Text>
-      <View style={styles.sectionList}>
+    <CollapsibleSection label="Day of week" count={Math.min(patterns.length, 5)}>
         {patterns.slice(0, 5).map((p, i) => (
           <View key={i} style={styles.smallCard}>
             <Text style={styles.smallCardBody}>{formatDayOfWeekPattern(p)}</Text>
           </View>
         ))}
-      </View>
-    </View>
+    </CollapsibleSection>
   );
 }
 
 function LagRelationshipSection({ relationships }: { relationships: LagRelationship[] }) {
   if (relationships.length === 0) return null;
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>What tends to follow what</Text>
-      <View style={styles.sectionList}>
+    <CollapsibleSection label="What tends to follow what" count={relationships.length}>
         {relationships.map((r, i) => (
           <View key={i} style={styles.smallCard}>
             <Text style={styles.smallCardBody}>{formatLagRelationship(r)}</Text>
           </View>
         ))}
-      </View>
-    </View>
+    </CollapsibleSection>
   );
 }
 
 function RareEventsSection({ events }: { events: RareEvent[] }) {
   if (events.length === 0) return null;
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>Rare days</Text>
-      <View style={styles.sectionList}>
+    <CollapsibleSection label="Rare days" count={events.length}>
         {events.map((e, i) => (
           <View key={i} style={styles.smallCard}>
             <Text style={styles.smallCardBody}>{e.clinical_note}</Text>
             {e.consequence_pattern && <Text style={[styles.smallCardBody, styles.smallCardSubtext]}>{e.consequence_pattern}</Text>}
           </View>
         ))}
-      </View>
-    </View>
+    </CollapsibleSection>
   );
 }
 
 function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
   if (impacts.length === 0) return null;
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>Medication &amp; therapy</Text>
-      <View style={styles.sectionList}>
+    <CollapsibleSection label="Medication &amp; therapy" count={impacts.length}>
         {impacts.map(impact => {
           const top = impact.affected_domains[0];
           return (
@@ -299,8 +313,7 @@ function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
             </View>
           );
         })}
-      </View>
-    </View>
+    </CollapsibleSection>
   );
 }
 
@@ -785,6 +798,10 @@ const styles = StyleSheet.create({
   // Slate, not indigo — matches the web app's section labels on this screen.
   sectionLabel: { fontSize: 11, color: '#8892a4', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1.1, marginBottom: 12 },
   section: { marginBottom: 24 },
+  collapsibleHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  collapsibleMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12 },
+  collapsibleCount: { fontSize: 12, color: '#6b7a99' },
+  collapsibleChevron: { fontSize: 14, color: '#6b7a99', lineHeight: 16 },
   sectionList: { gap: 8 },
   rangeControl: { marginBottom: 24 },
   rangeSelect: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533' },
