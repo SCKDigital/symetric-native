@@ -357,6 +357,13 @@ function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
 // intentionally stay un-merged (separate per-area passes, own baseline
 // maps) — merging is only for detectors whose whole point is cross-area
 // pairs or a shared per-day domain list.
+/** Day-of-week, lag, rare-event and pattern-evolution findings are only shown
+ *  from this range up. Over a week you get one instance of each weekday and
+ *  nothing can be "rare"; showing findings computed over 90 days while the
+ *  user has 7d selected is worse still, because the dates on screen then
+ *  contradict the range they picked. Under this, the sections are empty. */
+const MIN_RANGE_FOR_WINDOWED_DETECTORS = 30;
+
 export default function InsightsScreen() {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -457,7 +464,15 @@ export default function InsightsScreen() {
 
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
     setClusters(sorted as DetectedCluster[]);
-    setCircadianPatterns(circadianData);
+    // Circadian rows are written by the scheduled detector over its own fixed
+    // window, so they can't be recomputed per range like the others. Filtered
+    // to windows that end inside the selected range instead, and hidden below
+    // the threshold along with everything else.
+    setCircadianPatterns(
+      range >= MIN_RANGE_FOR_WINDOWED_DETECTORS
+        ? circadianData.filter(p => p.detection_window_end >= fromRange)
+        : [],
+    );
     setContextTags(tagData ?? []);
     if (settings?.time_format) setTimeFormat(settings.time_format as '12hr' | '24hr');
 
@@ -507,18 +522,27 @@ export default function InsightsScreen() {
     const merged90d = mergeDays(days90d, bodyDays90d);
     const combinedDomains = [...resolvedDomains, ...resolvedBodyDomains];
 
-    setDayOfWeekPatterns(detectDayOfWeekPatterns(merged90d, combinedDomains));
-    setLagRelationships(detectLagRelationships(merged90d, combinedDomains));
+    // These detectors used to run over a fixed 90 days whatever the range said,
+    // so picking 7d still surfaced findings dated weeks back. They now see only
+    // the selected window, and are skipped entirely below 30 days.
+    const windowed = range >= MIN_RANGE_FOR_WINDOWED_DETECTORS;
+    const inRange = <T extends { date: string }>(rows: T[]) => rows.filter(d => d.date >= fromRange);
+    const mergedRange = windowed ? inRange(merged90d) : [];
+    const daysRangeScoped = windowed ? inRange(days90d) : [];
+    const bodyDaysRangeScoped = windowed ? inRange(bodyDays90d) : [];
+
+    setDayOfWeekPatterns(windowed ? detectDayOfWeekPatterns(mergedRange, combinedDomains) : []);
+    setLagRelationships(windowed ? detectLagRelationships(mergedRange, combinedDomains) : []);
 
     const baselineMap: Partial<Record<DomainType, number>> = {};
     (baselines as Baseline[] | null)?.forEach(b => {
       baselineMap[b.domain] = b.baseline_score;
     });
     setBaselineMap(baselineMap);
-    setPatternEvolutions(detectPatternEvolution(days90d, resolvedDomains, baselineMap));
-    setRareEvents(detectRareEvents(days90d, resolvedDomains, baselineMap));
-    setBodyPatternEvolutions(detectPatternEvolution(bodyDays90d, resolvedBodyDomains, bodyBaselineMap));
-    setBodyRareEvents(detectRareEvents(bodyDays90d, resolvedBodyDomains, bodyBaselineMap));
+    setPatternEvolutions(detectPatternEvolution(daysRangeScoped, resolvedDomains, baselineMap));
+    setRareEvents(detectRareEvents(daysRangeScoped, resolvedDomains, baselineMap));
+    setBodyPatternEvolutions(detectPatternEvolution(bodyDaysRangeScoped, resolvedBodyDomains, bodyBaselineMap));
+    setBodyRareEvents(detectRareEvents(bodyDaysRangeScoped, resolvedBodyDomains, bodyBaselineMap));
     setMarkers(markersData);
 
     // Merged mind+body window, matching the merge rationale above — a
