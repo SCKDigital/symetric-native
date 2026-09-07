@@ -73,6 +73,12 @@ export default function AppTabs() {
         href: null, or expo-router would give it a sixth tab button.
       */}
       <Tabs.Screen name="auth/callback" options={{ href: null }} />
+
+      {/*
+        The catch-all in src/app/+not-found.tsx, declared for the same reason:
+        it lands in this navigator and would otherwise take a tab button.
+      */}
+      <Tabs.Screen name="+not-found" options={{ href: null }} />
     </Tabs>
   );
 }
