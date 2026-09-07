@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "app.symetric.mobile",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0A0C12",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
