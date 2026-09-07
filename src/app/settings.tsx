@@ -8,7 +8,7 @@ import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
 import { DeleteAllSheet, DeleteRangeSheet, ExportSheet, ResetBaselineSheet } from '@/components/settings/data-sheets';
 import {
   BellIcon, BellSlashIcon, BodyIcon, BrainIcon, CalendarIcon, ClockIcon, ClockSimpleIcon,
-  CycleIcon, DownloadIcon, EyeIcon, LockIcon, PaletteIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
+  CycleIcon, DownloadIcon, LockIcon, PaletteIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
 } from '@/components/settings/settings-icons';
 import {
   ChevronRight, InlineMessage, RowValue, SectionCard, SectionLabel, SettingsRow, RowDivider,
@@ -494,16 +494,13 @@ export default function SettingsScreen() {
         {/* ── Preferences ─────────────────────────────────────────────────── */}
         <SectionLabel>Preferences</SectionLabel>
         <SectionCard>
-          <SettingsRow
-            icon={<EyeIcon />}
-            label="Comfort mode"
-            subtitle="Larger text, reduced brightness"
-            right={<Toggle
-              value={profile?.comfort_mode ?? false}
-              onValueChange={() => toggleProfileField('comfort_mode', profile?.comfort_mode ?? false)}
-            />}
-          />
-          <RowDivider />
+          {/* Comfort mode is deliberately absent here. On the web app it adds
+              a `zoom: 1.12` CSS class and kills animations; React Native has
+              no zoom, so scaling text app-wide needs a font-scale system
+              threaded through every StyleSheet. Until that exists the toggle
+              wrote a profile field that nothing read, which is worse than not
+              offering it. profiles.comfort_mode is untouched, so a user who
+              set it on the web keeps their setting. */}
           <SettingsRow
             icon={<PaletteIcon />}
             label="Simplified colours"

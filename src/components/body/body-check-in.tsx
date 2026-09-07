@@ -42,6 +42,11 @@ type DomainValues = Partial<Record<BodyDomainType, number>>;
 // morning check-in, onboarding's body-consent step.
 export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   const { user, profile } = useAuth();
+  // Sliders live inside this ScrollView. A horizontal drag that starts with
+  // any vertical component gets claimed by the scroll, which is what made the
+  // sliders feel sticky — worst on the last domain, where there is the most
+  // scroll travel left to compete for. Locked while a slider is being dragged.
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [today] = useState(() => todayDateString());
 
   const [selectedDate, setSelectedDate] = useState(initialDate ?? today);
@@ -268,7 +273,7 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={scrollEnabled}>
           <View style={styles.header}>
             <Text style={styles.headerLabel}>Body check-in</Text>
             <Pressable onPress={onClose} hitSlop={8}>
@@ -302,6 +307,8 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
                     return (
                       <View key={d}>
                         <DomainSlider
+              onSlidingStart={() => setScrollEnabled(false)}
+              onSlidingComplete={() => setScrollEnabled(true)}
                           domain={d}
                           label={config.label}
                           hint={config.hint}

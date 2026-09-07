@@ -41,13 +41,19 @@ export interface GenerateReportInput {
   clusters: DetectedCluster[];
   appointmentId?: string;
   /** Gates the body_checkins/body_events/body_pain_sites fetches and the
-   *  conditional Body Overview page. There's no report-level include-body
-   *  toggle on native yet (see this file's own header comment), so the
-   *  caller just passes profile.body_tracking_enabled straight through —
-   *  the report includes body content whenever the user tracks it, same
-   *  end result as the web app's default (includeBody defaults false only
-   *  because web's caller has its own opt-in checkbox to thread through). */
+   *  conditional Body Overview page. Defaults includeBody when that isn't
+   *  given, so a caller that only knows whether the user tracks body still
+   *  behaves as before. */
   bodyTrackingEnabled?: boolean;
+  /** Report-level include toggles, matching the web app's three checkboxes.
+   *  includeMind gates the circadian patterns (the only mind content the web
+   *  generator gates); includeBody gates every body fetch and the Body
+   *  Overview page; includeCycle keeps or drops cycle_phase markers, which is
+   *  enough to zero out every cycle computation downstream without touching
+   *  the rest of the pipeline — same trick the web caller uses. */
+  includeMind?: boolean;
+  includeBody?: boolean;
+  includeCycle?: boolean;
 }
 
 // Mirrors insights.tsx's buildBodyDays/bodyBaselineMap recipe, but scoped to
@@ -148,7 +154,15 @@ function buildMorningEveningPairs(rows: Record<string, unknown>[], domains: Body
  * on Page 1's own tables).
  */
 export async function generateReport(input: GenerateReportInput): Promise<{ uri: string }> {
-  const { userId, userName, dateFrom, dateTo, clusters, appointmentId, bodyTrackingEnabled = false } = input;
+  const {
+    userId, userName, dateFrom, dateTo, clusters, appointmentId,
+    bodyTrackingEnabled = false,
+    includeMind = true,
+    includeCycle = true,
+  } = input;
+  // Body content follows the include toggle when the caller sets one, and
+  // otherwise whether the user tracks body at all.
+  const includeBody = input.includeBody ?? bodyTrackingEnabled;
 
   const [
     { data: checkIns },
@@ -186,10 +200,10 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
       .gte('detection_window_end', dateFrom).lte('detection_window_start', dateTo),
     appointmentId ? fetchPatternReviewsForAppointment(appointmentId).catch(() => []) : Promise.resolve([]),
     appointmentId ? fetchQuestionsForAppointment(appointmentId).catch(() => []) : Promise.resolve([]),
-    bodyTrackingEnabled
+    includeBody
       ? supabase.from('body_checkins').select('*').eq('user_id', userId).gte('entry_date', dateFrom).lte('entry_date', dateTo).order('entry_date', { ascending: true })
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
-    bodyTrackingEnabled
+    includeBody
       ? supabase.from('body_events').select('*, body_event_sites(*)').eq('user_id', userId).gte('event_date', dateFrom).lte('event_date', dateTo)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
@@ -200,14 +214,17 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // date per site to count distinct days. Ported from the web app's
   // GenerateReportSection.tsx, unchanged.
   const bodyCheckInIds = (bodyCheckInsRaw ?? []).map(c => c.id as string);
-  const { data: bodyPainSitesRaw } = bodyTrackingEnabled && bodyCheckInIds.length > 0
+  const { data: bodyPainSitesRaw } = includeBody && bodyCheckInIds.length > 0
     ? await supabase.from('body_pain_sites').select('*').in('body_checkin_id', bodyCheckInIds)
     : { data: [] as Record<string, unknown>[] };
   const entryDateByCheckInId = new Map((bodyCheckInsRaw ?? []).map(c => [c.id as string, c.entry_date as string]));
   const bodyPainSites = (bodyPainSitesRaw ?? []).map(site => ({ ...site, entry_date: entryDateByCheckInId.get(site.body_checkin_id as string) })) as any[];
 
   const activeDomains = resolveActiveDomains(settings);
-  const markers = (markersData ?? []) as InterventionMarker[];
+  // Cycle_phase markers drive every cycle computation downstream, so removing
+  // them here is enough to exclude cycle dates entirely.
+  const allMarkers = (markersData ?? []) as InterventionMarker[];
+  const markers = includeCycle ? allMarkers : allMarkers.filter(m => m.marker_type !== 'cycle_phase');
   const dayScores = buildDayScores(checkIns, sleepLogs);
 
   const baselineMap: Record<string, number> = { sleep: 3 };
@@ -226,7 +243,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // body-domain cluster the patient marked "should discuss" can never leak
   // into the mind-only flaggedClusters list with an unlabelled domain key.
   const mindClusters = clusters.filter(c => !isBodyDomain((c.domains_involved ?? [])[0] ?? ''));
-  const bodyClustersRaw = bodyTrackingEnabled ? clusters.filter(c => isBodyDomain((c.domains_involved ?? [])[0] ?? '')) : [];
+  const bodyClustersRaw = includeBody ? clusters.filter(c => isBodyDomain((c.domains_involved ?? [])[0] ?? '')) : [];
   const flaggedClusters = mindClusters.filter(flagFilter).sort((a, b) => sortWeight(b) - sortWeight(a));
   const bodyFlaggedClusters = bodyClustersRaw.filter(flagFilter).sort((a, b) => sortWeight(b) - sortWeight(a));
 
@@ -333,7 +350,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     domainConnections,
     lagRelationships,
     dayOfWeekPatterns,
-    circadianPatterns: (circadianPatterns ?? []) as CircadianPattern[],
+    circadianPatterns: (includeMind ? (circadianPatterns ?? []) : []) as CircadianPattern[],
     rareEvents,
     patternEvolution,
     interventionImpacts,
@@ -382,7 +399,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
 
   const contextConnectionsBody = buildContextConnectionsHtml({
     dayOfWeekPatterns,
-    circadianPatterns: (circadianPatterns ?? []) as CircadianPattern[],
+    circadianPatterns: (includeMind ? (circadianPatterns ?? []) : []) as CircadianPattern[],
     domainConnections,
   });
 

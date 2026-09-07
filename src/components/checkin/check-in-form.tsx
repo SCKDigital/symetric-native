@@ -43,6 +43,11 @@ export default function CheckInForm({
   quickCheckInMode = false,
 }: CheckInFormProps) {
   const { user, profile } = useAuth();
+  // Sliders live inside this ScrollView. A horizontal drag that starts with
+  // any vertical component gets claimed by the scroll, which is what made the
+  // sliders feel sticky — worst on the last domain, where there is the most
+  // scroll travel left to compete for. Locked while a slider is being dragged.
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [values, setValues] = useState<Record<DomainType, number>>(
     activeDomains.reduce((acc, domain) => ({ ...acc, [domain]: initialValues?.[domain] ?? 5 }), {} as Record<DomainType, number>),
   );
@@ -94,13 +99,15 @@ export default function CheckInForm({
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} scrollEnabled={scrollEnabled}>
         <View style={styles.card}>
           <Text style={styles.cardHeader}>{quickCheckInMode ? 'Quick mind check-in' : 'Now · Mind check-in'}</Text>
 
           <View style={styles.slidersGroup}>
             {activeDomains.map(domain => (
               <DomainSlider
+              onSlidingStart={() => setScrollEnabled(false)}
+              onSlidingComplete={() => setScrollEnabled(true)}
                 key={domain}
                 domain={domain}
                 label={DOMAIN_COPY[domain].label}

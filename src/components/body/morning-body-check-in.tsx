@@ -39,6 +39,11 @@ const MORNING_HINTS: Partial<Record<BodyDomainType, string>> = {
 export default function MorningBodyCheckIn({ visible, onClose }: Props) {
   const { user } = useAuth();
   // Always today — there's no backfill for the morning check-in.
+  // Sliders live inside this ScrollView. A horizontal drag that starts with
+  // any vertical component gets claimed by the scroll, which is what made the
+  // sliders feel sticky — worst on the last domain, where there is the most
+  // scroll travel left to compete for. Locked while a slider is being dragged.
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [selectedDate] = useState(() => todayDateString());
 
   const [loading, setLoading] = useState(true);
@@ -129,7 +134,7 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={scrollEnabled}>
           <View style={styles.header}>
             <Text style={styles.headerLabel}>Morning body check-in</Text>
             <Pressable onPress={onClose} hitSlop={8}>
@@ -150,6 +155,8 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
                     const config = BODY_DOMAINS[d];
                     return (
                       <DomainSlider
+              onSlidingStart={() => setScrollEnabled(false)}
+              onSlidingComplete={() => setScrollEnabled(true)}
                         key={d}
                         domain={`morning_${d}`}
                         label={config.label}

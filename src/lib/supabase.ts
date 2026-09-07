@@ -52,6 +52,7 @@ export type BodyDomainType =
   | 'breathlessness'
   | 'orthostatic'
   | 'gut'
+  | 'brain_fog'
   | 'exhaustion';
 
 export type BodySide = 'L' | 'R';
@@ -203,6 +204,7 @@ export interface BodyCheckIn {
   breathlessness?: number | null;
   orthostatic?: number | null;
   gut?: number | null;
+  brain_fog?: number | null;
   exertion?: number | null;
   exhaustion?: number | null;
   morning_fatigue?: number | null;

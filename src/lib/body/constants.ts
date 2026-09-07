@@ -35,8 +35,11 @@ export interface BodyDomainConfig {
  *  signal the split exists to preserve. */
 export const PAIN_SPLIT_BOUNDARY_DATE = '2026-08-20';
 
-// Fixed order — append new domains, never insert, so historical row ordering
-// stays stable. `pain` stays in this list (deprecated, not removed) purely
+// Fixed order — append new domains rather than inserting, so historical row
+// ordering stays stable. `brain_fog` is the one exception: it went in before
+// `exhaustion` rather than after, because exhaustion has to stay last (see
+// below). Safe for the same reason exhaustion's own repositioning was —
+// nothing depends on array position, only on which domains are present. `pain` stays in this list (deprecated, not removed) purely
 // so History and detection keep iterating it for pre-boundary rows; it's
 // filtered out of the check-in form and Settings toggle list via
 // CHECKIN_BODY_DOMAIN_ORDER below. `exhaustion` is deliberately LAST despite
@@ -53,6 +56,7 @@ export const BODY_DOMAIN_ORDER: BodyDomainType[] = [
   'breathlessness',
   'orthostatic',
   'gut',
+  'brain_fog',
   'exhaustion',
 ];
 
@@ -113,6 +117,13 @@ export const BODY_DOMAINS: Record<BodyDomainType, BodyDomainConfig> = {
     hint: 'Nausea, bloating, cramping, motility.',
     lowAnchor: 'Settled',
     highAnchor: 'Bad',
+  },
+  brain_fog: {
+    key: 'brain_fog',
+    label: 'Brain fog',
+    hint: 'Woolly thinking, losing the thread, reaching for words.',
+    lowAnchor: 'Clear',
+    highAnchor: 'Foggy',
   },
   exhaustion: {
     key: 'exhaustion',

@@ -23,6 +23,11 @@ interface DomainSliderProps {
   note?: string;
   /** False before the user has interacted — shows the value as an unset resting position. */
   touched?: boolean;
+  /** Fired as a drag starts/ends. Parents that put sliders inside a ScrollView
+   *  use these to disable scrolling for the duration — see the note on
+   *  `slider` in the styles below for why that's necessary. */
+  onSlidingStart?: () => void;
+  onSlidingComplete?: () => void;
 }
 
 // Ported from the web app's DomainSlider.tsx. The web version layers a
@@ -43,6 +48,8 @@ export default function DomainSlider({
   highLabel,
   note,
   touched = true,
+  onSlidingStart,
+  onSlidingComplete,
 }: DomainSliderProps) {
   const fillPercent = ((value - 1) / 9) * 100;
 
@@ -61,7 +68,7 @@ export default function DomainSlider({
       </View>
 
       <View style={styles.trackWrap}>
-        <View style={styles.trackBg}>
+        <View style={styles.trackBg} pointerEvents="none">
           {touched ? (
             <LinearGradient
               colors={['#4f46e5', '#818cf8']}
@@ -85,6 +92,9 @@ export default function DomainSlider({
           step={1}
           value={value}
           onValueChange={onChange}
+          onSlidingStart={onSlidingStart}
+          onSlidingComplete={onSlidingComplete}
+          tapToSeek
           minimumTrackTintColor="transparent"
           maximumTrackTintColor="transparent"
           thumbTintColor="#818cf8"
@@ -123,6 +133,11 @@ const styles = StyleSheet.create({
   trackFill: { height: '100%', borderRadius: 2 },
   trackFillUntouched: { backgroundColor: '#3d4457' },
   baselineTick: { position: 'absolute', top: '50%', width: 2, height: 12, marginTop: -6, marginLeft: -1, backgroundColor: '#4a5568', borderRadius: 1, zIndex: 1 },
+  // The gradient fill and baseline tick sit under this and are decorative
+  // only; both are pointerEvents="none" so nothing competes with the thumb.
+  // The thumb still has to win against the enclosing ScrollView, which is what
+  // onSlidingStart/Complete are for — without that, a drag with any vertical
+  // component gets claimed by the scroll and the slider feels sticky.
   slider: { width: '100%', height: 40 },
   rangeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   rangeText: { fontSize: 11, color: '#4a5568', fontFamily: 'DM Mono' },
