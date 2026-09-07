@@ -47,7 +47,37 @@ export function timeOfDayInTZ(date: Date, timezone: string): { hours: number; mi
   return { hours, minutes };
 }
 
-export async function ensureTodayCheckIns(userId: string, timezone: string) {
+// Concurrent callers share one run. The existence check below is a
+// read-then-write, and the times it generates are randomised inside their
+// bands — so two calls racing each other both see "nothing scheduled yet",
+// both generate a *different* set of times, and both inserts succeed. The
+// unique constraint on (user_id, scheduled_date, scheduled_at) can't catch
+// that, because the timestamps genuinely differ. The result is a user getting
+// 8 check-ins on a 4-a-day setting.
+//
+// That race is easy to hit: the web app calls this from an App.tsx effect and
+// from TodayScreen's, both firing on load, and the native hook used to call it
+// on every refresh. Keyed by user + local date so a genuine day rollover still
+// schedules.
+const inFlightByUserDay = new Map<string, Promise<void>>();
+
+export async function ensureTodayCheckIns(userId: string, timezone: string): Promise<void> {
+  const dayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const key = `${userId}:${dayKey}`;
+
+  const existing = inFlightByUserDay.get(key);
+  if (existing) return existing;
+
+  const run = scheduleTodayCheckIns(userId, timezone).finally(() => {
+    inFlightByUserDay.delete(key);
+  });
+  inFlightByUserDay.set(key, run);
+  return run;
+}
+
+async function scheduleTodayCheckIns(userId: string, timezone: string) {
   try {
     const { data: settings, error: settingsError } = await supabase
       .from('check_in_settings')

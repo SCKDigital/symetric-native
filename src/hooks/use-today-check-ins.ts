@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/contexts/auth-context';
 import { resolveActiveDomains } from '@/lib/domains';
@@ -61,13 +61,27 @@ const EMPTY: State = {
 export function useTodayCheckIns() {
   const { user, profile } = useAuth();
   const [state, setState] = useState<State>(EMPTY);
+  const scheduledForDay = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
     setState(prev => ({ ...prev, loading: true }));
 
     const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    await ensureTodayCheckIns(user.id, timezone);
+
+    // Scheduling is a once-a-day job, not something every refresh should
+    // attempt. load() now re-runs on a timer tick and on app resume, and each
+    // of those calling the scheduler is what turned a latent race into a
+    // frequent one. Guarded per local day; the scheduler is idempotent and
+    // serialised as well, so this is belt and braces rather than the only
+    // defence.
+    const todayKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    if (scheduledForDay.current !== todayKey) {
+      scheduledForDay.current = todayKey;
+      await ensureTodayCheckIns(user.id, timezone);
+    }
 
     const todayLocal = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
