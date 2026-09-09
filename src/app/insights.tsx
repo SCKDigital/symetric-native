@@ -30,7 +30,7 @@ import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, Patte
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
 import { DOMAIN_NAMES, getDomainColorFromProfile, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
-import { fetchLatestSleepConnections, type SleepSymptomConnection } from '@/lib/queries/sleep-connections';
+import { type SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import {
   Area, BodyMindConnectionRow, PatternFinding,
   bodyEventFrequencyFindings, bodyEventImpactFindings, bodyMindConnectionFindings, bodyTimeOfDayFindings,
@@ -564,6 +564,10 @@ interface InsightsFetchBundle {
   bodyCheckIns90dRaw: Record<string, unknown>[] | null;
   bodyEvents90dRaw: { event_date: string; event_type: string }[] | null;
   domainConnectionsData: BodyMindConnectionRow[] | null;
+  /** Every window in the last 90 days, newest window first and strongest
+   *  difference first within a window. The single window to show is picked
+   *  from this in memory — see the comment at its use. */
+  sleepConnections90d: SleepSymptomConnection[] | null;
 }
 
 export default function InsightsScreen() {
@@ -607,6 +611,15 @@ export default function InsightsScreen() {
   const [patternsOpen, setPatternsOpen] = useState(false);
   const [viewingVolatilityGroup, setViewingVolatilityGroup] = useState<VolatilityGroup | null>(null);
 
+  // load() depended on the whole `profile` object, so any auth-context refresh
+  // that handed back a new object identity re-ran all eleven queries and the
+  // full detection pass — the screen going back to the pulse for a second with
+  // nothing having changed. Only these two fields are actually read, and the
+  // array is joined to a string so a re-fetch of identical values compares
+  // equal.
+  const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
+  const bodyDomainsActiveKey = ((profile?.body_domains_active as string[] | null) ?? []).join(',');
+
   const load = useCallback(async () => {
     if (!user) return;
     // Only the first load blacks the screen out. load() re-runs on every range
@@ -624,8 +637,6 @@ export default function InsightsScreen() {
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const from90 = ninetyDaysAgo.toLocaleDateString('en-CA');
 
-    const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
-
     // Everything below covers a fixed 90 days and doesn't depend on the range,
     // so it's fetched once per user and reused. Changing the range used to
     // re-run all fifteen queries and wait on them before redrawing, which is
@@ -636,7 +647,7 @@ export default function InsightsScreen() {
         clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines },
         markersData, { data: tagData },
         { data: bodyCheckIns90dRaw }, { data: bodyEvents90dRaw },
-        { data: domainConnectionsData },
+        { data: domainConnectionsData }, { data: sleepConnections90d },
       ] = await Promise.all([
         fetchClustersForDateRange(user.id, from90, to),
         fetchCircadianPatterns(user.id, from90),
@@ -655,12 +666,22 @@ export default function InsightsScreen() {
         bodyTrackingEnabled
           ? supabase.from('domain_connections').select('*').eq('user_id', user.id).gte('window_end', from90).order('strength', { ascending: false })
           : Promise.resolve({ data: [] as BodyMindConnectionRow[] }),
+        // Was fetchLatestSleepConnections, two queries deep, awaited *after*
+        // this whole block and all the detection below it — three serial
+        // network waits before the screen could paint. Its "pick the newest
+        // window, then read that window whole" logic is done in memory
+        // instead, off one query that joins the parallel batch.
+        supabase.from('sleep_symptom_connections').select('*').eq('user_id', user.id)
+          .gte('window_end', from90)
+          .order('window_start', { ascending: false })
+          .order('difference', { ascending: false }),
       ]);
       fetchCache.current = {
         userId: user.id,
         data: {
           clusterData, circadianData, checkIns90d, sleepLogs90d, settings, baselines,
           markersData, tagData, bodyCheckIns90dRaw, bodyEvents90dRaw, domainConnectionsData,
+          sleepConnections90d,
         } as InsightsFetchBundle,
       };
     }
@@ -668,6 +689,7 @@ export default function InsightsScreen() {
     const {
       clusterData, circadianData, checkIns90d, sleepLogs90d, settings, baselines,
       markersData, tagData, bodyCheckIns90dRaw, bodyEvents90dRaw, domainConnectionsData,
+      sleepConnections90d,
     } = fetchCache.current.data;
 
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
@@ -695,7 +717,7 @@ export default function InsightsScreen() {
     // 'exertion' (a legacy value still in body_domains_active's DB default)
     // is excluded.
     const bodyActiveFromProfile: BodyDomainType[] = bodyTrackingEnabled
-      ? (((profile?.body_domains_active as string[] | null) ?? [])
+      ? ((bodyDomainsActiveKey ? bodyDomainsActiveKey.split(',') : [])
           .filter((d): d is BodyDomainType => (BODY_DOMAIN_ORDER as string[]).includes(d)))
       : [];
     const resolvedBodyDomains: BodyDomainType[] = bodyActiveFromProfile.length > 0
@@ -795,8 +817,18 @@ export default function InsightsScreen() {
 
     // Written by the weekly sleep detector — a separate table from
     // domain_connections, with its own good/poor-sleep grouping rather than a
-    // correlation coefficient.
-    setSleepConnections(await fetchLatestSleepConnections(user.id, fromRange).catch(() => []));
+    // correlation coefficient. Rows are only comparable within one detection
+    // window, so a single window is picked (the newest that overlaps the
+    // selected range) and read whole; mixing windows would put differently-
+    // sampled numbers side by side. The fetch is already ordered newest window
+    // first, so the first eligible row names the window.
+    const eligibleSleepConnections = (sleepConnections90d ?? []).filter(r => r.window_end >= fromRange);
+    const sleepConnectionWindow = eligibleSleepConnections[0]?.window_start ?? null;
+    setSleepConnections(
+      sleepConnectionWindow
+        ? eligibleSleepConnections.filter(r => r.window_start === sleepConnectionWindow)
+        : [],
+    );
 
     // Derived, not fetched: every range is 90 days or less, so the range rows
     // are always a subset of what's already in memory. This used to be four
@@ -838,7 +870,7 @@ export default function InsightsScreen() {
 
     hasLoadedOnce.current = true;
     setLoading(false);
-  }, [user, profile, range]);
+  }, [user, bodyTrackingEnabled, bodyDomainsActiveKey, range]);
 
   // Detection used to be awaited at the top of load(), so every Insights mount
   // — and every range change — waited on a round trip (and, on the day the
