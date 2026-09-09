@@ -21,6 +21,7 @@ import { forcePatternDetection, runPatternDetectionIfNeeded } from '@/lib/patter
 import { createMarker } from '@/lib/queries/markers';
 import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 import { formatWindowTime } from '@/components/settings/settings-sheets';
+import { timeOfDayInTZ } from '@/lib/scheduler';
 import { formatTime } from '@/lib/time-format';
 import { supabase, type CheckIn } from '@/lib/supabase';
 
@@ -170,6 +171,18 @@ function TodayHome() {
   const lastCompletedAt = lastCompleted?.completed_at ?? null;
   const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+  // "Your check-in window opens at 08:00" was shown for any empty day, so at
+  // 08:15 with nothing scheduled it pointed the user at a time that had already
+  // passed — the app reading as frozen at the start of the window. Compared in
+  // the profile's timezone, not the device's, because that is where
+  // window_start is configured.
+  const windowNotYetOpen = (() => {
+    if (!checkInSettings) return false;
+    const { hours, minutes } = timeOfDayInTZ(new Date(nowMs), timezone);
+    const [startH, startM] = checkInSettings.window_start.split(':').map(Number);
+    return hours * 60 + minutes < startH * 60 + startM;
+  })();
+
   // Moves one check-in. notified_at is cleared so the reminder fires again at
   // the new time rather than counting as already sent, and scheduled_date is
   // recomputed in the user's zone because a late-evening move can cross
@@ -274,16 +287,27 @@ function TodayHome() {
             </>
           ) : totalCount === 0 ? (
             <>
-              <Text style={styles.statusHeading}>Your mind check-ins are coming</Text>
+              <Text style={styles.statusHeading}>
+                {windowNotYetOpen ? 'Your mind check-ins are coming' : 'Nothing scheduled yet'}
+              </Text>
               {/* Before the active window opens there is genuinely nothing
                   scheduled yet, which used to read as "this should resolve
-                  shortly" — indistinguishable from something being broken.
-                  Say when they'll start instead. */}
+                  shortly" — indistinguishable from something being broken. Say
+                  when they'll start instead. Once the window is open an empty
+                  day is not normal, so say that rather than repeating an
+                  opening time that has already passed. */}
               <Text style={styles.statusBody}>
-                {checkInSettings
-                  ? `Your check-in window opens at ${formatWindowTime(checkInSettings.window_start, timeFormat)}.`
-                  : 'Nothing is scheduled for today yet.'}
+                {!checkInSettings
+                  ? 'Nothing is scheduled for today yet.'
+                  : windowNotYetOpen
+                    ? `Your check-in window opens at ${formatWindowTime(checkInSettings.window_start, timeFormat)}.`
+                    : "Today's check-ins haven't been set up yet."}
               </Text>
+              {!windowNotYetOpen && checkInSettings && (
+                <Pressable onPress={refresh} style={({ pressed }) => pressed && styles.pressed}>
+                  <Text style={styles.reschedule}>Try again</Text>
+                </Pressable>
+              )}
             </>
           ) : (
             <Text style={styles.statusBody}>Your mind check-in window has closed for today</Text>
@@ -305,7 +329,7 @@ function TodayHome() {
           <Text style={styles.windowClosed}>(Editing window closed)</Text>
         )}
 
-        <BonusCheckInCard activeDomains={activeDomains} onLogged={refresh} />
+        <BonusCheckInCard activeDomains={activeDomains} baselines={baselines} onLogged={refresh} />
 
         {/* Body logging, in the web app's own order: the optional morning
             prompt, then the evening card. Both were only reachable from

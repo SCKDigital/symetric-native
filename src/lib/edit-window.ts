@@ -5,15 +5,20 @@
 
 const EDIT_WINDOW_MINUTES = 10;
 
+// `now` is optional throughout: callers that render on a ticking clock pass
+// their own tick value so the derivation is a pure function of state, rather
+// than reading Date.now() during render and relying on the tick to have
+// happened first.
+
 /** True if the timestamp is still within the ten-minute edit window. */
-export function isWithinEditWindow(completedAt: string | Date): boolean {
-  const diffMs = Date.now() - new Date(completedAt).getTime();
+export function isWithinEditWindow(completedAt: string | Date, now: number = Date.now()): boolean {
+  const diffMs = now - new Date(completedAt).getTime();
   return diffMs / (1000 * 60) <= EDIT_WINDOW_MINUTES;
 }
 
 /** Whole minutes remaining in the edit window (0 once closed). */
-export function getMinutesRemaining(completedAt: string | Date): number {
-  const diffMs = Date.now() - new Date(completedAt).getTime();
+export function getMinutesRemaining(completedAt: string | Date, now: number = Date.now()): number {
+  const diffMs = now - new Date(completedAt).getTime();
   const remaining = EDIT_WINDOW_MINUTES - diffMs / (1000 * 60);
   return Math.max(0, Math.ceil(remaining));
 }

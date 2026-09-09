@@ -62,6 +62,7 @@ export function useTodayCheckIns() {
   const { user, profile } = useAuth();
   const [state, setState] = useState<State>(EMPTY);
   const scheduledForDay = useRef<string | null>(null);
+  const lastLoadFoundNothing = useRef(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -70,15 +71,23 @@ export function useTodayCheckIns() {
     const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     // Scheduling is a once-a-day job, not something every refresh should
-    // attempt. load() now re-runs on a timer tick and on app resume, and each
-    // of those calling the scheduler is what turned a latent race into a
-    // frequent one. Guarded per local day; the scheduler is idempotent and
-    // serialised as well, so this is belt and braces rather than the only
-    // defence.
+    // attempt. load() re-runs on a timer tick and on app resume, and each of
+    // those calling the scheduler is what turned a latent race into a frequent
+    // one. Guarded per local day; the scheduler is idempotent and serialised as
+    // well, so this is belt and braces rather than the only defence.
+    //
+    // The exception is a day that came back genuinely empty. Whatever made the
+    // scheduler return without inserting — a failed settings read, a dropped
+    // connection, a timezone edge at the window boundary — the once-a-day guard
+    // would then hold for the rest of the day and leave the user staring at
+    // "your check-ins are coming" until midnight. That is the "still stuck at
+    // 8:00am" report. Retrying is safe: ensureTodayCheckIns re-checks for
+    // existing rows, shares one in-flight promise, and the check_ins_daily_limit
+    // trigger caps the day regardless of how often it is called.
     const todayKey = new Intl.DateTimeFormat('en-CA', {
       timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
     }).format(new Date());
-    if (scheduledForDay.current !== todayKey) {
+    if (scheduledForDay.current !== todayKey || lastLoadFoundNothing.current) {
       scheduledForDay.current = todayKey;
       await ensureTodayCheckIns(user.id, timezone);
     }
@@ -167,6 +176,7 @@ export function useTodayCheckIns() {
 
     const completedCount = todaysCheckIns.filter(c => c.status === 'completed').length;
     const totalCount = todaysCheckIns.length;
+    lastLoadFoundNothing.current = totalCount === 0;
 
     setState({
       loading: false,

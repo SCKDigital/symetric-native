@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -28,7 +28,7 @@ import { detectInterventionImpacts, InterventionImpact } from '@/lib/detection/i
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
 import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
-import { DOMAIN_NAMES, resolveActiveDomains } from '@/lib/domains';
+import { DOMAIN_NAMES, getDomainColorFromProfile, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
 import { fetchLatestSleepConnections, type SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import {
@@ -280,27 +280,202 @@ function LagRelationshipSection({ findings }: { findings: PatternFinding[] }) {
   );
 }
 
+// ── Rare days, grouped by domain ────────────────────────────────────────────
+//
+// This used to be one card per detected thing, so a domain that swung on four
+// separate days produced four near-identical cards and the section read as a
+// list of dates rather than a list of findings. Grouping by domain answers the
+// question the section is actually for — "what is unusual about *this* domain"
+// — and pushes the dates into an expandable detail.
+//
+// Events that are inherently about several domains at once (all elevated, all
+// suppressed, a multi-domain crash) have no single owner and go into their own
+// group at the end rather than being duplicated into every domain.
+
+const CROSS_DOMAIN = '__cross__';
+
+interface RareDayOccurrence {
+  /** Already-formatted date or date range. */
+  when: string;
+  note?: string;
+}
+
+interface RareDayEntry {
+  key: string;
+  /** Lowercase noun phrase — reads as "volatility recorded on 4 days". */
+  kind: string;
+  count: number;
+  /** Volatility and spikes are counted in days; runs of poor sleep in times. */
+  unit: 'days' | 'times';
+  occurrences: RareDayOccurrence[];
+}
+
+interface RareDayGroup {
+  domain: string;
+  label: string;
+  entries: RareDayEntry[];
+  total: number;
+}
+
+/** Inclusive day span of a cluster; an ongoing one counts as its start day. */
+function clusterDayCount(c: DetectedCluster): number {
+  if (!c.end_date || c.end_date === c.start_date) return 1;
+  const ms = parseDateString(c.end_date).getTime() - parseDateString(c.start_date).getTime();
+  return Math.max(1, Math.round(ms / 86_400_000) + 1);
+}
+
+function buildRareDayGroups(events: RareEvent[], volatilityClusters: DetectedCluster[]): RareDayGroup[] {
+  const byDomain = new Map<string, RareDayEntry[]>();
+  const push = (domain: string, entry: RareDayEntry) => {
+    const list = byDomain.get(domain);
+    if (list) list.push(entry);
+    else byDomain.set(domain, [entry]);
+  };
+
+  // Volatility: all of a domain's clusters collapse into a single entry, so
+  // four separate swings read as "volatility recorded on 4 days".
+  const volatilityByDomain = new Map<string, DetectedCluster[]>();
+  volatilityClusters.forEach(c => {
+    const domain = (c.domains_involved ?? [])[0] ?? CROSS_DOMAIN;
+    const list = volatilityByDomain.get(domain);
+    if (list) list.push(c);
+    else volatilityByDomain.set(domain, [c]);
+  });
+  volatilityByDomain.forEach((clusters, domain) => {
+    push(domain, {
+      key: `volatility:${domain}`,
+      kind: 'volatility',
+      count: clusters.reduce((sum, c) => sum + clusterDayCount(c), 0),
+      unit: 'days',
+      occurrences: clusters
+        .slice()
+        .sort((a, b) => b.start_date.localeCompare(a.start_date))
+        .map(c => ({ when: formatRange(c), note: 'Swung more than usual within the day' })),
+    });
+  });
+
+  events.forEach((e, i) => {
+    const dates = e.occurrence_dates.slice().sort((a, b) => b.localeCompare(a));
+    const occurrences: RareDayOccurrence[] = dates.map(d => ({ when: fmtDate(d) }));
+    // consequence_pattern is one statement about the event as a whole, not
+    // about any single occurrence, so it rides on the first row.
+    if (e.consequence_pattern && occurrences.length > 0) occurrences[0].note = e.consequence_pattern;
+
+    if (e.event_type === 'consecutive_poor_sleep') {
+      push('sleep', {
+        key: `sleep-run:${i}`,
+        kind: 'three or more poor nights in a row',
+        count: e.frequency,
+        unit: 'times',
+        occurrences: occurrences.map(o => ({ ...o, note: o.note ?? 'Run started this day' })),
+      });
+      return;
+    }
+
+    if (e.event_type === 'extreme_spike') {
+      const domain = e.affected_domains[0] ?? CROSS_DOMAIN;
+      push(domain, {
+        key: `spike:${domain}:${i}`,
+        kind: 'a reading three or more points from your baseline',
+        count: e.frequency,
+        unit: 'days',
+        occurrences,
+      });
+      return;
+    }
+
+    const kind =
+      e.event_type === 'all_elevated' ? 'every tracked domain elevated at once'
+      : e.event_type === 'all_suppressed' ? 'every tracked domain suppressed at once'
+      : 'three or more domains dropping within 48 hours';
+    push(CROSS_DOMAIN, { key: `${e.event_type}:${i}`, kind, count: e.frequency, unit: 'days', occurrences });
+  });
+
+  const groups: RareDayGroup[] = [];
+  byDomain.forEach((entries, domain) => {
+    groups.push({
+      domain,
+      label: domain === CROSS_DOMAIN ? 'Across your domains' : domainLabel(domain),
+      entries,
+      total: entries.reduce((sum, e) => sum + e.count, 0),
+    });
+  });
+
+  // Busiest domain first; the cross-domain group is not about any one domain,
+  // so it sits at the end regardless of size.
+  return groups.sort((a, b) => {
+    if (a.domain === CROSS_DOMAIN) return 1;
+    if (b.domain === CROSS_DOMAIN) return -1;
+    return b.total - a.total || a.label.localeCompare(b.label);
+  });
+}
+
+/** "Volatility recorded on 4 days" / "Three or more poor nights in a row recorded 2 times". */
+function describeRareDayEntry(e: RareDayEntry): string {
+  const noun = e.unit === 'days'
+    ? `on ${e.count} day${e.count === 1 ? '' : 's'}`
+    : `${e.count} time${e.count === 1 ? '' : 's'}`;
+  const sentence = `${e.kind} recorded ${noun}`;
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+}
+
+function RareDayGroupCard({ group }: { group: RareDayGroup }) {
+  const { profile } = useAuth();
+  const [open, setOpen] = useState(false);
+  const color = group.domain === CROSS_DOMAIN ? '#8892a4' : getDomainColorFromProfile(group.domain, profile);
+
+  return (
+    <View style={styles.smallCard}>
+      <Pressable
+        onPress={() => setOpen(o => !o)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        style={({ pressed }) => [styles.rareGroupHeader, pressed && styles.pressed]}>
+        <View style={styles.rareGroupHeading}>
+          <Text style={[styles.smallCardTitle, { color }]}>{group.label}</Text>
+          {group.entries.map(e => (
+            <Text key={e.key} style={styles.smallCardBody}>{describeRareDayEntry(e)}</Text>
+          ))}
+        </View>
+        <Text style={styles.collapsibleChevron}>{open ? '⌃' : '⌄'}</Text>
+      </Pressable>
+
+      {open && (
+        <View style={styles.rareGroupDetail}>
+          {group.entries.map(e => (
+            <View key={e.key} style={styles.rareEntryDetail}>
+              {group.entries.length > 1 && (
+                <Text style={[styles.smallCardBody, styles.rareEntryKind]}>{e.kind}</Text>
+              )}
+              {e.occurrences.map((o, i) => (
+                <View key={`${e.key}:${i}`} style={styles.rareOccurrence}>
+                  <View style={[styles.rareOccurrenceDot, { backgroundColor: color }]} />
+                  <View style={styles.rareOccurrenceText}>
+                    <Text style={styles.smallCardBody}>{o.when}</Text>
+                    {o.note && <Text style={[styles.smallCardBody, styles.smallCardSubtext]}>{o.note}</Text>}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function RareEventsSection({ events, volatilityClusters }: {
   events: RareEvent[];
   volatilityClusters: DetectedCluster[];
 }) {
-  if (events.length === 0 && volatilityClusters.length === 0) return null;
+  const groups = useMemo(
+    () => buildRareDayGroups(events, volatilityClusters),
+    [events, volatilityClusters],
+  );
+  if (groups.length === 0) return null;
   return (
-    <CollapsibleSection label="Rare days" count={events.length + volatilityClusters.length}>
-        {volatilityClusters.map(c => (
-          <View key={c.id} style={styles.smallCard}>
-            <Text style={styles.smallCardBody}>
-              {domainLabel((c.domains_involved ?? [])[0] ?? '')} swung more than usual within the day
-            </Text>
-            <Text style={[styles.smallCardBody, styles.smallCardSubtext]}>{formatRange(c)}</Text>
-          </View>
-        ))}
-        {events.map((e, i) => (
-          <View key={i} style={styles.smallCard}>
-            <Text style={styles.smallCardBody}>{e.clinical_note}</Text>
-            {e.consequence_pattern && <Text style={[styles.smallCardBody, styles.smallCardSubtext]}>{e.consequence_pattern}</Text>}
-          </View>
-        ))}
+    <CollapsibleSection label="Rare days" count={groups.length}>
+      {groups.map(g => <RareDayGroupCard key={g.domain} group={g} />)}
     </CollapsibleSection>
   );
 }
@@ -922,6 +1097,15 @@ const styles = StyleSheet.create({
   smallCardTitle: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   smallCardBody: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
   smallCardSubtext: { marginTop: 4, color: '#6b7690', fontStyle: 'italic' },
+  rareGroupHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  rareGroupHeading: { flex: 1 },
+  rareGroupDetail: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#1e2533', gap: 12 },
+  rareEntryDetail: { gap: 6 },
+  rareEntryKind: { color: '#a8b2c4' },
+  rareOccurrence: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  // Nudged down to sit on the first line's optical centre rather than its top.
+  rareOccurrenceDot: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
+  rareOccurrenceText: { flex: 1 },
   pressed: { opacity: 0.7 },
   standoutList: { gap: 10 },
   standoutSentence: { fontSize: 15, color: '#e2e8f0', lineHeight: 23 },

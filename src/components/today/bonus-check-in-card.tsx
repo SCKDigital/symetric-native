@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import DomainSlider from '@/components/checkin/domain-slider';
+import EditCheckInModal from '@/components/checkin/edit-check-in-modal';
 import { useAuth } from '@/contexts/auth-context';
 import { trackCheckInCompleted } from '@/lib/analytics';
 import { RESCUE_WINDOW_MS } from '@/lib/constants';
 import { DOMAIN_COPY, getDomainColorFromProfile } from '@/lib/domains';
-import { DomainType, supabase } from '@/lib/supabase';
+import { getMinutesRemaining, isWithinEditWindow } from '@/lib/edit-window';
+import { CheckIn, DomainType, supabase } from '@/lib/supabase';
 
 // Port of the web app's QuickMoodCard.tsx — the "Log a bonus mind check-in"
 // row at the foot of Today, and the slider sheet behind it. Unlike a scheduled
@@ -36,10 +38,12 @@ function formatTimeRemaining(ms: number): string {
 
 interface Props {
   activeDomains?: DomainType[];
+  /** Only forwarded to the edit modal, which shows each domain's baseline. */
+  baselines?: Record<DomainType, number>;
   onLogged?: () => void;
 }
 
-export default function BonusCheckInCard({ activeDomains, onLogged }: Props) {
+export default function BonusCheckInCard({ activeDomains, baselines, onLogged }: Props) {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -51,6 +55,16 @@ export default function BonusCheckInCard({ activeDomains, onLogged }: Props) {
   const [error, setError] = useState('');
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
+  // The last bonus check-in, so it can be corrected for ten minutes the way a
+  // scheduled one can. Held here rather than coming from useTodayCheckIns
+  // because Today's list is filtered on scheduled_date, and a bonus row is
+  // inserted without one — deliberately, so an extra log doesn't inflate the
+  // day's "2 of 4" progress. That does mean this is the only place it can be
+  // reached from.
+  const [lastBonus, setLastBonus] = useState<CheckIn | null>(null);
+  const [editing, setEditing] = useState(false);
+  // Drives the countdown and, at zero, retires the edit affordance.
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const domains: DomainType[] = activeDomains && activeDomains.length > 0 ? activeDomains : ['mood'];
 
@@ -73,6 +87,37 @@ export default function BonusCheckInCard({ activeDomains, onLogged }: Props) {
     });
     return () => { cancelled = true; };
   }, [user]);
+
+  // A bonus logged just before the app was backgrounded should still be
+  // correctable on return, so the row is fetched rather than only remembered
+  // from this session's own insert. Identified by what makes it a bonus:
+  // completed, with no scheduled_date.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    supabase
+      .from('check_ins')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'completed')
+      .is('scheduled_date', null)
+      .order('completed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const row = data as CheckIn;
+        if (row.completed_at && isWithinEditWindow(row.completed_at)) setLastBonus(row);
+      });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  // Only ticks while there is something to count down.
+  useEffect(() => {
+    if (!lastBonus?.completed_at) return;
+    const id = setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [lastBonus?.completed_at]);
 
   useEffect(() => {
     if (cooldownUntil === null) return;
@@ -114,7 +159,10 @@ export default function BonusCheckInCard({ activeDomains, onLogged }: Props) {
     };
     for (const d of domains) payload[d] = values[d] ?? 5;
 
-    const { error: insertError } = await supabase.from('check_ins').insert(payload);
+    // The inserted row comes back so it can be handed straight to the edit
+    // modal — a bonus check-in is not in Today's list to be found again.
+    const { data: inserted, error: insertError } = await supabase
+      .from('check_ins').insert(payload).select().single();
     setSaving(false);
 
     if (insertError) {
@@ -123,6 +171,8 @@ export default function BonusCheckInCard({ activeDomains, onLogged }: Props) {
       return;
     }
 
+    setLastBonus((inserted as CheckIn | null) ?? null);
+    setNowMs(Date.now());
     trackCheckInCompleted(domains.length);
 
     const until = Date.now() + COOLDOWN_MS;
@@ -139,6 +189,9 @@ export default function BonusCheckInCard({ activeDomains, onLogged }: Props) {
   };
 
   if (loading) return null;
+
+  const bonusCompletedAt = lastBonus?.completed_at ?? null;
+  const bonusEditable = bonusCompletedAt !== null && isWithinEditWindow(bonusCompletedAt, nowMs);
 
   return (
     <>
@@ -160,6 +213,31 @@ export default function BonusCheckInCard({ activeDomains, onLogged }: Props) {
           <Text style={styles.triggerPlus}>+</Text>
         )}
       </Pressable>
+
+      {bonusEditable && bonusCompletedAt && (
+        <Pressable
+          onPress={() => setEditing(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit last bonus check-in, ${getMinutesRemaining(bonusCompletedAt, nowMs)} minutes remaining`}
+          style={({ pressed }) => [styles.editRow, pressed && styles.pressed]}>
+          <Text style={styles.editRowText}>Edit last bonus check-in</Text>
+          <Text style={styles.editRowMeta}>{getMinutesRemaining(bonusCompletedAt, nowMs)} min remaining</Text>
+        </Pressable>
+      )}
+
+      {editing && lastBonus && (
+        <EditCheckInModal
+          checkIn={lastBonus}
+          activeDomains={domains}
+          baselines={baselines ?? ({} as Record<DomainType, number>)}
+          onClose={() => setEditing(false)}
+          onSaved={updated => {
+            setLastBonus(updated);
+            setEditing(false);
+            onLogged?.();
+          }}
+        />
+      )}
 
       <Modal visible={modalOpen} animationType="slide" onRequestClose={() => setModalOpen(false)}>
         <View style={styles.sheet}>
@@ -221,6 +299,14 @@ const styles = StyleSheet.create({
   triggerMeta: { fontSize: 12, color: '#9aabb8' },
   triggerSaved: { fontSize: 12, color: '#818cf8' },
   triggerPlus: { fontSize: 18, color: '#64748b', lineHeight: 20 },
+
+  editRow: {
+    borderWidth: 1, borderColor: '#1e2533', borderRadius: 12,
+    paddingVertical: 12, paddingHorizontal: 16, marginTop: -4, marginBottom: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  editRowText: { fontSize: 14, color: '#818cf8' },
+  editRowMeta: { fontSize: 12, color: '#6b7690' },
 
   sheet: { flex: 1, backgroundColor: '#0a0c12' },
   sheetContent: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 60, gap: 8 },
