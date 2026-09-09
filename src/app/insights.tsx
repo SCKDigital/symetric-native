@@ -280,10 +280,21 @@ function LagRelationshipSection({ findings }: { findings: PatternFinding[] }) {
   );
 }
 
-function RareEventsSection({ events }: { events: RareEvent[] }) {
-  if (events.length === 0) return null;
+function RareEventsSection({ events, volatilityClusters }: {
+  events: RareEvent[];
+  volatilityClusters: DetectedCluster[];
+}) {
+  if (events.length === 0 && volatilityClusters.length === 0) return null;
   return (
-    <CollapsibleSection label="Rare days" count={events.length}>
+    <CollapsibleSection label="Rare days" count={events.length + volatilityClusters.length}>
+        {volatilityClusters.map(c => (
+          <View key={c.id} style={styles.smallCard}>
+            <Text style={styles.smallCardBody}>
+              {domainLabel((c.domains_involved ?? [])[0] ?? '')} swung more than usual within the day
+            </Text>
+            <Text style={[styles.smallCardBody, styles.smallCardSubtext]}>{formatRange(c)}</Text>
+          </View>
+        ))}
         {events.map((e, i) => (
           <View key={i} style={styles.smallCard}>
             <Text style={styles.smallCardBody}>{e.clinical_note}</Text>
@@ -362,10 +373,30 @@ function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
  *  contradict the range they picked. Under this, the sections are empty. */
 const MIN_RANGE_FOR_WINDOWED_DETECTORS = 30;
 
+/** The range-independent half of the Insights fetch, cached per user so
+ *  changing the range costs no network. */
+interface InsightsFetchBundle {
+  /** Rows come back with the joined context_tags and sort_weight, which the
+   *  DetectedCluster type doesn't carry — kept loose here and narrowed at use. */
+  clusterData: (DetectedCluster & { sort_weight?: number })[];
+  circadianData: CircadianPattern[];
+  checkIns90d: CheckIn[] | null;
+  sleepLogs90d: SleepLog[] | null;
+  settings: { active_domains?: DomainType[] | null; quick_checkin_domains?: DomainType[] | null; time_format?: string | null } | null;
+  baselines: Baseline[] | null;
+  markersData: InterventionMarker[];
+  tagData: ContextTag[] | null;
+  bodyCheckIns90dRaw: Record<string, unknown>[] | null;
+  bodyEvents90dRaw: { event_date: string; event_type: string }[] | null;
+  domainConnectionsData: BodyMindConnectionRow[] | null;
+}
+
 export default function InsightsScreen() {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const hasLoadedOnce = useRef(false);
+  // Range-independent query results, cached per user — see the note in load().
+  const fetchCache = useRef<{ userId: string; data: InsightsFetchBundle } | null>(null);
   const [range, setRange] = useState<RangeDays>(30);
   const [clusters, setClusters] = useState<DetectedCluster[]>([]);
   const [circadianPatterns, setCircadianPatterns] = useState<CircadianPattern[]>([]);
@@ -409,11 +440,6 @@ export default function InsightsScreen() {
     setLoading(prev => prev || !hasLoadedOnce.current);
 
     const to = new Date().toLocaleDateString('en-CA');
-    const from30 = (() => {
-      const d = new Date();
-      d.setDate(d.getDate() - 30);
-      return d.toLocaleDateString('en-CA');
-    })();
     const fromRange = (() => {
       const d = new Date();
       d.setDate(d.getDate() - range + 1);
@@ -425,39 +451,49 @@ export default function InsightsScreen() {
 
     const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
 
-    const [
-      clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines },
-      { data: rangeCheckIns }, { data: rangeSleepLogs }, markersData, { data: tagData },
-      { data: bodyCheckIns90dRaw }, { data: bodyEvents90dRaw },
-      { data: bodyCheckInsRangeRaw }, { data: bodyEventsRangeRaw },
-      { data: domainConnectionsData },
-    ] = await Promise.all([
-      fetchClustersForDateRange(user.id, from30, to),
-      fetchCircadianPatterns(user.id, from30),
-      supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
-      supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', from90).lte('log_date', to).order('log_date', { ascending: true }),
-      supabase.from('check_in_settings').select('active_domains, quick_checkin_domains, time_format').eq('user_id', user.id).maybeSingle(),
-      supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true),
-      supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', `${fromRange}T00:00:00`).order('scheduled_at', { ascending: true }),
-      supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', fromRange).lte('log_date', to).order('log_date', { ascending: true }),
-      fetchMarkersInRange(from90, to).catch(() => [] as InterventionMarker[]),
-      supabase.from('context_tags').select('*').eq('user_id', user.id),
-      bodyTrackingEnabled
-        ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', from90).lte('entry_date', to).order('entry_date', { ascending: true })
-        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
-      bodyTrackingEnabled
-        ? supabase.from('body_events').select('*').eq('user_id', user.id).gte('event_date', from90).lte('event_date', to)
-        : Promise.resolve({ data: [] as { event_date: string; event_type: string }[] }),
-      bodyTrackingEnabled
-        ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', fromRange).lte('entry_date', to)
-        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
-      bodyTrackingEnabled
-        ? supabase.from('body_events').select('*').eq('user_id', user.id).gte('event_date', fromRange).lte('event_date', to)
-        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
-      bodyTrackingEnabled
-        ? supabase.from('domain_connections').select('*').eq('user_id', user.id).gte('window_end', from90).order('strength', { ascending: false })
-        : Promise.resolve({ data: [] as BodyMindConnectionRow[] }),
-    ]);
+    // Everything below covers a fixed 90 days and doesn't depend on the range,
+    // so it's fetched once per user and reused. Changing the range used to
+    // re-run all fifteen queries and wait on them before redrawing, which is
+    // what made switching range feel broken: the dropdown label updated
+    // immediately while the numbers under it were still the old range's.
+    if (fetchCache.current?.userId !== user.id) {
+      const [
+        clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines },
+        markersData, { data: tagData },
+        { data: bodyCheckIns90dRaw }, { data: bodyEvents90dRaw },
+        { data: domainConnectionsData },
+      ] = await Promise.all([
+        fetchClustersForDateRange(user.id, from90, to),
+        fetchCircadianPatterns(user.id, from90),
+        supabase.from('check_ins').select('*').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
+        supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', from90).lte('log_date', to).order('log_date', { ascending: true }),
+        supabase.from('check_in_settings').select('active_domains, quick_checkin_domains, time_format').eq('user_id', user.id).maybeSingle(),
+        supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true),
+        fetchMarkersInRange(from90, to).catch(() => [] as InterventionMarker[]),
+        supabase.from('context_tags').select('*').eq('user_id', user.id),
+        bodyTrackingEnabled
+          ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', from90).lte('entry_date', to).order('entry_date', { ascending: true })
+          : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+        bodyTrackingEnabled
+          ? supabase.from('body_events').select('*').eq('user_id', user.id).gte('event_date', from90).lte('event_date', to)
+          : Promise.resolve({ data: [] as { event_date: string; event_type: string }[] }),
+        bodyTrackingEnabled
+          ? supabase.from('domain_connections').select('*').eq('user_id', user.id).gte('window_end', from90).order('strength', { ascending: false })
+          : Promise.resolve({ data: [] as BodyMindConnectionRow[] }),
+      ]);
+      fetchCache.current = {
+        userId: user.id,
+        data: {
+          clusterData, circadianData, checkIns90d, sleepLogs90d, settings, baselines,
+          markersData, tagData, bodyCheckIns90dRaw, bodyEvents90dRaw, domainConnectionsData,
+        } as InsightsFetchBundle,
+      };
+    }
+
+    const {
+      clusterData, circadianData, checkIns90d, sleepLogs90d, settings, baselines,
+      markersData, tagData, bodyCheckIns90dRaw, bodyEvents90dRaw, domainConnectionsData,
+    } = fetchCache.current.data;
 
     const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
     setClusters(sorted as DetectedCluster[]);
@@ -587,7 +623,14 @@ export default function InsightsScreen() {
     // correlation coefficient.
     setSleepConnections(await fetchLatestSleepConnections(user.id, fromRange).catch(() => []));
 
-    const bodySummary = computeBodySummaries(bodyCheckInsRangeRaw ?? [], bodyEventsRangeRaw ?? []);
+    // Derived, not fetched: every range is 90 days or less, so the range rows
+    // are always a subset of what's already in memory. This used to be four
+    // more queries, re-run on every range change.
+    const bodyCheckInsRangeRaw = ((bodyCheckIns90dRaw ?? []) as Record<string, unknown>[])
+      .filter(r => (r.entry_date as string) >= fromRange);
+    const bodyEventsRangeRaw = ((bodyEvents90dRaw ?? []) as { event_date: string; event_type: string }[])
+      .filter(r => r.event_date >= fromRange);
+    const bodySummary = computeBodySummaries(bodyCheckInsRangeRaw, bodyEventsRangeRaw);
     setBodyDomains(bodySummary.domains);
     setBodyEvents(bodySummary.events);
     setBodyDaysLogged(bodySummary.daysLogged);
@@ -605,10 +648,14 @@ export default function InsightsScreen() {
     const daysSinceMostRecent = mostRecentUnread ? Math.round((Date.now() - parseDateString(mostRecentUnread.marker_date).getTime()) / 86400000) : null;
     setTooRecentLabel(impacts.length === 0 && mostRecentUnread ? `${mostRecentUnread.label} was ${daysSinceMostRecent} day${daysSinceMostRecent !== 1 ? 's' : ''} ago, too early to read` : null);
 
-    const daysRange = buildDayScores(rangeCheckIns as CheckIn[] | null, rangeSleepLogs as SleepLog[] | null);
-    setRangeStats({ from: fromRange, to, checkInCount: rangeCheckIns?.length ?? 0, daysWithCheckIn: daysRange.length });
+    const rangeCheckIns = ((checkIns90d ?? []) as CheckIn[])
+      .filter(c => new Date(c.scheduled_at).toLocaleDateString('en-CA') >= fromRange);
+    const rangeSleepLogs = ((sleepLogs90d ?? []) as SleepLog[])
+      .filter(l => l.log_date >= fromRange);
+    const daysRange = buildDayScores(rangeCheckIns, rangeSleepLogs);
+    setRangeStats({ from: fromRange, to, checkInCount: rangeCheckIns.length, daysWithCheckIn: daysRange.length });
     setDays(daysRange);
-    setRangeCheckInRows((rangeCheckIns as CheckIn[] | null) ?? []);
+    setRangeCheckInRows(rangeCheckIns);
 
     const sleepDaysList = daysRange.filter(d => d.scores['sleep'] !== undefined);
     setAvgSleepScore(sleepDaysList.length > 0 ? sleepDaysList.reduce((s, d) => s + d.scores['sleep']!, 0) / sleepDaysList.length : null);
@@ -659,6 +706,13 @@ export default function InsightsScreen() {
       </SafeAreaView>
     );
   }
+
+  // A volatility spike is a single day that moved a lot — an event, not a
+  // pattern. Left in Patterns they crowded out the sustained deviations and
+  // rapid cycling that section exists to surface, often several for the same
+  // domain. They read as what they are alongside the other rare days.
+  const volatilityClusters = clusters.filter(c => c.cluster_type === 'intraday_volatility');
+  const patternClusters = clusters.filter(c => c.cluster_type !== 'intraday_volatility');
 
   const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0
     && lagRelationships.length === 0 && rareEvents.length === 0 && interventionImpacts.length === 0
@@ -779,7 +833,7 @@ export default function InsightsScreen() {
       <FlatList
         // Collapsed like every other detail section. It's the list's own data
         // rather than a child, so the toggle empties it instead of hiding it.
-        data={patternsOpen ? clusters : []}
+        data={patternsOpen ? patternClusters : []}
         keyExtractor={c => c.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
@@ -792,9 +846,9 @@ export default function InsightsScreen() {
             <CircadianSection patterns={circadianPatterns} />
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
             <LagRelationshipSection findings={allLagFindings} />
-            <RareEventsSection events={rareEvents} />
+            <RareEventsSection events={rareEvents} volatilityClusters={volatilityClusters} />
             <MedicationSection impacts={interventionImpacts} />
-            {clusters.length > 0 && (
+            {patternClusters.length > 0 && (
               <Pressable
                 onPress={() => setPatternsOpen(o => !o)}
                 accessibilityRole="button"
@@ -802,7 +856,7 @@ export default function InsightsScreen() {
                 style={({ pressed }) => [styles.collapsibleHeader, pressed && styles.pressed]}>
                 <Text style={styles.sectionLabel}>Patterns</Text>
                 <View style={styles.collapsibleMeta}>
-                  <Text style={styles.collapsibleCount}>{clusters.length}</Text>
+                  <Text style={styles.collapsibleCount}>{patternClusters.length}</Text>
                   <Text style={styles.collapsibleChevron}>{patternsOpen ? '⌃' : '⌄'}</Text>
                 </View>
               </Pressable>
