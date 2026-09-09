@@ -23,9 +23,12 @@ interface DomainSliderProps {
   note?: string;
   /** False before the user has interacted — shows the value as an unset resting position. */
   touched?: boolean;
-  /** Fired as a drag starts/ends. Parents that put sliders inside a ScrollView
-   *  use these to disable scrolling for the duration — see the note on
-   *  `slider` in the styles below for why that's necessary. */
+  /** Fired on touch down/up over the track, NOT on slide start. Parents that
+   *  put sliders inside a ScrollView use these to lock scrolling for the
+   *  duration. It has to be touch-based: onSlidingStart only fires once the
+   *  slider has already won the gesture, so hooking that did nothing to stop
+   *  the ScrollView claiming it first — which made the sliders harder to use,
+   *  not easier. */
   onSlidingStart?: () => void;
   onSlidingComplete?: () => void;
 }
@@ -67,7 +70,11 @@ export default function DomainSlider({
         <Text style={[styles.value, !touched && styles.valueUntouched]}>{touched ? value : 'Not yet rated'}</Text>
       </View>
 
-      <View style={styles.trackWrap}>
+      <View
+        style={styles.trackWrap}
+        onTouchStart={onSlidingStart}
+        onTouchEnd={onSlidingComplete}
+        onTouchCancel={onSlidingComplete}>
         <View style={styles.trackBg} pointerEvents="none">
           {touched ? (
             <LinearGradient
@@ -92,8 +99,6 @@ export default function DomainSlider({
           step={1}
           value={value}
           onValueChange={onChange}
-          onSlidingStart={onSlidingStart}
-          onSlidingComplete={onSlidingComplete}
           tapToSeek
           minimumTrackTintColor="transparent"
           maximumTrackTintColor="transparent"
@@ -124,7 +129,10 @@ const styles = StyleSheet.create({
   root: {},
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   headerLabels: { flex: 1 },
-  label: { fontSize: 14, color: '#cbd5e0', fontWeight: '400', textTransform: 'capitalize' },
+  // No textTransform: the labels are authored with their own capitalisation
+  // ('End of day exhaustion', 'Joint & muscle pain'), and 'capitalize' turned
+  // those into 'End Of Day Exhaustion'.
+  label: { fontSize: 14, color: '#cbd5e0', fontWeight: '400' },
   hint: { fontSize: 12, color: '#6b7690', marginTop: 2, lineHeight: 17 },
   value: { fontSize: 13, color: '#6366f1', fontFamily: 'DM Mono', fontWeight: '500' },
   valueUntouched: { fontSize: 11.5, color: '#6b7690', fontStyle: 'italic' },

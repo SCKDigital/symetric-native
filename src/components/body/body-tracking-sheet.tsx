@@ -138,7 +138,7 @@ export default function BodyTrackingSheet({
               <View style={styles.morningTextWrap}>
                 <Text style={styles.morningTitle}>Morning check-in</Text>
                 <Text style={styles.morningSubtitle}>
-                  Optional and short: three scores (fatigue, pain, standing up) to catch how the day started, kept separate from tonight’s numbers.
+                  Optional and short: three scores (fatigue, pain, dizziness) to catch how the day started, kept separate from tonight’s numbers.
                 </Text>
               </View>
               <Switch value={morningEnabled} onValueChange={setMorningEnabled} trackColor={{ true: CHROME_COLOR }} />

@@ -120,7 +120,7 @@ export function MorningBodyCheckInCard() {
       <View style={styles.morningCard}>
         <View style={styles.morningText}>
           <Text style={styles.morningLabel}>Morning check-in</Text>
-          <Text style={styles.morningSub}>Fatigue, pain, and standing up, before the day starts</Text>
+          <Text style={styles.morningSub}>Fatigue, pain, and dizziness, before the day starts</Text>
         </View>
         <View style={styles.morningActions}>
           <Pressable onPress={() => setOpen(true)} style={({ pressed }) => [styles.morningButton, pressed && styles.pressed]}>

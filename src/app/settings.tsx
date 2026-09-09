@@ -380,7 +380,7 @@ export default function SettingsScreen() {
               <RowDivider />
               <SettingsRow
                 icon={<BellIcon />} label="Morning check-in"
-                subtitle="Optional: fatigue, pain, and standing up, before the day starts"
+                subtitle="Optional: fatigue, pain, and dizziness, before the day starts"
                 right={<Toggle value={bodyMorningEnabled} onValueChange={() => toggleProfileField('body_morning_enabled', bodyMorningEnabled, setBodyMorningEnabled)} />}
               />
               {bodyMorningEnabled && (

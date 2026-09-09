@@ -81,13 +81,6 @@ function formatDayOfWeekPattern(p: DayOfWeekPattern): string {
   return `${label} tends to be ${dir} on ${p.dayName}s`;
 }
 
-function formatLagRelationship(r: LagRelationship): string {
-  const predictorLabel = domainLabel(r.predictor);
-  const outcomeLabel = domainLabel(r.outcome);
-  const relation = r.direction === 'positive' ? 'tends to come with' : 'tends to come with the opposite of';
-  const dayWord = r.lagDays === 1 ? 'the next day' : `${r.lagDays} days later`;
-  return `Higher ${predictorLabel.toLowerCase()} ${relation} ${outcomeLabel.toLowerCase()} ${dayWord}`;
-}
 
 function fmtDate(dateStr: string): string {
   return parseDateString(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -269,13 +262,18 @@ function DayOfWeekSection({ patterns }: { patterns: DayOfWeekPattern[] }) {
   );
 }
 
-function LagRelationshipSection({ relationships }: { relationships: LagRelationship[] }) {
-  if (relationships.length === 0) return null;
+// Takes findings rather than raw relationships: lagRelationshipFindings
+// already builds the sentence with sentenceHighlights, so the domain names
+// pick up their own colours here the way they do in "What stands out".
+function LagRelationshipSection({ findings }: { findings: PatternFinding[] }) {
+  if (findings.length === 0) return null;
   return (
-    <CollapsibleSection label="What tends to follow what" count={relationships.length}>
-        {relationships.map((r, i) => (
-          <View key={i} style={styles.smallCard}>
-            <Text style={styles.smallCardBody}>{formatLagRelationship(r)}</Text>
+    <CollapsibleSection label="What tends to follow what" count={findings.length}>
+        {findings.map(f => (
+          <View key={f.id} style={styles.smallCard}>
+            <Text style={styles.smallCardBody}>
+              <HighlightedSentence sentence={f.sentence} highlights={f.sentenceHighlights} />
+            </Text>
           </View>
         ))}
     </CollapsibleSection>
@@ -400,6 +398,7 @@ export default function InsightsScreen() {
   const [timeFormat, setTimeFormat] = useState<'12hr' | '24hr'>('12hr');
   const [baselineMap, setBaselineMap] = useState<Partial<Record<DomainType, number>>>({});
   const [viewingCluster, setViewingCluster] = useState<DetectedCluster | null>(null);
+  const [patternsOpen, setPatternsOpen] = useState(false);
   const [viewingVolatilityGroup, setViewingVolatilityGroup] = useState<VolatilityGroup | null>(null);
 
   const load = useCallback(async () => {
@@ -778,7 +777,9 @@ export default function InsightsScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <FlatList
-        data={clusters}
+        // Collapsed like every other detail section. It's the list's own data
+        // rather than a child, so the toggle empties it instead of hiding it.
+        data={patternsOpen ? clusters : []}
         keyExtractor={c => c.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
@@ -790,10 +791,22 @@ export default function InsightsScreen() {
             <AreaIndex rows={areaRows} onSelect={setActiveArea} />
             <CircadianSection patterns={circadianPatterns} />
             <DayOfWeekSection patterns={dayOfWeekPatterns} />
-            <LagRelationshipSection relationships={lagRelationships} />
+            <LagRelationshipSection findings={allLagFindings} />
             <RareEventsSection events={rareEvents} />
             <MedicationSection impacts={interventionImpacts} />
-            {clusters.length > 0 && <Text style={styles.sectionLabel}>Patterns</Text>}
+            {clusters.length > 0 && (
+              <Pressable
+                onPress={() => setPatternsOpen(o => !o)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: patternsOpen }}
+                style={({ pressed }) => [styles.collapsibleHeader, pressed && styles.pressed]}>
+                <Text style={styles.sectionLabel}>Patterns</Text>
+                <View style={styles.collapsibleMeta}>
+                  <Text style={styles.collapsibleCount}>{clusters.length}</Text>
+                  <Text style={styles.collapsibleChevron}>{patternsOpen ? '⌃' : '⌄'}</Text>
+                </View>
+              </Pressable>
+            )}
           </>
         }
         renderItem={({ item }) => {

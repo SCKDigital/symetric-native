@@ -106,7 +106,7 @@ export const BODY_DOMAINS: Record<BodyDomainType, BodyDomainConfig> = {
   },
   orthostatic: {
     key: 'orthostatic',
-    label: 'Standing up',
+    label: 'Dizziness',
     hint: 'Lightheaded, heart racing, greying out on standing.',
     lowAnchor: 'Fine',
     highAnchor: 'Rough',
