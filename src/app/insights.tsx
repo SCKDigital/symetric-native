@@ -13,7 +13,7 @@ import { ChevronDownIcon, ChevronRightIcon } from '@/components/shared/chevrons'
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { useAuth } from '@/contexts/auth-context';
 import { AreaRow, buildAreaRows } from '@/lib/area-rows';
-import { BODY_DOMAIN_ORDER, BODY_DOMAINS, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { BODY_DOMAIN_ORDER, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
 import { CircadianPattern, fetchCircadianPatterns, formatCircadianPattern } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { buildDayScores, DayScores, mergeDays } from '@/lib/day-scores';
@@ -28,13 +28,13 @@ import { detectInterventionImpacts, InterventionImpact } from '@/lib/detection/i
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
 import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
-import { DOMAIN_NAMES, getDomainColorFromProfile, resolveActiveDomains } from '@/lib/domains';
+import { getDomainColorFromProfile, resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
 import { type SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import {
   Area, BodyMindConnectionRow, PatternFinding,
   bodyEventFrequencyFindings, bodyEventImpactFindings, bodyMindConnectionFindings, bodyTimeOfDayFindings,
-  clusterFindings, dayOfWeekFindings, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings, sleepConnectionFindings,
+  clusterFindings, dayOfWeekFindings, factorLabel, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings, sleepConnectionFindings,
 } from '@/lib/pattern-findings';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { computeBodySummaries } from '@/lib/report/body-summary';
@@ -55,14 +55,13 @@ const CLUSTER_TYPE_LABEL: Record<string, string> = {
   baseline_shift: 'Baseline shift',
 };
 
-function domainLabel(domain: string): string {
-  if (domain === 'sleep') return 'Sleep';
-  // Body domains use BODY_DOMAINS' own label (e.g. "Joint & muscle pain"),
-  // not DOMAIN_NAMES — that set is deliberately mind-only wording (see its
-  // own header comment), never a dedup target for body domains.
-  if (domain in BODY_DOMAINS) return BODY_DOMAINS[domain as BodyDomainType].label;
-  return DOMAIN_NAMES[domain as DomainType] ?? domain;
-}
+// factorLabel, not a local copy. This used DOMAIN_NAMES for mind domains,
+// which is History's deliberately different wording ("Social battery"), while
+// every other label on this screen comes from DOMAIN_COPY via factorLabel
+// ("Social depletion") — so one screen called the same domain two things, and
+// the History wording is the one that reads as higher-is-better, contradicting
+// the polarity fix in lib/domain-polarity.ts.
+const domainLabel = factorLabel;
 
 function formatRange(cluster: DetectedCluster): string {
   const start = parseDateString(cluster.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -692,7 +691,16 @@ export default function InsightsScreen() {
       sleepConnections90d,
     } = fetchCache.current.data;
 
-    const sorted = [...clusterData].sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
+    // Scoped to the selected range. The fetch deliberately covers a fixed 90
+    // days so changing range doesn't re-query, but that made every cluster ever
+    // detected show up under "Last 30 days" — June patterns listed against a
+    // 13 Aug-11 Sept window. A cluster belongs to the range if it overlaps it;
+    // an ongoing one (no end_date) is judged on its start.
+    const inRangeCluster = (c: { start_date: string; end_date?: string | null }) =>
+      (c.end_date ?? c.start_date) >= fromRange && c.start_date <= to;
+    const sorted = [...clusterData]
+      .filter(inRangeCluster)
+      .sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
     setClusters(sorted as DetectedCluster[]);
     // Circadian rows are written by the scheduled detector over its own fixed
     // window, so they can't be recomputed per range like the others. Filtered

@@ -3,8 +3,9 @@ import Svg, { Polygon } from 'react-native-svg';
 
 import { useAuth } from '@/contexts/auth-context';
 import { formatShortDate, parseDateString } from '@/lib/date-utils';
-import { DOMAIN_COPY, DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
+import { DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
 import type { CheckIn, ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
+import { FACTOR_LABELS, factorLabel } from '@/lib/pattern-findings';
 
 // Ported from the web app's components/ClusterCard.tsx. Mechanic swap: the
 // web version hand-rolls a 500ms touch-hold timer (onTouchStart/End/Move)
@@ -159,8 +160,7 @@ export function ClusterCard({
     .slice(0, 3);
 
   const domainColor = getDomainColorFromProfile(cluster.domains_involved?.[0] ?? '', profile);
-  const domainLabels = Object.fromEntries(Object.entries(DOMAIN_COPY).map(([k, v]) => [k, v.label]));
-  const headingLabel = domainHeadingLabel(cluster.domains_involved ?? [], domainLabels);
+  const headingLabel = domainHeadingLabel(cluster.domains_involved ?? [], FACTOR_LABELS);
 
   return (
     <Pressable onPress={onToggle} onLongPress={onToggleFlag} style={[styles.card, { borderLeftColor: domainColor } as ViewStyle]}>
@@ -193,7 +193,7 @@ export function ClusterCard({
 
           {primaryStats && primaryDomain && (
             <View style={styles.primaryStatsBox}>
-              <Text style={[styles.primaryStatsLabel, { color: domainColor }]}>{DOMAIN_COPY[primaryDomain]?.label ?? primaryDomain}</Text>
+              <Text style={[styles.primaryStatsLabel, { color: domainColor }]}>{factorLabel(primaryDomain)}</Text>
               {cluster.cluster_type === 'intraday_volatility' ? (
                 intradayCheckIns.length >= 2 ? (
                   <View>
@@ -246,7 +246,7 @@ export function ClusterCard({
               <View style={{ gap: 4 }}>
                 {coOccurring.slice(0, 4).map(s => (
                   <Text key={s.domain} style={styles.coOccurringLine}>
-                    <Text style={{ color: getDomainColorFromProfile(s.domain, profile), fontWeight: '500' }}>{DOMAIN_COPY[s.domain]?.label ?? s.domain}</Text>
+                    <Text style={{ color: getDomainColorFromProfile(s.domain, profile), fontWeight: '500' }}>{factorLabel(s.domain)}</Text>
                     {' '}averaged <Text style={styles.coOccurringValue}>{s.average.toFixed(1)}</Text>
                     <Text style={styles.coOccurringMuted}> (baseline: {s.baseline})</Text>
                     {' '}- {Math.abs(s.deviation).toFixed(1)} pts {s.deviation < 0 ? 'lower' : 'higher'}

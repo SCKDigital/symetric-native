@@ -5,10 +5,11 @@ import Svg, { Path } from 'react-native-svg';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { formatShortDate, parseDateString } from '@/lib/date-utils';
-import { DOMAIN_COPY, DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
+import { DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
 import { supabase } from '@/lib/supabase';
 import type { ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
+import { FACTOR_LABELS, factorLabel } from '@/lib/pattern-findings';
 
 // Ported from the web app's components/insights/PatternDetailScreen.tsx —
 // chunk 3 (final) of the MindAreaDetail port. Self-contained: fetches its
@@ -48,7 +49,7 @@ function DomainStatCard({ domain, baselines, avgInCluster }: {
   return (
     <View style={styles.statCard}>
       <View style={styles.statCardHeader}>
-        <Text style={[styles.statCardDomain, { color: getDomainColorFromProfile(domain, profile) }]}>{DOMAIN_COPY[domain]?.label ?? domain}</Text>
+        <Text style={[styles.statCardDomain, { color: getDomainColorFromProfile(domain, profile) }]}>{factorLabel(domain)}</Text>
         <Text style={styles.statCardBaseline}>baseline {baseline}</Text>
       </View>
       {deviation !== null && deviationAbs !== null && dir && (
@@ -173,8 +174,7 @@ export default function PatternDetailScreen({
   const overallMin = volatilityDayBreakdown.length > 0 ? Math.min(...volatilityDayBreakdown.map(d => d.min)) : null;
   const overallMax = volatilityDayBreakdown.length > 0 ? Math.max(...volatilityDayBreakdown.map(d => d.max)) : null;
   const domainColor = getDomainColorFromProfile(primaryDomain ?? '', profile);
-  const domainLabels = Object.fromEntries(Object.entries(DOMAIN_COPY).map(([k, v]) => [k, v.label]));
-  const headingLabel = domainHeadingLabel(cluster.domains_involved ?? [], domainLabels);
+  const headingLabel = domainHeadingLabel(cluster.domains_involved ?? [], FACTOR_LABELS);
 
   const coAffected = DOMAIN_ORDER
     .filter(d => d !== primaryDomain && !cluster.domains_involved.includes(d))
@@ -327,7 +327,7 @@ export default function PatternDetailScreen({
               return <MetaRow label="Deviation from usual" value={`Averaged ${Math.abs(dev).toFixed(1)} pts ${dir} your usual`} />;
             })()}
             {coAffected.length > 0 && (
-              <MetaRow label="Domains also affected" value={coAffected.map(d => DOMAIN_COPY[d.domain]?.label ?? d.domain).join(', ')} />
+              <MetaRow label="Domains also affected" value={coAffected.map(d => factorLabel(d.domain)).join(', ')} />
             )}
           </View>
         </View>

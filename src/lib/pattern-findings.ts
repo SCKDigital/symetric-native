@@ -40,6 +40,18 @@ export function factorLabel(d: string): string {
   return DOMAIN_COPY[d as keyof typeof DOMAIN_COPY]?.label ?? d;
 }
 
+/**
+ * The same labels as factorLabel, as a lookup map, for APIs that take one
+ * (domainHeadingLabel). Callers were building this from DOMAIN_COPY alone,
+ * which is mind-only — so the heading on a body cluster's card read
+ * "pain_mechanical" rather than "Joint & muscle pain".
+ */
+export const FACTOR_LABELS: Record<string, string> = {
+  sleep: 'Sleep',
+  ...Object.fromEntries(Object.entries(DOMAIN_COPY).map(([k, v]) => [k, v.label])),
+  ...Object.fromEntries(Object.entries(BODY_DOMAINS).map(([k, v]) => [k, v.label])),
+};
+
 export type Grade = 'solid' | 'partial' | 'limited';
 export type Area = 'mind' | 'body' | 'sleep' | 'medication';
 

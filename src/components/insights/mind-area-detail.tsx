@@ -5,14 +5,14 @@ import Svg, { Circle, Line, Path, Polyline, Text as SvgText } from 'react-native
 import BackRow from '@/components/insights/back-row';
 import { ClusterCard } from '@/components/insights/cluster-card';
 import { useAuth } from '@/contexts/auth-context';
-import { clusterDurationDays } from '@/lib/pattern-findings';
+import { clusterDurationDays, factorLabel } from '@/lib/pattern-findings';
 import type { CircadianPattern } from '@/lib/circadian-detection';
 import { formatCircadianPattern } from '@/lib/circadian-detection';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
 import type { RareEvent } from '@/lib/detection/rare-events';
 import { formatShortDate } from '@/lib/date-utils';
-import { DOMAIN_COPY, getDomainColorFromProfile } from '@/lib/domains';
+import { getDomainColorFromProfile } from '@/lib/domains';
 import { aggregateVolatilityGroups, VolatilityGroup } from '@/lib/volatility-aggregation';
 import type { CheckIn, ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
 
@@ -123,7 +123,7 @@ function DomainCompactRow({ domain, days, baselines, isExpanded, onToggle }: {
   return (
     <View style={[styles.compactRow, { borderLeftColor: domainColor }]}>
       <Pressable onPress={onToggle} style={styles.compactRowHeader}>
-        <Text style={[styles.compactRowLabel, { color: domainColor }]}>{DOMAIN_COPY[domain]?.label ?? domain}</Text>
+        <Text style={[styles.compactRowLabel, { color: domainColor }]}>{factorLabel(domain)}</Text>
         <View style={styles.compactRowBar}>
           <View style={[styles.compactRowFill, { width: `${fillPct}%`, backgroundColor: domainColor }]} />
           <View style={[styles.compactRowBaselineTick, { left: `${baselinePct}%` }]} />
@@ -154,7 +154,7 @@ function HighDespitePoorSleepCard({ cluster, onView }: { cluster: DetectedCluste
   const start = fmt(cluster.start_date);
   const end = cluster.ongoing ? 'now' : cluster.end_date ? fmt(cluster.end_date) : start;
   const domain = cluster.domains_involved?.[0] as DomainType | undefined;
-  const domLabel = domain ? (DOMAIN_COPY[domain]?.label ?? domain) : 'Energy';
+  const domLabel = domain ? factorLabel(domain) : 'Energy';
   const domainColor = getDomainColorFromProfile(domain ?? '', profile);
 
   return (
@@ -180,8 +180,8 @@ function LagRelationshipCard({ rel }: { rel: LagRelationship }) {
   const instanceNote = `detected in ${rel.instanceCount} of ${rel.totalPairs} instances`;
   const predColor = getDomainColorFromProfile(rel.predictor, profile);
   const outColor = getDomainColorFromProfile(rel.outcome, profile);
-  const predDisplay = rel.predictor === 'sleep' ? 'sleep quality' : (DOMAIN_COPY[rel.predictor as DomainType]?.label ?? rel.predictor);
-  const outDisplay = DOMAIN_COPY[rel.outcome as DomainType]?.label ?? rel.outcome;
+  const predDisplay = rel.predictor === 'sleep' ? 'sleep quality' : factorLabel(rel.predictor);
+  const outDisplay = factorLabel(rel.outcome);
 
   let sentence: React.ReactNode;
   if (rel.predictor === 'sleep') {
@@ -202,7 +202,7 @@ function LagRelationshipCard({ rel }: { rel: LagRelationship }) {
 }
 
 function DayOfWeekPatternCard({ pat }: { pat: DayOfWeekPattern }) {
-  const domLabel = DOMAIN_COPY[pat.domain as DomainType]?.label ?? pat.domain;
+  const domLabel = factorLabel(pat.domain);
   const diffStr = pat.difference.toFixed(1);
   const hl = pat.direction === 'elevated' ? 'higher' : 'lower';
   const weekNote = `observed in ${pat.consistentWeeks} of ${pat.weekCount} weeks`;
@@ -221,7 +221,7 @@ function DayOfWeekPatternCard({ pat }: { pat: DayOfWeekPattern }) {
 function RareEventCard({ event }: { event: RareEvent }) {
   const { profile } = useAuth();
   const fmtDate = formatShortDate;
-  const domainLabel = event.affected_domains.length === 1 ? (DOMAIN_COPY[event.affected_domains[0] as DomainType]?.label ?? event.affected_domains[0]) : null;
+  const domainLabel = event.affected_domains.length === 1 ? factorLabel(event.affected_domains[0]) : null;
   const domainColor = getDomainColorFromProfile(event.affected_domains[0] ?? '', profile);
   let noteText = event.clinical_note;
   if (event.event_type === 'extreme_spike' && domainLabel) {
@@ -432,7 +432,7 @@ function VolatilityGroupCard({ vg, summaryLine, onView }: { vg: VolatilityGroup;
   return (
     <Pressable onPress={onView} style={styles.volCard}>
       <View style={styles.volCardText}>
-        <Text style={[styles.volCardDomain, { color }]}>{DOMAIN_COPY[vg.domain as DomainType]?.label ?? vg.domain}</Text>
+        <Text style={[styles.volCardDomain, { color }]}>{factorLabel(vg.domain)}</Text>
         <Text style={styles.volCardSummary}>{summaryLine}</Text>
       </View>
       <Svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#6b7a99" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
