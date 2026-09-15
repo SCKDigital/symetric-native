@@ -373,7 +373,7 @@ export default function InsightsScreen() {
           ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', from90).lte('entry_date', to).order('entry_date', { ascending: true })
           : Promise.resolve({ data: [] as Record<string, unknown>[] }),
         bodyTrackingEnabled
-          ? supabase.from('body_events').select('*').eq('user_id', user.id).gte('event_date', from90).lte('event_date', to)
+          ? supabase.from('body_events').select('*, body_event_sites(*)').eq('user_id', user.id).gte('event_date', from90).lte('event_date', to)
           : Promise.resolve({ data: [] as { event_date: string; event_type: string }[] }),
         bodyTrackingEnabled
           ? supabase.from('domain_connections').select('*').eq('user_id', user.id).gte('window_end', from90).order('strength', { ascending: false })

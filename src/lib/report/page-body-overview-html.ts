@@ -72,7 +72,7 @@ export function buildBodyOverviewHtml(data: BodyOverviewData): string {
         <div class="event-table-row">
           <span class="event-col-date">${esc(fmtDay(ev.date))}</span>
           <span class="event-col-type">${esc(ev.label)}</span>
-          <span class="event-col-detail">${esc(ev.context ?? '-')}</span>
+          <span class="event-col-detail">${esc([ev.detail, ev.context].filter(Boolean).join(' · ') || '-')}</span>
         </div>`).join('')}
       ${olderEventCount > 0 ? `<p class="overflow-note">${olderEventCount} earlier event${olderEventCount !== 1 ? 's' : ''} not shown.</p>` : ''}
     `;

@@ -1,3 +1,4 @@
+import { formatEventCharacterLabel, formatEventSiteLabel } from '@/lib/body/format-body-event';
 import { BODY_DOMAIN_ORDER, BODY_DOMAINS, BODY_EVENTS, MORNING_BODY_DOMAIN_ORDER, BODY_MAP_REGIONS, EVENT_SITE_LISTS } from '@/lib/body/constants';
 import type { BodyEvent, BodyEventSite, BodyPainSite, BodySide } from '@/lib/supabase';
 import type { BodyDomainSummary, BodyEventSummary, BodyEventOccurrence, BodySiteFrequency } from '@/lib/report/types';
@@ -80,6 +81,12 @@ export function buildBodyEventOccurrences(
       date: ev.event_date,
       eventType: ev.event_type,
       label: BODY_EVENTS[ev.event_type]?.label ?? ev.event_type,
+      // Same rule History's formatEventLabel uses: a site for the event types
+      // that prompt for one, character tags for the ones that prompt for those.
+      // This was being dropped, so "reaction" surfaced with the day's note but
+      // never with what the reaction actually was.
+      detail: formatEventSiteLabel(ev.event_type, (ev as { body_event_sites?: BodyEventSite[] }).body_event_sites ?? [])
+        ?? formatEventCharacterLabel(ev.character),
       context: noteByDate.get(ev.event_date),
     }))
     .sort((a, b) => b.date.localeCompare(a.date));

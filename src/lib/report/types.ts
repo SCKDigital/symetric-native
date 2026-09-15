@@ -24,6 +24,12 @@ export interface BodyEventOccurrence {
   date: string;
   eventType: string;
   label: string;
+  /** The event's own descriptor: where it happened (subluxation, injury) or
+   *  what it felt like (reaction — "flushing, hives"). Distinct from `context`,
+   *  which is the whole day's note and says nothing about this event
+   *  specifically. Optional because most event types prompt for neither. */
+  detail?: string;
+  /** The body check-in note for that day, if there was one. */
   context?: string;
 }
 

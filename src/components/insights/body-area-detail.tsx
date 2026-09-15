@@ -186,9 +186,14 @@ export default function BodyAreaDetail({
                       <Text style={styles.emptyText}>No dates recorded.</Text>
                     ) : occurrences.map((o, i) => (
                       <DayRow key={`${o.date}-${i}`} date={o.date}>
-                        {o.context
-                          ? <Text style={styles.dayNote}>{o.context}</Text>
-                          : <Text style={styles.dayNoteEmpty}>No note that day</Text>}
+                        {/* The event's own descriptor first — where it happened,
+                            or what it felt like — then the day's note, which is
+                            about the whole day rather than this event. */}
+                        {o.detail ? <Text style={styles.dayValue}>{o.detail}</Text> : null}
+                        {o.context ? <Text style={styles.dayNote}>{o.context}</Text> : null}
+                        {!o.detail && !o.context
+                          ? <Text style={styles.dayNoteEmpty}>Logged, no further detail</Text>
+                          : null}
                       </DayRow>
                     ))}
                   </CollapsibleRow>
