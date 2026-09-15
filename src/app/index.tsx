@@ -10,6 +10,7 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
 import { BodyCheckInCard, MorningBodyCheckInCard } from '@/components/today/body-check-in-cards';
 import { ActiveCheckInCard, LateCheckInCard, PendingCheckInCard } from '@/components/today/check-in-cards';
+import AppointmentReminderCard, { daysUntil } from '@/components/today/appointment-reminder-card';
 import BonusCheckInCard from '@/components/today/bonus-check-in-card';
 import { RescheduleListSheet, RescheduleTimePickerSheet } from '@/components/today/reschedule-sheets';
 import SleepCard from '@/components/today/sleep-card';
@@ -18,12 +19,13 @@ import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@/lib/edit-window';
 import { forcePatternDetection, runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
+import { fetchUpcomingAppointment } from '@/lib/api/appointments';
 import { createMarker } from '@/lib/queries/markers';
 import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 import { formatWindowTime } from '@/components/settings/settings-sheets';
 import { timeOfDayInTZ } from '@/lib/scheduler';
 import { formatTime } from '@/lib/time-format';
-import { supabase, type CheckIn } from '@/lib/supabase';
+import { supabase, type Appointment, type CheckIn } from '@/lib/supabase';
 
 function formatDate(): string {
   return new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
@@ -77,14 +79,14 @@ export default function TodayScreen() {
 // unscheduled one from the app at all.
 //
 // Still not ported from the web screen, roughly in order of how much they
-// matter: the info sheet, day summaries, milestones, gap recovery,
-// notification prompts, and the appointment reminder card.
+// matter: the info sheet, day summaries, milestones, gap recovery, and
+// notification prompts.
 function TodayHome() {
   const { user, profile } = useAuth();
   const {
     loading, activeCheckIn, rescuableCheckIn, allDone, activeDomains, baselines,
     completedCount, totalCount, nextScheduled, afterNextScheduled, lastCompleted,
-    timeFormat, allCheckIns, checkInSettings, refresh,
+    timeFormat, allCheckIns, checkInSettings, schedulingError, refresh,
   } = useTodayCheckIns();
   const [editingCheckIn, setEditingCheckIn] = useState<CheckIn | null>(null);
   const [showMarkerModal, setShowMarkerModal] = useState(false);
@@ -97,6 +99,7 @@ function TodayHome() {
   // stay a dashboard card rather than suddenly seize the screen again.
   const [snoozedId, setSnoozedId] = useState<string | null>(null);
   const [snoozedUntil, setSnoozedUntil] = useState<number | null>(null);
+  const [upcomingAppointment, setUpcomingAppointment] = useState<Appointment | null>(null);
   // Ticked rather than read during render: the expiry countdown on the hero
   // card has to move on its own, and reading the clock mid-render is impure.
   // Thirty seconds is enough for a minute-resolution countdown.
@@ -130,6 +133,22 @@ function TodayHome() {
     });
     return () => sub.remove();
   }, [refresh]);
+
+  // The appointment reminder, shown when one is within the next seven days —
+  // the same rule the web app's TodayScreen applies. Failures are swallowed on
+  // purpose: this is an FYI card, and nothing else on the screen depends on it.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    fetchUpcomingAppointment(user.id)
+      .then(appt => {
+        if (cancelled || !appt) return;
+        const days = daysUntil(appt.appointment_date);
+        if (days >= 0 && days <= 7) setUpcomingAppointment(appt);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
 
   // Detection is throttled internally (daily for clusters, weekly for
   // connections and the baseline recalc), so this is a cheap call that mostly
@@ -288,7 +307,7 @@ function TodayHome() {
           ) : totalCount === 0 ? (
             <>
               <Text style={styles.statusHeading}>
-                {windowNotYetOpen ? 'Your mind check-ins are coming' : 'Nothing scheduled yet'}
+                {windowNotYetOpen && !schedulingError ? 'Your mind check-ins are coming' : 'Nothing scheduled yet'}
               </Text>
               {/* Before the active window opens there is genuinely nothing
                   scheduled yet, which used to read as "this should resolve
@@ -297,13 +316,15 @@ function TodayHome() {
                   day is not normal, so say that rather than repeating an
                   opening time that has already passed. */}
               <Text style={styles.statusBody}>
-                {!checkInSettings
-                  ? 'Nothing is scheduled for today yet.'
-                  : windowNotYetOpen
-                    ? `Your check-in window opens at ${formatWindowTime(checkInSettings.window_start, timeFormat)}.`
-                    : "Today's check-ins haven't been set up yet."}
+                {schedulingError
+                  ? schedulingError
+                  : !checkInSettings
+                    ? 'Nothing is scheduled for today yet.'
+                    : windowNotYetOpen
+                      ? `Your check-in window opens at ${formatWindowTime(checkInSettings.window_start, timeFormat)}.`
+                      : "Today's check-ins haven't been set up yet."}
               </Text>
-              {!windowNotYetOpen && checkInSettings && (
+              {(schedulingError || (!windowNotYetOpen && checkInSettings)) && (
                 <Pressable onPress={refresh} style={({ pressed }) => pressed && styles.pressed}>
                   <Text style={styles.reschedule}>Try again</Text>
                 </Pressable>
@@ -328,6 +349,8 @@ function TodayHome() {
         {lastCompletedAt && wasRecentlyCompleted(lastCompletedAt) && (
           <Text style={styles.windowClosed}>(Editing window closed)</Text>
         )}
+
+        {upcomingAppointment && <AppointmentReminderCard appointment={upcomingAppointment} />}
 
         <BonusCheckInCard activeDomains={activeDomains} baselines={baselines} onLogged={refresh} />
 
