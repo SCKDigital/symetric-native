@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,7 +14,7 @@ import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { useAuth } from '@/contexts/auth-context';
 import { AreaRow, buildAreaRows } from '@/lib/area-rows';
 import { BODY_DOMAIN_ORDER, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
-import { CircadianPattern, fetchCircadianPatterns, formatCircadianPattern } from '@/lib/circadian-detection';
+import { CircadianPattern, fetchCircadianPatterns } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { buildDayScores, DayScores, mergeDays } from '@/lib/day-scores';
 import { parseDateString } from '@/lib/date-utils';
@@ -28,7 +28,7 @@ import { detectInterventionImpacts, InterventionImpact } from '@/lib/detection/i
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
 import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
-import { getDomainColorFromProfile, resolveActiveDomains } from '@/lib/domains';
+import { resolveActiveDomains } from '@/lib/domains';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
 import { type SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import {
@@ -37,8 +37,8 @@ import {
   clusterFindings, dayOfWeekFindings, factorLabel, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings, sleepConnectionFindings,
 } from '@/lib/pattern-findings';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
-import { computeBodySummaries } from '@/lib/report/body-summary';
-import type { BodyDomainSummary, BodyEventSummary } from '@/lib/report/types';
+import { buildBodyEventOccurrences, computeBodySummaries } from '@/lib/report/body-summary';
+import type { BodyDomainSummary, BodyEventOccurrence, BodyEventSummary } from '@/lib/report/types';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
 import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
@@ -76,15 +76,6 @@ function formatRange(cluster: DetectedCluster): string {
   if (cluster.end_date === cluster.start_date) return start;
   const end = parseDateString(cluster.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   return `${start} – ${end}`;
-}
-
-function formatDayOfWeekPattern(p: DayOfWeekPattern): string {
-  const label = domainLabel(p.domain);
-  const dir = p.direction === 'elevated' ? 'higher' : 'lower';
-  if (p.type === 'weekday_weekend') {
-    return `${label} tends to be ${dir} on weekends than weekdays`;
-  }
-  return `${label} tends to be ${dir} on ${p.dayName}s`;
 }
 
 
@@ -225,299 +216,6 @@ function WhatStandsOut({ findings, rangeDays }: { findings: PatternFinding[]; ra
 // a phone screen and made Insights a very long scroll of individually minor
 // findings. Collapsed by default, with the count on the header so it's still
 // obvious there's something in there.
-function CollapsibleSection({ label, count, children }: {
-  label: string; count: number; children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  if (count === 0) return null;
-  return (
-    <View style={styles.section}>
-      <Pressable
-        onPress={() => setOpen(o => !o)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        style={({ pressed }) => [styles.collapsibleHeader, pressed && styles.pressed]}>
-        <Text style={styles.sectionLabel}>{label}</Text>
-        <View style={styles.collapsibleMeta}>
-          <Text style={styles.collapsibleCount}>{count}</Text>
-          <Text style={styles.collapsibleChevron}>{open ? '⌃' : '⌄'}</Text>
-        </View>
-      </Pressable>
-      {open && <View style={styles.sectionList}>{children}</View>}
-    </View>
-  );
-}
-
-function CircadianSection({ patterns }: { patterns: CircadianPattern[] }) {
-  if (patterns.length === 0) return null;
-  return (
-    <CollapsibleSection label="Time of day" count={patterns.length}>
-        {patterns.map(p => {
-          const formatted = formatCircadianPattern(p);
-          return (
-            <View key={p.domain} style={styles.smallCard}>
-              <Text style={styles.smallCardTitle}>{formatted.domain}</Text>
-              <Text style={styles.smallCardBody}>
-                Highest {p.highest_block}, lowest {p.lowest_block} · range {formatted.range}
-              </Text>
-            </View>
-          );
-        })}
-    </CollapsibleSection>
-  );
-}
-
-function DayOfWeekSection({ patterns }: { patterns: DayOfWeekPattern[] }) {
-  if (patterns.length === 0) return null;
-  return (
-    <CollapsibleSection label="Day of week" count={Math.min(patterns.length, 5)}>
-        {patterns.slice(0, 5).map((p, i) => (
-          <View key={i} style={styles.smallCard}>
-            <Text style={styles.smallCardBody}>{formatDayOfWeekPattern(p)}</Text>
-          </View>
-        ))}
-    </CollapsibleSection>
-  );
-}
-
-// Takes findings rather than raw relationships: lagRelationshipFindings
-// already builds the sentence with sentenceHighlights, so the domain names
-// pick up their own colours here the way they do in "What stands out".
-function LagRelationshipSection({ findings }: { findings: PatternFinding[] }) {
-  if (findings.length === 0) return null;
-  return (
-    <CollapsibleSection label="What tends to follow what" count={findings.length}>
-        {findings.map(f => (
-          <View key={f.id} style={styles.smallCard}>
-            <Text style={styles.smallCardBody}>
-              <HighlightedSentence sentence={f.sentence} highlights={f.sentenceHighlights} />
-            </Text>
-          </View>
-        ))}
-    </CollapsibleSection>
-  );
-}
-
-// ── Rare days, grouped by domain ────────────────────────────────────────────
-//
-// This used to be one card per detected thing, so a domain that swung on four
-// separate days produced four near-identical cards and the section read as a
-// list of dates rather than a list of findings. Grouping by domain answers the
-// question the section is actually for — "what is unusual about *this* domain"
-// — and pushes the dates into an expandable detail.
-//
-// Events that are inherently about several domains at once (all elevated, all
-// suppressed, a multi-domain crash) have no single owner and go into their own
-// group at the end rather than being duplicated into every domain.
-
-const CROSS_DOMAIN = '__cross__';
-
-interface RareDayOccurrence {
-  /** Already-formatted date or date range. */
-  when: string;
-  note?: string;
-}
-
-interface RareDayEntry {
-  key: string;
-  /** Lowercase noun phrase — reads as "volatility recorded on 4 days". */
-  kind: string;
-  count: number;
-  /** Volatility and spikes are counted in days; runs of poor sleep in times. */
-  unit: 'days' | 'times';
-  occurrences: RareDayOccurrence[];
-}
-
-interface RareDayGroup {
-  domain: string;
-  label: string;
-  entries: RareDayEntry[];
-  total: number;
-}
-
-/** Inclusive day span of a cluster; an ongoing one counts as its start day. */
-function clusterDayCount(c: DetectedCluster): number {
-  if (!c.end_date || c.end_date === c.start_date) return 1;
-  const ms = parseDateString(c.end_date).getTime() - parseDateString(c.start_date).getTime();
-  return Math.max(1, Math.round(ms / 86_400_000) + 1);
-}
-
-function buildRareDayGroups(events: RareEvent[], volatilityClusters: DetectedCluster[]): RareDayGroup[] {
-  const byDomain = new Map<string, RareDayEntry[]>();
-  const push = (domain: string, entry: RareDayEntry) => {
-    const list = byDomain.get(domain);
-    if (list) list.push(entry);
-    else byDomain.set(domain, [entry]);
-  };
-
-  // Volatility: all of a domain's clusters collapse into a single entry, so
-  // four separate swings read as "volatility recorded on 4 days".
-  const volatilityByDomain = new Map<string, DetectedCluster[]>();
-  volatilityClusters.forEach(c => {
-    const domain = (c.domains_involved ?? [])[0] ?? CROSS_DOMAIN;
-    const list = volatilityByDomain.get(domain);
-    if (list) list.push(c);
-    else volatilityByDomain.set(domain, [c]);
-  });
-  volatilityByDomain.forEach((clusters, domain) => {
-    push(domain, {
-      key: `volatility:${domain}`,
-      kind: 'volatility',
-      count: clusters.reduce((sum, c) => sum + clusterDayCount(c), 0),
-      unit: 'days',
-      occurrences: clusters
-        .slice()
-        .sort((a, b) => b.start_date.localeCompare(a.start_date))
-        .map(c => ({ when: formatRange(c), note: 'Swung more than usual within the day' })),
-    });
-  });
-
-  events.forEach((e, i) => {
-    const dates = e.occurrence_dates.slice().sort((a, b) => b.localeCompare(a));
-    const occurrences: RareDayOccurrence[] = dates.map(d => ({ when: fmtDate(d) }));
-    // consequence_pattern is one statement about the event as a whole, not
-    // about any single occurrence, so it rides on the first row.
-    if (e.consequence_pattern && occurrences.length > 0) occurrences[0].note = e.consequence_pattern;
-
-    if (e.event_type === 'consecutive_poor_sleep') {
-      push('sleep', {
-        key: `sleep-run:${i}`,
-        kind: 'three or more poor nights in a row',
-        count: e.frequency,
-        unit: 'times',
-        occurrences: occurrences.map(o => ({ ...o, note: o.note ?? 'Run started this day' })),
-      });
-      return;
-    }
-
-    if (e.event_type === 'extreme_spike') {
-      const domain = e.affected_domains[0] ?? CROSS_DOMAIN;
-      push(domain, {
-        key: `spike:${domain}:${i}`,
-        kind: 'a reading three or more points from your baseline',
-        count: e.frequency,
-        unit: 'days',
-        occurrences,
-      });
-      return;
-    }
-
-    const kind =
-      e.event_type === 'all_elevated' ? 'every tracked domain elevated at once'
-      : e.event_type === 'all_suppressed' ? 'every tracked domain suppressed at once'
-      : 'three or more domains dropping within 48 hours';
-    push(CROSS_DOMAIN, { key: `${e.event_type}:${i}`, kind, count: e.frequency, unit: 'days', occurrences });
-  });
-
-  const groups: RareDayGroup[] = [];
-  byDomain.forEach((entries, domain) => {
-    groups.push({
-      domain,
-      label: domain === CROSS_DOMAIN ? 'Across your domains' : domainLabel(domain),
-      entries,
-      total: entries.reduce((sum, e) => sum + e.count, 0),
-    });
-  });
-
-  // Busiest domain first; the cross-domain group is not about any one domain,
-  // so it sits at the end regardless of size.
-  return groups.sort((a, b) => {
-    if (a.domain === CROSS_DOMAIN) return 1;
-    if (b.domain === CROSS_DOMAIN) return -1;
-    return b.total - a.total || a.label.localeCompare(b.label);
-  });
-}
-
-/** "Volatility recorded on 4 days" / "Three or more poor nights in a row recorded 2 times". */
-function describeRareDayEntry(e: RareDayEntry): string {
-  const noun = e.unit === 'days'
-    ? `on ${e.count} day${e.count === 1 ? '' : 's'}`
-    : `${e.count} time${e.count === 1 ? '' : 's'}`;
-  const sentence = `${e.kind} recorded ${noun}`;
-  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
-}
-
-function RareDayGroupCard({ group }: { group: RareDayGroup }) {
-  const { profile } = useAuth();
-  const [open, setOpen] = useState(false);
-  const color = group.domain === CROSS_DOMAIN ? '#8892a4' : getDomainColorFromProfile(group.domain, profile);
-
-  return (
-    <View style={styles.smallCard}>
-      <Pressable
-        onPress={() => setOpen(o => !o)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        style={({ pressed }) => [styles.rareGroupHeader, pressed && styles.pressed]}>
-        <View style={styles.rareGroupHeading}>
-          <Text style={[styles.smallCardTitle, { color }]}>{group.label}</Text>
-          {group.entries.map(e => (
-            <Text key={e.key} style={styles.smallCardBody}>{describeRareDayEntry(e)}</Text>
-          ))}
-        </View>
-        <Text style={styles.collapsibleChevron}>{open ? '⌃' : '⌄'}</Text>
-      </Pressable>
-
-      {open && (
-        <View style={styles.rareGroupDetail}>
-          {group.entries.map(e => (
-            <View key={e.key} style={styles.rareEntryDetail}>
-              {group.entries.length > 1 && (
-                <Text style={[styles.smallCardBody, styles.rareEntryKind]}>{e.kind}</Text>
-              )}
-              {e.occurrences.map((o, i) => (
-                <View key={`${e.key}:${i}`} style={styles.rareOccurrence}>
-                  <View style={[styles.rareOccurrenceDot, { backgroundColor: color }]} />
-                  <View style={styles.rareOccurrenceText}>
-                    <Text style={styles.smallCardBody}>{o.when}</Text>
-                    {o.note && <Text style={[styles.smallCardBody, styles.smallCardSubtext]}>{o.note}</Text>}
-                  </View>
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function RareEventsSection({ events, volatilityClusters }: {
-  events: RareEvent[];
-  volatilityClusters: DetectedCluster[];
-}) {
-  const groups = useMemo(
-    () => buildRareDayGroups(events, volatilityClusters),
-    [events, volatilityClusters],
-  );
-  if (groups.length === 0) return null;
-  return (
-    <CollapsibleSection label="Rare days" count={groups.length}>
-      {groups.map(g => <RareDayGroupCard key={g.domain} group={g} />)}
-    </CollapsibleSection>
-  );
-}
-
-function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
-  if (impacts.length === 0) return null;
-  return (
-    <CollapsibleSection label="Medication &amp; therapy" count={impacts.length}>
-        {impacts.map(impact => {
-          const top = impact.affected_domains[0];
-          return (
-            <View key={impact.marker_id} style={styles.smallCard}>
-              <Text style={styles.smallCardTitle}>{impact.marker_label}</Text>
-              {top && (
-                <Text style={styles.smallCardBody}>
-                  {domainLabel(top.domain)} {top.direction} by {Math.abs(top.change).toFixed(1)} points in the {top.window_days} days after
-                </Text>
-              )}
-            </View>
-          );
-        })}
-    </CollapsibleSection>
-  );
-}
 
 // Chunk 1–8 of the multi-session Insights port: cluster detection (1),
 // circadian detection (2), day-of-week + lag-relationship detection (3),
@@ -617,6 +315,8 @@ export default function InsightsScreen() {
   const [days90dCount, setDays90dCount] = useState(0);
   const [contextTags, setContextTags] = useState<ContextTag[]>([]);
   const [rangeCheckInRows, setRangeCheckInRows] = useState<CheckIn[]>([]);
+  const [bodyCheckInRows, setBodyCheckInRows] = useState<Record<string, unknown>[]>([]);
+  const [bodyEventOccurrences, setBodyEventOccurrences] = useState<BodyEventOccurrence[]>([]);
   const [timeFormat, setTimeFormat] = useState<'12hr' | '24hr'>('12hr');
   const [baselineMap, setBaselineMap] = useState<Partial<Record<DomainType, number>>>({});
   const [viewingCluster, setViewingCluster] = useState<DetectedCluster | null>(null);
@@ -887,6 +587,11 @@ export default function InsightsScreen() {
       .filter(r => (r.entry_date as string) >= fromRange);
     const bodyEventsRangeRaw = ((bodyEvents90dRaw ?? []) as { event_date: string; event_type: string }[])
       .filter(r => r.event_date >= fromRange);
+    setBodyCheckInRows(bodyCheckInsRangeRaw);
+    // Dates and the day's note per event, so the Body drill-down can open an
+    // event type onto when it actually happened. Already built for the PDF
+    // report's body page; Insights simply never asked for it.
+    setBodyEventOccurrences(buildBodyEventOccurrences(bodyEventsRangeRaw as never[], bodyCheckInsRangeRaw));
     const bodySummary = computeBodySummaries(bodyCheckInsRangeRaw, bodyEventsRangeRaw);
     setBodyDomains(bodySummary.domains);
     setBodyEvents(bodySummary.events);
@@ -1021,6 +726,17 @@ export default function InsightsScreen() {
   const medicationFindings = interventionImpactFindings(interventionImpacts);
   const eligibleMarkerCount = markers.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy').length;
 
+  // Day-of-week and what-follows-what run over merged mind+body days, so their
+  // results are mixed. Rare events are already detected per area, and circadian
+  // detection only covers mind domains, so only these two need splitting. A
+  // cross-area relationship belongs to both screens — that is what it is about.
+  const involvesBody = (factors: string[]) => factors.some(isBodyDomain);
+  const involvesMind = (factors: string[]) => factors.some(f => f !== 'sleep' && !isBodyDomain(f));
+  const mindDayOfWeek = dayOfWeekPatterns.filter(p => involvesMind([p.domain]));
+  const bodyDayOfWeek = dayOfWeekPatterns.filter(p => involvesBody([p.domain]));
+  const mindLag = lagRelationships.filter(r => involvesMind([r.predictor, r.outcome]));
+  const bodyLag = lagRelationships.filter(r => involvesBody([r.predictor, r.outcome]));
+
   const standoutFindings = selectStandoutFindings([...mindFindings, ...sleepFindings, ...bodyFindings, ...medicationFindings], 3);
   const areaRows = buildAreaRows({
     mind: { findings: mindFindings, trackedDomainCount: activeDomains.length },
@@ -1044,8 +760,8 @@ export default function InsightsScreen() {
           contextTags={contextTags}
           checkIns={rangeCheckInRows}
           trackedDomains={activeDomains}
-          dayOfWeekPatterns={dayOfWeekPatterns}
-          lagRelationships={lagRelationships}
+          dayOfWeekPatterns={mindDayOfWeek}
+          lagRelationships={mindLag}
           rareEvents={rareEvents}
           circadianPatterns={circadianPatterns}
           days90dCount={days90dCount}
@@ -1064,7 +780,21 @@ export default function InsightsScreen() {
   if (activeArea === 'body') {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
-        <BodyAreaDetail onBack={() => setActiveArea(null)} domains={bodyDomains} events={bodyEvents} daysLogged={bodyDaysLogged} findings={bodyFindings} />
+        <BodyAreaDetail
+          onBack={() => setActiveArea(null)}
+          domains={bodyDomains}
+          events={bodyEvents}
+          eventOccurrences={bodyEventOccurrences}
+          checkInRows={bodyCheckInRows}
+          daysLogged={bodyDaysLogged}
+          findings={bodyFindings}
+          rareEvents={bodyRareEvents}
+          volatilityClusters={volatilityClusters.filter(c => isBodyDomain((c.domains_involved ?? [])[0] ?? ''))}
+          lagRelationships={bodyLag}
+          dayOfWeekPatterns={bodyDayOfWeek}
+          circadianPatterns={[]}
+          daysOfData={days90dCount}
+        />
       </SafeAreaView>
     );
   }
@@ -1098,13 +828,15 @@ export default function InsightsScreen() {
             <AppLogoHeader />
             <Text style={styles.heading}>Insights</Text>
             <RangeControl range={range} onChange={r => { setRange(r); setActiveArea(null); }} fromDate={rangeStats.from} toDate={rangeStats.to} checkInCount={rangeStats.checkInCount} daysWithCheckIn={rangeStats.daysWithCheckIn} />
+            {/* Every finding now has exactly one home. These five sections used
+                to sit here as well as inside the drill-downs, so a top finding
+                appeared three times on one screen — once in "What stands out",
+                once here, once behind an area row — while body-domain versions
+                of the same findings had no drill-down of their own and only
+                appeared here, unlabelled as to which area they belonged to.
+                The area rows carry the counts, so nothing became unreachable. */}
             <WhatStandsOut findings={standoutFindings} rangeDays={range} />
             <AreaIndex rows={areaRows} onSelect={setActiveArea} />
-            <CircadianSection patterns={circadianPatterns} />
-            <DayOfWeekSection patterns={dayOfWeekPatterns} />
-            <LagRelationshipSection findings={allLagFindings} />
-            <RareEventsSection events={rareEvents} volatilityClusters={volatilityClusters} />
-            <MedicationSection impacts={interventionImpacts} />
             {patternClusters.length > 0 && (
               <Pressable
                 onPress={() => setPatternsOpen(o => !o)}

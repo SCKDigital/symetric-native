@@ -5,9 +5,11 @@ import Svg, { Circle, Line, Path, Polyline, Text as SvgText } from 'react-native
 import BackRow from '@/components/insights/back-row';
 import { ClusterCard } from '@/components/insights/cluster-card';
 import { useAuth } from '@/contexts/auth-context';
+import {
+  CollapsibleRow, PredictivePatternsSection, RareDaysSection, TimeAndDaySection,
+} from '@/components/insights/pattern-sections';
 import { clusterDurationDays, factorLabel } from '@/lib/pattern-findings';
 import type { CircadianPattern } from '@/lib/circadian-detection';
-import { formatCircadianPattern } from '@/lib/circadian-detection';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
 import type { RareEvent } from '@/lib/detection/rare-events';
@@ -174,91 +176,6 @@ function HighDespitePoorSleepCard({ cluster, onView }: { cluster: DetectedCluste
   );
 }
 
-function LagRelationshipCard({ rel }: { rel: LagRelationship }) {
-  const { profile } = useAuth();
-  const lagStr = rel.lagDays === 1 ? 'the next day' : 'two days later';
-  const instanceNote = `detected in ${rel.instanceCount} of ${rel.totalPairs} instances`;
-  const predColor = getDomainColorFromProfile(rel.predictor, profile);
-  const outColor = getDomainColorFromProfile(rel.outcome, profile);
-  const predDisplay = rel.predictor === 'sleep' ? 'sleep quality' : factorLabel(rel.predictor);
-  const outDisplay = factorLabel(rel.outcome);
-
-  let sentence: React.ReactNode;
-  if (rel.predictor === 'sleep') {
-    sentence = rel.direction === 'positive'
-      ? <>Better sleep tends to be followed by higher <Text style={{ color: outColor }}>{outDisplay}</Text> {lagStr}</>
-      : <>Lower <Text style={{ color: predColor }}>{predDisplay}</Text> tends to be followed by higher <Text style={{ color: outColor }}>{outDisplay}</Text> {lagStr}</>;
-  } else if (rel.direction === 'positive') {
-    sentence = <>When <Text style={{ color: predColor }}>{predDisplay}</Text> is <Text style={styles.bold}>elevated</Text>, <Text style={{ color: outColor }}>{outDisplay}</Text> tends to be <Text style={styles.bold}>elevated</Text> {lagStr}</>;
-  } else {
-    sentence = <>When <Text style={{ color: predColor }}>{predDisplay}</Text> is <Text style={styles.bold}>elevated</Text>, <Text style={{ color: outColor }}>{outDisplay}</Text> tends to <Text style={styles.bold}>drop</Text> {lagStr}</>;
-  }
-
-  return (
-    <View style={styles.smallCard}>
-      <Text style={styles.smallCardSentence}>{sentence} <Text style={styles.smallCardMuted}>({instanceNote})</Text></Text>
-    </View>
-  );
-}
-
-function DayOfWeekPatternCard({ pat }: { pat: DayOfWeekPattern }) {
-  const domLabel = factorLabel(pat.domain);
-  const diffStr = pat.difference.toFixed(1);
-  const hl = pat.direction === 'elevated' ? 'higher' : 'lower';
-  const weekNote = `observed in ${pat.consistentWeeks} of ${pat.weekCount} weeks`;
-  const primaryText = pat.type === 'weekday_weekend'
-    ? `${domLabel} is ${diffStr} points ${hl} on ${pat.direction === 'elevated' ? 'weekends' : 'weekdays'} than ${pat.direction === 'elevated' ? 'weekdays' : 'weekends'}`
-    : `${domLabel} is ${diffStr} points ${hl} on ${pat.dayName}s than your weekly average`;
-
-  return (
-    <View style={styles.smallCard}>
-      <Text style={styles.smallCardBody}>{primaryText}</Text>
-      <Text style={styles.smallCardMuted}>{weekNote}</Text>
-    </View>
-  );
-}
-
-function RareEventCard({ event }: { event: RareEvent }) {
-  const { profile } = useAuth();
-  const fmtDate = formatShortDate;
-  const domainLabel = event.affected_domains.length === 1 ? factorLabel(event.affected_domains[0]) : null;
-  const domainColor = getDomainColorFromProfile(event.affected_domains[0] ?? '', profile);
-  let noteText = event.clinical_note;
-  if (event.event_type === 'extreme_spike' && domainLabel) {
-    noteText = noteText.replace(event.affected_domains[0], domainLabel);
-  }
-
-  return (
-    <View style={[styles.rareCard, { borderColor: `${domainColor}40`, borderLeftColor: domainColor }]}>
-      <Text style={styles.rareCardNote}>{noteText}</Text>
-      {event.consequence_pattern && <Text style={styles.rareCardConsequence}>{event.consequence_pattern}</Text>}
-      {event.occurrence_dates.length > 0 && (
-        <Text style={styles.rareCardDates}>
-          {event.occurrence_dates.slice(0, 3).map(fmtDate).join(' · ')}
-          {event.occurrence_dates.length > 3 ? ` +${event.occurrence_dates.length - 3} more` : ''}
-        </Text>
-      )}
-    </View>
-  );
-}
-
-function CollapsibleRow({ label, meta, expanded, onToggle, children }: {
-  label: string; meta: string; expanded: boolean; onToggle: () => void; children: React.ReactNode;
-}) {
-  return (
-    <View>
-      <Pressable onPress={onToggle} style={styles.collapsibleHeader}>
-        <Text style={styles.collapsibleLabel}>{label}</Text>
-        <Text style={styles.collapsibleMeta}>{meta}</Text>
-        <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#6b7a99" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={expanded ? styles.chevronExpanded : undefined}>
-          <Polyline points="6 9 12 15 18 9" />
-        </Svg>
-      </Pressable>
-      {expanded && <View style={styles.collapsibleBody}>{children}</View>}
-    </View>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────
 
 interface Props {
@@ -287,16 +204,11 @@ export default function MindAreaDetail({
 }: Props) {
   const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
   const [showAllGroups, setShowAllGroups] = useState(false);
-  const [rareOpen, setRareOpen] = useState(false);
-  const [lagOpen, setLagOpen] = useState(false);
-  const [timeOpen, setTimeOpen] = useState(false);
-  const [trackedOpen, setTrackedOpen] = useState(false);
   const [expandedDomain, setExpandedDomain] = useState<DomainType | null>(null);
 
   const highDespitePoorSleep = clusters.filter(c => c.high_despite_poor_sleep === true).sort((a, b) => b.start_date.localeCompare(a.start_date));
   const volatilityGroups = aggregateVolatilityGroups(clusters);
   const nonVolatility = clusters.filter(c => c.cluster_type !== 'intraday_volatility');
-  const meaningfulCircadian = circadianPatterns.filter(p => p.range >= 2.0);
 
   interface DomainGroup { domain: string; maxSeverity: number; entries: { summaryLine: string; cluster?: DetectedCluster; vg?: VolatilityGroup }[] }
   const groupMap = new Map<string, DomainGroup>();
@@ -366,57 +278,11 @@ export default function MindAreaDetail({
         </View>
       )}
 
-      {rareEvents.length > 0 && (
-        <CollapsibleRow label="Rare days" meta={`${rareEvents.length} event${rareEvents.length !== 1 ? 's' : ''}`} expanded={rareOpen} onToggle={() => setRareOpen(o => !o)}>
-          <Text style={styles.collapsibleIntro}>Days that looked statistically different from your typical pattern.</Text>
-          {rareEvents.map(e => <RareEventCard key={e.event_type} event={e} />)}
-          <Text style={styles.collapsibleFooter}>Based on {days90dCount} days of data.</Text>
-        </CollapsibleRow>
-      )}
+      <RareDaysSection events={rareEvents} daysOfData={days90dCount} />
+      <PredictivePatternsSection relationships={lagRelationships} />
+      <TimeAndDaySection circadian={circadianPatterns} dayOfWeek={dayOfWeekPatterns} />
 
-      {lagRelationships.length > 0 && (
-        <CollapsibleRow label="Predictive patterns" meta={`${lagRelationships.length} relationship${lagRelationships.length !== 1 ? 's' : ''}`} expanded={lagOpen} onToggle={() => setLagOpen(o => !o)}>
-          {[...lagRelationships].sort((a, b) => b.instanceCount - a.instanceCount).map(rel => (
-            <LagRelationshipCard key={`${rel.predictor}-${rel.outcome}-${rel.lagDays}`} rel={rel} />
-          ))}
-        </CollapsibleRow>
-      )}
-
-      {(meaningfulCircadian.length > 0 || dayOfWeekPatterns.length > 0) && (
-        <CollapsibleRow
-          label="Time & day patterns"
-          meta={[meaningfulCircadian.length > 0 && `${meaningfulCircadian.length} time-of-day`, dayOfWeekPatterns.length > 0 && `${dayOfWeekPatterns.length} day-of-week`].filter(Boolean).join(' · ')}
-          expanded={timeOpen} onToggle={() => setTimeOpen(o => !o)}
-        >
-          {dayOfWeekPatterns.map((pat, i) => <DayOfWeekPatternCard key={`${pat.domain}-${pat.type}-${i}`} pat={pat} />)}
-          {meaningfulCircadian.map(pattern => {
-            const formatted = formatCircadianPattern(pattern);
-            return (
-              <View key={pattern.domain} style={styles.circadianCard}>
-                <View style={styles.circadianHeader}>
-                  <Text style={styles.circadianDomain}>{formatted.domain}</Text>
-                  <Text style={styles.circadianRange}>{formatted.range.toFixed(1)} pt range</Text>
-                </View>
-                <View style={styles.circadianGrid}>
-                  {(['Morning', 'Midday', 'Afternoon', 'Evening'] as const).map(blockName => {
-                    const block = formatted.blocks.find(b => b.name === blockName);
-                    return (
-                      <View key={blockName} style={styles.circadianBlock}>
-                        <Text style={styles.circadianBlockName}>{blockName}</Text>
-                        <Text style={styles.circadianBlockValue}>{block ? block.avg.toFixed(1) : '-'}</Text>
-                        <Text style={styles.circadianBlockCount}>{block ? `${block.count} log${block.count !== 1 ? 's' : ''}` : 'no data'}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-                <Text style={styles.circadianFooter}>Higher in the {pattern.highest_block}, lower in the {pattern.lowest_block}</Text>
-              </View>
-            );
-          })}
-        </CollapsibleRow>
-      )}
-
-      <CollapsibleRow label="Tracked symptoms" meta="" expanded={trackedOpen} onToggle={() => setTrackedOpen(o => !o)}>
+      <CollapsibleRow label="Tracked symptoms" defaultOpen>
         {trackedDomains.map(domain => (
           <DomainCompactRow key={domain} domain={domain} days={days} baselines={baselines}
             isExpanded={expandedDomain === domain} onToggle={() => setExpandedDomain(prev => prev === domain ? null : domain)} />
