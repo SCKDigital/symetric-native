@@ -23,36 +23,45 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // signInWithMagicLink differs: it needs an emailRedirectTo pointing at a deep
 // link (see lib/auth-deep-link.ts) since there's no browser URL for Supabase
 // to fall back to.
+/** One read. Returns undefined on error and null-ish when the row isn't there
+ *  yet, which is the distinction fetchProfileWithRetry below retries on. */
+async function fetchProfile(userId: string) {
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+  if (error) {
+    console.error('Error fetching profile:', error);
+    return undefined;
+  }
+  return data;
+}
+
+// Module scope, not component scope. It captures nothing — it takes a userId
+// and calls the module-level fetchProfile — but living inside the component
+// made the auth effect's dependency array look wrong to the linter, and a
+// standing warning on the auth path is the last place you want noise. Hoisting
+// makes "captures nothing" structural instead of something you have to read the
+// body to confirm.
+//
+// The retries exist because a profile row is created by a trigger on signup,
+// and the first read after a brand-new account can land before it commits.
+async function fetchProfileWithRetry(userId: string) {
+  let data = await fetchProfile(userId);
+  if (data == null) {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    data = await fetchProfile(userId);
+  }
+  if (data == null) {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    data = await fetchProfile(userId);
+  }
+  return data;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const fetchGenRef = useRef(0);
-
-  const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-
-    if (error) {
-      console.error('Error fetching profile:', error);
-      return undefined;
-    }
-
-    return data;
-  };
-
-  const fetchProfileWithRetry = async (userId: string) => {
-    let data = await fetchProfile(userId);
-    if (data == null) {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      data = await fetchProfile(userId);
-    }
-    if (data == null) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      data = await fetchProfile(userId);
-    }
-    return data;
-  };
 
   const refreshProfile = async () => {
     if (user) {
