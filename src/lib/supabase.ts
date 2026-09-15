@@ -6,6 +6,20 @@ import { AppState } from 'react-native';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
+// These are inlined at build time, so a build made without them produces an
+// app that cannot reach the database at all — and createClient's own error
+// ("supabaseUrl is required") arrives as a white screen at module load, with
+// nothing naming the cause. .env is gitignored and eas.json declares no env
+// block, so the values come from EAS environment variables: if a build profile
+// ever stops resolving them, this is the line that says so.
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. '
+    + 'Locally these come from .env; in a build they come from the EAS '
+    + 'environment variables for that profile.',
+  );
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
