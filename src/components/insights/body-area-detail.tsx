@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import BackRow from '@/components/insights/back-row';
+import BodySiteHeatmap from '@/components/insights/body-site-heatmap';
 import {
   CollapsibleRow, PredictivePatternsSection, RareDaysSection, TimeAndDaySection,
 } from '@/components/insights/pattern-sections';
@@ -12,7 +13,7 @@ import type { LagRelationship } from '@/lib/detection/lag-relationships';
 import type { RareEvent } from '@/lib/detection/rare-events';
 import { BODY_COLOR } from '@/lib/domains';
 import { CONFIDENCE_COPY, PatternFinding } from '@/lib/pattern-findings';
-import type { BodyDomainSummary, BodyEventOccurrence, BodyEventSummary } from '@/lib/report/types';
+import type { BodyDomainSummary, BodyEventOccurrence, BodyEventSummary, BodySiteFrequency } from '@/lib/report/types';
 import type { DetectedCluster } from '@/lib/supabase';
 
 // The "Body" drill-down.
@@ -45,6 +46,8 @@ interface Props {
   domains: BodyDomainSummary[];
   events: BodyEventSummary[];
   eventOccurrences: BodyEventOccurrence[];
+  /** Per-site day counts over the range, for the map. */
+  siteFrequency: BodySiteFrequency[];
   /** Range-scoped body_checkins rows, for the per-domain day breakdown. */
   checkInRows: Record<string, unknown>[];
   daysLogged: number;
@@ -96,7 +99,7 @@ function DayRow({ date, children }: { date: string; children: React.ReactNode })
 }
 
 export default function BodyAreaDetail({
-  onBack, domains, events, eventOccurrences, checkInRows, daysLogged, findings,
+  onBack, domains, events, eventOccurrences, siteFrequency, checkInRows, daysLogged, findings,
   rareEvents, volatilityClusters, lagRelationships, dayOfWeekPatterns, circadianPatterns, daysOfData,
 }: Props) {
   const shown = findings.filter(f => f.grade !== 'limited');
@@ -128,6 +131,12 @@ export default function BodyAreaDetail({
             ))}
           </View>
         )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Where it shows up</Text>
+        <Text style={styles.daysLoggedText}>Pain, instability and event sites across the selected range. Brighter means logged on more days.</Text>
+        <BodySiteHeatmap sites={siteFrequency} />
       </View>
 
       <View style={styles.section}>

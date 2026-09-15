@@ -202,6 +202,7 @@ export default function MindAreaDetail({
   dayOfWeekPatterns, lagRelationships, rareEvents, circadianPatterns,
   days90dCount, timeFormat, onViewCluster, onViewVolatilityGroup, onToggleFlag,
 }: Props) {
+  const { profile } = useAuth();
   const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
   const [showAllGroups, setShowAllGroups] = useState(false);
   const [expandedDomain, setExpandedDomain] = useState<DomainType | null>(null);
@@ -226,7 +227,13 @@ export default function MindAreaDetail({
     g.maxSeverity = Math.max(g.maxSeverity, vg.swingMax);
     g.entries.push({ summaryLine: volatilityGroupSummaryLine(vg), vg });
   });
-  const domainGroups = [...groupMap.values()].sort((a, b) => b.maxSeverity - a.maxSeverity);
+  const domainGroups = [...groupMap.values()]
+    .map(g => ({
+      ...g,
+      entries: [...g.entries].sort((a, b) =>
+        (b.cluster?.start_date ?? '').localeCompare(a.cluster?.start_date ?? '')),
+    }))
+    .sort((a, b) => b.maxSeverity - a.maxSeverity);
   const visibleGroups = showAllGroups ? domainGroups : domainGroups.slice(0, 3);
   const hiddenCount = domainGroups.length - 3;
   const totalPatternCount = nonVolatility.length + volatilityGroups.length;
@@ -239,7 +246,19 @@ export default function MindAreaDetail({
         <View>
           <Text style={styles.intro}>Deviations from your personal baseline that lasted several days or kept recurring.</Text>
           <View style={styles.list}>
-            {visibleGroups.flatMap(g => g.entries).map((entry, i) =>
+            {/* Grouped, not flattened. domainGroups was already built here and
+                then immediately flatMapped back apart, so its only effect was
+                ordering — four overlapping Motivation periods rendered as four
+                unlabelled near-identical cards with no indication they were all
+                the same domain. The heading is the finding; the cards under it
+                are the evidence. */}
+            {visibleGroups.map(g => (
+              <View key={g.domain} style={styles.domainGroup}>
+                <Text style={[styles.domainGroupLabel, { color: getDomainColorFromProfile(g.domain, profile) }]}>
+                  {factorLabel(g.domain)}
+                  {g.entries.length > 1 ? `  ·  ${g.entries.length} periods` : ''}
+                </Text>
+                {g.entries.map((entry, i) =>
               entry.cluster ? (
                 <ClusterCard
                   key={entry.cluster.id}
@@ -257,7 +276,9 @@ export default function MindAreaDetail({
               ) : entry.vg ? (
                 <VolatilityGroupCard key={`vol-${i}`} vg={entry.vg} summaryLine={entry.summaryLine} onView={() => onViewVolatilityGroup(entry.vg!)} />
               ) : null
-            )}
+                )}
+              </View>
+            ))}
             {!showAllGroups && hiddenCount > 0 && (
               <Pressable onPress={() => setShowAllGroups(true)}>
                 <Text style={styles.showMoreText}>Show {hiddenCount} more {hiddenCount === 1 ? 'domain' : 'domains'}</Text>
@@ -314,6 +335,8 @@ const styles = StyleSheet.create({
   list: { gap: 10 },
   emptyText: { fontSize: 14, color: '#8892a4', lineHeight: 20 },
   sectionLabel: { fontSize: 11, color: '#8892a4', textTransform: 'uppercase', letterSpacing: 1.1, fontWeight: '600', marginBottom: 12 },
+  domainGroup: { gap: 8 },
+  domainGroupLabel: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
   showMoreText: { fontSize: 13, color: '#6366f1', paddingVertical: 4 },
   volCard: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)', borderLeftWidth: 4, borderRadius: 14, padding: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   volCardText: { gap: 3 },

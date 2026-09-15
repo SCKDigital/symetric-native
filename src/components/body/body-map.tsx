@@ -17,11 +17,11 @@ interface Props {
   onChange: (sites: PainSite[]) => void;
 }
 
-const CENTER_X = 120;
+export const CENTER_X = 120;
 const SILHOUETTE = '#232838';
 const SILHOUETTE_STROKE = '#323a52';
 
-interface MarkerLayout {
+export interface MarkerLayout {
   region: string;
   y: number;
   offset: number; // 0 = midline (single marker on centerline)
@@ -30,7 +30,7 @@ interface MarkerLayout {
 // y/offset values match the SILHOUETTE_* point geometry below — jaw/neck/
 // ribs sit on the head+torso contour, shoulder/elbow/wrist/hip/knee/ankle
 // sit on the arm and leg point paths. Keep the two in sync if either moves.
-const FRONT_LAYOUT: MarkerLayout[] = [
+export const FRONT_LAYOUT: MarkerLayout[] = [
   { region: 'jaw', y: 54, offset: 16 },
   { region: 'neck', y: 84, offset: 0 },
   { region: 'shoulder', y: 100, offset: 50 },
@@ -43,7 +43,7 @@ const FRONT_LAYOUT: MarkerLayout[] = [
   { region: 'ankle', y: 406, offset: 22 },
 ];
 
-const BACK_LAYOUT: MarkerLayout[] = [
+export const BACK_LAYOUT: MarkerLayout[] = [
   { region: 'neck', y: 84, offset: 0 },
   { region: 'shoulder', y: 100, offset: 50 },
   { region: 'shoulder_blade', y: 122, offset: 30 },
@@ -62,12 +62,12 @@ const BACK_LAYOUT: MarkerLayout[] = [
  * Getting this wrong is not recoverable later, so it's computed in exactly
  * one place.
  */
-function lateralX(side: 'L' | 'R', offset: number): number {
+export function lateralX(side: 'L' | 'R', offset: number): number {
   const rightSign = side === 'R' ? -1 : 1;
   return CENTER_X - rightSign * offset;
 }
 
-function hexPoints(cx: number, cy: number, r: number): string {
+export function hexPoints(cx: number, cy: number, r: number): string {
   const pts: string[] = [];
   for (let i = 0; i < 6; i++) {
     const angle = (Math.PI / 3) * i - Math.PI / 2;
@@ -155,7 +155,7 @@ const TORSO_PATH = smoothOpenPath(TORSO_POINTS) + ` L ${CENTER_X} ${TORSO_POINTS
 const LEG_PATH = taperedLimbPath(LEG_POINTS, LEG_RADII);
 const ARM_POINTS_STR = ARM_POINTS.map(p => `${p.x},${p.y}`).join(' ');
 
-function Silhouette({ aspect }: { aspect: BodyAspect }) {
+export function Silhouette({ aspect }: { aspect: BodyAspect }) {
   const [hip, knee, ankle] = LEG_POINTS;
   const hand = ARM_POINTS[ARM_POINTS.length - 1];
   const neckHalfWidth = HEAD_R * 0.7;

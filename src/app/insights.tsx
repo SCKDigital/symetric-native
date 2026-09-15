@@ -37,8 +37,8 @@ import {
   clusterFindings, dayOfWeekFindings, factorLabel, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings, sleepConnectionFindings,
 } from '@/lib/pattern-findings';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
-import { buildBodyEventOccurrences, computeBodySummaries } from '@/lib/report/body-summary';
-import type { BodyDomainSummary, BodyEventOccurrence, BodyEventSummary } from '@/lib/report/types';
+import { buildBodyEventOccurrences, computeBodySiteFrequency, computeBodySummaries } from '@/lib/report/body-summary';
+import type { BodyDomainSummary, BodyEventOccurrence, BodyEventSummary, BodySiteFrequency } from '@/lib/report/types';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
 import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
@@ -317,6 +317,7 @@ export default function InsightsScreen() {
   const [rangeCheckInRows, setRangeCheckInRows] = useState<CheckIn[]>([]);
   const [bodyCheckInRows, setBodyCheckInRows] = useState<Record<string, unknown>[]>([]);
   const [bodyEventOccurrences, setBodyEventOccurrences] = useState<BodyEventOccurrence[]>([]);
+  const [bodySiteFrequency, setBodySiteFrequency] = useState<BodySiteFrequency[]>([]);
   const [timeFormat, setTimeFormat] = useState<'12hr' | '24hr'>('12hr');
   const [baselineMap, setBaselineMap] = useState<Partial<Record<DomainType, number>>>({});
   const [viewingCluster, setViewingCluster] = useState<DetectedCluster | null>(null);
@@ -370,7 +371,7 @@ export default function InsightsScreen() {
         fetchMarkersInRange(from90, to).catch(() => [] as InterventionMarker[]),
         supabase.from('context_tags').select('*').eq('user_id', user.id),
         bodyTrackingEnabled
-          ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', from90).lte('entry_date', to).order('entry_date', { ascending: true })
+          ? supabase.from('body_checkins').select('*, body_pain_sites(*)').eq('user_id', user.id).gte('entry_date', from90).lte('entry_date', to).order('entry_date', { ascending: true })
           : Promise.resolve({ data: [] as Record<string, unknown>[] }),
         bodyTrackingEnabled
           ? supabase.from('body_events').select('*, body_event_sites(*)').eq('user_id', user.id).gte('event_date', from90).lte('event_date', to)
@@ -588,6 +589,13 @@ export default function InsightsScreen() {
     const bodyEventsRangeRaw = ((bodyEvents90dRaw ?? []) as { event_date: string; event_type: string }[])
       .filter(r => r.event_date >= fromRange);
     setBodyCheckInRows(bodyCheckInsRangeRaw);
+    // Flattened out of the nested select, with entry_date joined on from the
+    // parent row — computeBodySiteFrequency counts distinct days, so each site
+    // needs to know which day it belongs to.
+    const painSitesInRange = bodyCheckInsRangeRaw.flatMap(c =>
+      ((c.body_pain_sites as Record<string, unknown>[] | undefined) ?? [])
+        .map(site => ({ ...site, entry_date: c.entry_date as string })));
+    setBodySiteFrequency(computeBodySiteFrequency(painSitesInRange as never[], bodyEventsRangeRaw as never[]));
     // Dates and the day's note per event, so the Body drill-down can open an
     // event type onto when it actually happened. Already built for the PDF
     // report's body page; Insights simply never asked for it.
@@ -785,6 +793,7 @@ export default function InsightsScreen() {
           domains={bodyDomains}
           events={bodyEvents}
           eventOccurrences={bodyEventOccurrences}
+          siteFrequency={bodySiteFrequency}
           checkInRows={bodyCheckInRows}
           daysLogged={bodyDaysLogged}
           findings={bodyFindings}
