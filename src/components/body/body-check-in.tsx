@@ -261,11 +261,20 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       id = inserted.id;
     }
 
-    await supabase.from('body_pain_sites').delete().eq('body_checkin_id', id);
+    // Everything below is delete-then-insert, which is the dangerous shape: a
+    // delete that succeeds followed by an insert that fails destroys sites that
+    // were already recorded. None of these results were checked, so that loss
+    // was silent and the save still reported success. The main body_checkins
+    // row has already been written at this point, so a failure here is partial
+    // rather than total — the user is told which part didn't stick.
+    const sideEffectErrors: unknown[] = [];
+    const track = <T extends { error: unknown }>(r: T) => { if (r.error) sideEffectErrors.push(r.error); return r; };
+
+    track(await supabase.from('body_pain_sites').delete().eq('body_checkin_id', id));
     if (painSites.length > 0) {
-      await supabase.from('body_pain_sites').insert(
+      track(await supabase.from('body_pain_sites').insert(
         painSites.map(s => ({ body_checkin_id: id, user_id: user.id, region: s.region, side: s.side, aspect: s.aspect }))
-      );
+      ));
     }
 
     for (const type of BODY_EVENT_ORDER) {
@@ -275,24 +284,32 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       const character = eventCharacter[type];
 
       if (isTicked && !wasTicked) {
-        const { data: ev } = await supabase
+        const { data: ev, error: evErr } = await supabase
           .from('body_events')
           .insert({ user_id: user.id, event_date: selectedDate, event_type: type, body_checkin_id: id, entered_retroactively: retro, character: character?.length ? character : null })
           .select('id').single();
+        if (evErr) sideEffectErrors.push(evErr);
         if (ev && sites?.length) {
-          await supabase.from('body_event_sites').insert(sites.map(s => ({ body_event_id: ev.id, user_id: user.id, region: s.region, side: s.side })));
+          track(await supabase.from('body_event_sites').insert(sites.map(s => ({ body_event_id: ev.id, user_id: user.id, region: s.region, side: s.side }))));
         }
-        trackBodyEventLogged(type);
+        if (ev) trackBodyEventLogged(type);
       } else if (isTicked && wasTicked) {
         const evId = existingEventIds[type]!;
-        await supabase.from('body_events').update({ character: character?.length ? character : null }).eq('id', evId);
-        await supabase.from('body_event_sites').delete().eq('body_event_id', evId);
+        track(await supabase.from('body_events').update({ character: character?.length ? character : null }).eq('id', evId));
+        track(await supabase.from('body_event_sites').delete().eq('body_event_id', evId));
         if (sites?.length) {
-          await supabase.from('body_event_sites').insert(sites.map(s => ({ body_event_id: evId, user_id: user.id, region: s.region, side: s.side })));
+          track(await supabase.from('body_event_sites').insert(sites.map(s => ({ body_event_id: evId, user_id: user.id, region: s.region, side: s.side }))));
         }
       } else if (!isTicked && wasTicked) {
-        await supabase.from('body_events').delete().eq('id', existingEventIds[type]!);
+        track(await supabase.from('body_events').delete().eq('id', existingEventIds[type]!));
       }
+    }
+
+    if (sideEffectErrors.length > 0) {
+      sideEffectErrors.forEach(e => console.error('[BodyCheckIn] secondary write failed:', e));
+      setSaving(false);
+      setError('Your scores saved, but the sites or events on this entry did not. Reopen the day and check them.');
+      return;
     }
 
     const domainCount = CHECKIN_BODY_DOMAIN_ORDER.filter(d => values[d] !== undefined).length;

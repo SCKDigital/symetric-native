@@ -176,12 +176,21 @@ export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
   const { user, signOut } = useAuth();
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const isConfirmed = confirmText === 'DELETE';
 
+  // Every result is checked before signing out. None of them were, and
+  // PostgREST returns failures rather than throwing — so a delete blocked by a
+  // missing RLS policy left the rows in place, signed the user out anyway, and
+  // told them their account was gone. That is not a hypothetical here: the
+  // profiles table shipped with RLS enabled and no DELETE policy, which is
+  // exactly this failure, and nothing in the app could report it.
   const handleDeleteAll = async () => {
     if (!user || !isConfirmed) return;
     setDeleting(true);
-    await Promise.all([
+    setDeleteError(null);
+
+    const results = await Promise.all([
       supabase.from('check_ins').delete().eq('user_id', user.id),
       supabase.from('sleep_logs').delete().eq('user_id', user.id),
       supabase.from('detected_clusters').delete().eq('user_id', user.id),
@@ -189,7 +198,24 @@ export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
       supabase.from('baselines').delete().eq('user_id', user.id),
       supabase.from('check_in_settings').delete().eq('user_id', user.id),
     ]);
-    await supabase.from('profiles').delete().eq('id', user.id);
+    const failed = results.filter(r => r.error);
+    if (failed.length > 0) {
+      failed.forEach(r => console.error('[DeleteAllSheet] delete failed:', r.error));
+      setDeleteError('Some data could not be deleted, so your account has been left in place. Nothing was signed out. Try again, or contact support.');
+      setDeleting(false);
+      return;
+    }
+
+    // Last, and separately: the remaining tables cascade from this row, so it
+    // failing means data survives that the user was told had gone.
+    const { error: profileError } = await supabase.from('profiles').delete().eq('id', user.id);
+    if (profileError) {
+      console.error('[DeleteAllSheet] profile delete failed:', profileError);
+      setDeleteError('Your data was removed but the account itself could not be deleted. You have not been signed out. Try again, or contact support.');
+      setDeleting(false);
+      return;
+    }
+
     await signOut();
   };
 
@@ -209,6 +235,7 @@ export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
         editable={!deleting}
         style={styles.textInput}
       />
+      {deleteError && <Text style={styles.error}>{deleteError}</Text>}
       <SheetButton danger label={deleting ? 'Deleting...' : 'Delete everything'} onPress={handleDeleteAll} disabled={!isConfirmed || deleting} />
       <SheetCancel onPress={onClose} />
     </SheetShell>
@@ -306,7 +333,7 @@ export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClos
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
-  error: { fontSize: 12, color: '#f87171', marginBottom: 12 },
+  error: { fontSize: 12, color: '#f87171', marginBottom: 12, lineHeight: 18 },
   hint: { fontSize: 12, color: '#8b90a4', lineHeight: 18, marginBottom: 12 },
   fieldLabel: { fontSize: 11, color: '#4a5568', letterSpacing: 0.6, marginBottom: 6 },
   done: { fontSize: 14, color: '#818cf8', textAlign: 'center', paddingVertical: 8 },

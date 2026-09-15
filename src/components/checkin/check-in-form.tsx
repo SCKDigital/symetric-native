@@ -60,12 +60,14 @@ export default function CheckInForm({
   );
   const [notes, setNotes] = useState(initialNotes ?? '');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
 
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const updateData: Partial<CheckIn> = {
         status: 'completed',
@@ -73,7 +75,17 @@ export default function CheckInForm({
         notes: notes || undefined,
         ...values,
       };
-      await supabase.from('check_ins').update(updateData).eq('id', checkIn.id);
+      // PostgREST failures are returned, not thrown, so the try/catch around
+      // this never saw them: a rejected write fell straight through to the
+      // "Logged" tick, the analytics event and the screen closing. The user was
+      // told their check-in saved when nothing had been written.
+      const { error } = await supabase.from('check_ins').update(updateData).eq('id', checkIn.id);
+      if (error) {
+        console.error('[CheckInForm] save failed:', error);
+        setSaveError("Couldn't save that. Check your connection and try again.");
+        setSaving(false);
+        return;
+      }
       trackCheckInCompleted(activeDomains.length);
 
       if (onCompleted) {
@@ -83,7 +95,9 @@ export default function CheckInForm({
         setShowConfirmation(true);
         setTimeout(() => onComplete(), 1500);
       }
-    } catch {
+    } catch (e) {
+      console.error('[CheckInForm] save threw:', e);
+      setSaveError("Couldn't save that. Check your connection and try again.");
       setSaving(false);
     }
   };
@@ -143,9 +157,11 @@ export default function CheckInForm({
           </View>
         </View>
 
+        {saveError && <Text style={styles.saveError}>{saveError}</Text>}
+
         <Pressable onPress={handleSave} disabled={saving} style={({ pressed }) => pressed && !saving && styles.pressed}>
           <View style={[styles.submitButton, saving && styles.submitButtonDisabled]}>
-            {saving ? <ActivityIndicator color="#4a5568" /> : <Text style={styles.submitButtonText}>{submitButtonText ?? 'Done'}</Text>}
+            {saving ? <ActivityIndicator color="#4a5568" /> : <Text style={styles.submitButtonText}>{saveError ? 'Try again' : (submitButtonText ?? 'Done')}</Text>}
           </View>
         </Pressable>
       </ScrollView>
@@ -155,6 +171,7 @@ export default function CheckInForm({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
+  saveError: { fontSize: 13, color: '#f87171', marginBottom: 12, lineHeight: 19 },
   content: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 96 },
   card: {
     backgroundColor: '#1e2840',
