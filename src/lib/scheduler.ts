@@ -5,27 +5,55 @@ import { RESCUE_WINDOW_MS, CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 // logic (no DOM/browser API involved), so it runs identically on native.
 
 /**
+ * Reads an instant's wall-clock fields in `timezone` and returns them as if
+ * they were UTC. The difference between this and the instant itself is the
+ * zone's offset at that instant.
+ *
+ * formatToParts, not toLocaleString: the *format* of toLocaleString's output is
+ * implementation-defined and explicitly not something Date can parse back. V8
+ * accepts its own "9/12/2026, 8:00:00 AM" output, which is why the previous
+ * implementation worked on the web. Hermes' parser is far stricter, so on
+ * device every offset came out NaN and every window boundary became an Invalid
+ * Date. The damage was invisible: `now > windowEndUTC` is false for an Invalid
+ * Date, so the "window has closed" guard did not bail out, and scheduling ran
+ * on to throw RangeError inside its own try/catch and return having inserted
+ * nothing. That is why a day's check-ins only ever appeared after opening the
+ * web app. Reading numeric parts avoids the round-trip entirely.
+ */
+function wallClockAsUtcMs(instantMs: number, timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(instantMs));
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value);
+  return Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+}
+
+/**
  * Convert a local time string (HH:MM) on a given local date string (YYYY-MM-DD)
  * in the specified IANA timezone to a UTC Date.
  *
- * Works regardless of the device's own timezone because the offset is derived
- * by comparing how the same UTC instant is rendered in UTC vs the target timezone.
+ * Works regardless of the device's own timezone: the answer is the instant
+ * whose wall clock in `timezone` reads as the requested date and time.
+ *
+ * Solved by iteration rather than a single subtraction because the zone's
+ * offset at the *guess* can differ from its offset at the *answer* — that is
+ * exactly what happens across a DST boundary. Two passes converge for every
+ * real zone; the second is a no-op whenever the first landed in the same
+ * offset.
  */
 export function localTimeToUTC(localDateStr: string, timeStr: string, timezone: string): Date {
   const [hours, minutes] = timeStr.split(':').map(Number);
   const [year, month, day] = localDateStr.split('-').map(Number);
+  const targetMs = Date.UTC(year, month - 1, day, hours, minutes, 0);
 
-  // Treat the desired local time as UTC to get an approximate epoch value
-  const guess = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
-
-  // Compare how `guess` renders in UTC vs the target timezone.
-  // Parsing both strings in the same locale cancels the device's own offset,
-  // giving us a clean UTC-vs-TZ delta.
-  const utcMs = new Date(guess.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
-  const tzMs = new Date(guess.toLocaleString('en-US', { timeZone: timezone })).getTime();
-  const offsetMs = utcMs - tzMs;
-
-  return new Date(guess.getTime() + offsetMs);
+  let ms = targetMs;
+  for (let i = 0; i < 2; i++) {
+    ms += targetMs - wallClockAsUtcMs(ms, timezone);
+  }
+  return new Date(ms);
 }
 
 /**
@@ -87,7 +115,7 @@ async function scheduleTodayCheckIns(userId: string, timezone: string) {
 
     if (settingsError || !settings) {
       console.error('No check-in settings found:', settingsError);
-      return;
+      throw new Error('Could not read your check-in settings.');
     }
 
     const now = new Date();
@@ -121,6 +149,18 @@ async function scheduleTodayCheckIns(userId: string, timezone: string) {
     const windowStartUTC = localTimeToUTC(todayLocal, settings.window_start, timezone);
     const windowEndUTC = localTimeToUTC(todayLocal, settings.window_end, timezone);
 
+    // An Invalid Date here used to sail straight past the "window has closed"
+    // check below — every comparison against NaN is false — and only surfaced
+    // three lines later as a RangeError from toISOString, caught by this
+    // function's own try/catch and logged to a console nobody reads. Months of
+    // days went unscheduled that way. Fail loudly and specifically instead.
+    if (Number.isNaN(windowStartUTC.getTime()) || Number.isNaN(windowEndUTC.getTime())) {
+      throw new Error(
+        `Could not read the check-in window (${settings.window_start}–${settings.window_end}) `
+        + `in timezone "${timezone}". Check the timezone on your profile.`,
+      );
+    }
+
     if (now > windowEndUTC) {
       console.log('Window has closed for today');
       return;
@@ -150,12 +190,17 @@ async function scheduleTodayCheckIns(userId: string, timezone: string) {
     if (insertError) {
       if (insertError.code === '23505') return; // another process already scheduled today
       console.error('Error scheduling check-ins:', insertError);
-      return;
+      throw new Error("Could not save today's check-ins.");
     }
 
     console.log(`Scheduled ${rows.length} check-ins for ${todayLocal}`);
   } catch (error) {
+    // Rethrown, not swallowed. Swallowing here is precisely how a broken
+    // timezone conversion went unnoticed for months: the screen showed "your
+    // check-ins are coming" forever and nothing anywhere said why. The caller
+    // decides what the user sees; this only makes sure it knows.
     console.error('Error in ensureTodayCheckIns:', error);
+    throw error;
   }
 }
 

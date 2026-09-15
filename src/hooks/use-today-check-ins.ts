@@ -31,6 +31,10 @@ interface State {
   timeFormat: TimeFormat;
   /** The whole row: rescheduling validates against window_start/window_end. */
   checkInSettings: CheckInSettings | null;
+  /** Why today has no check-ins, when the reason is a failure rather than an
+   *  empty window. Shown on Today so a scheduling problem is visible instead of
+   *  looking like the day simply hasn't started. */
+  schedulingError: string | null;
 }
 
 const EMPTY: State = {
@@ -48,6 +52,7 @@ const EMPTY: State = {
   allCheckIns: [],
   timeFormat: '12hr',
   checkInSettings: null,
+  schedulingError: null,
 };
 
 /**
@@ -87,9 +92,17 @@ export function useTodayCheckIns() {
     const todayKey = new Intl.DateTimeFormat('en-CA', {
       timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
     }).format(new Date());
+    let schedulingError: string | null = null;
     if (scheduledForDay.current !== todayKey || lastLoadFoundNothing.current) {
       scheduledForDay.current = todayKey;
-      await ensureTodayCheckIns(user.id, timezone);
+      try {
+        await ensureTodayCheckIns(user.id, timezone);
+      } catch (e) {
+        // Kept rather than rethrown: the rest of the day's data still loads and
+        // is still worth showing. The message is rendered under the empty state.
+        schedulingError = e instanceof Error ? e.message : 'Could not set up today’s check-ins.';
+        console.error('[useTodayCheckIns] scheduling failed:', e);
+      }
     }
 
     const todayLocal = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -195,6 +208,8 @@ export function useTodayCheckIns() {
       allCheckIns: todaysCheckIns,
       timeFormat: (settingsRes.data?.time_format as TimeFormat | undefined) ?? '12hr',
       checkInSettings: (settingsRes.data as CheckInSettings | null) ?? null,
+      // Only worth showing when it actually left the day empty.
+      schedulingError: totalCount === 0 ? schedulingError : null,
     });
   }, [user, profile?.timezone]);
 
