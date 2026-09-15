@@ -64,6 +64,12 @@ export async function upsertStreakCluster(params: {
   const sortWeight = calculateSortWeight(clusterForScoring);
 
   const existing = allClusters.find(c => {
+    // Type matters: this only ever wants to extend another sustained streak.
+    // It worked without the check only because every other cluster type stores
+    // direction as null, so the direction test happened to exclude them — a
+    // guarantee nothing states and a new cluster type with a direction would
+    // quietly break, silently rewriting an unrelated row's dates and severity.
+    if (c.cluster_type !== 'sustained_deviation') return false;
     if (!c.domains_involved?.includes(domain)) return false;
     if (c.direction !== direction) return false;
     const clusterStart: string = c.start_date;
