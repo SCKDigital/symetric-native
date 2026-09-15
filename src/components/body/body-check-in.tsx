@@ -13,6 +13,8 @@ import {
   BODY_DOMAINS, BODY_EARLY_LOG_HOUR, BODY_EARLY_LOG_SENSITIVE_DOMAINS, BODY_EVENT_ORDER, BODY_EVENTS,
   BREATHLESSNESS_CHARACTER_TAGS, CHECKIN_BODY_DOMAIN_ORDER, PAIN_CHARACTER_TAGS, REACTION_CHARACTER_TAGS,
 } from '@/lib/body/constants';
+import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
+import { dailyBodyValue } from '@/lib/detection/body-daily-value';
 import { BODY_COLOR } from '@/lib/domains';
 import { addDays, parseDateString, todayDateString } from '@/lib/date-utils';
 import { supabase } from '@/lib/supabase';
@@ -53,6 +55,11 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   const [loading, setLoading] = useState(true);
   const [checkinId, setCheckinId] = useState<string | null>(null);
   const [values, setValues] = useState<DomainValues>({});
+  // Each domain's own rolling baseline, used as the slider's resting position
+  // and as the value stored for a domain that is never touched. Empty until
+  // the history fetch lands; every read falls back to the 0-10 midpoint, which
+  // is also what rollingBodyBaseline returns before there are 7 logged days.
+  const [domainBaselines, setDomainBaselines] = useState<Partial<Record<BodyDomainType, number>>>({});
   const [painDiffuse, setPainDiffuse] = useState(false);
   const [painSites, setPainSites] = useState<PainSite[]>([]);
   const [painCharacter, setPainCharacter] = useState<string[]>([]);
@@ -93,6 +100,39 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(values.pain_mechanical ?? 0) > 0 || (values.joint_instability ?? 0) > 0]);
+
+  // An untouched slider records this domain's baseline rather than a flat 5,
+  // so "typical for me" is what gets stored on a day nothing was changed. Same
+  // rolling-median rule the detectors use, so the stored value and the value
+  // it is later compared against come from one definition. Days before the one
+  // being edited only — including it would fold a value into its own baseline.
+  useEffect(() => {
+    if (!user || !visible) return;
+    let cancelled = false;
+    const from = new Date(parseDateString(selectedDate).getTime() - 90 * 86_400_000)
+      .toLocaleDateString('en-CA');
+    supabase
+      .from('body_checkins').select('*')
+      .eq('user_id', user.id)
+      .gte('entry_date', from)
+      .lt('entry_date', selectedDate)
+      .order('entry_date', { ascending: true })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const rows = (data ?? []) as Record<string, unknown>[];
+        const next: Partial<Record<BodyDomainType, number>> = {};
+        for (const d of CHECKIN_BODY_DOMAIN_ORDER) {
+          const history = rows
+            .map(r => dailyBodyValue(r, d))
+            .filter((v): v is number => v !== null);
+          // Rounded: the slider steps in whole numbers and the columns are
+          // smallint, so a median of 4.5 has to land somewhere.
+          next[d] = Math.round(rollingBodyBaseline(history));
+        }
+        setDomainBaselines(next);
+      });
+    return () => { cancelled = true; };
+  }, [user, visible, selectedDate]);
 
   useEffect(() => {
     if (!user || !visible) return;
@@ -204,10 +244,11 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       entered_retroactively: retro,
     };
     for (const d of CHECKIN_BODY_DOMAIN_ORDER) {
-      // Optional domains stay null when untouched — not logging something is
-      // real information and must not be invented as a 5. Required ones are
-      // pre-selected in the UI, so they store what the slider was showing.
-      payload[d] = values[d] ?? (BODY_DOMAINS[d]?.required ? 5 : null);
+      // Every domain stores what its slider was showing, touched or not, so the
+      // form never claims a rating it didn't save. For an untouched domain that
+      // is the rolling baseline — invented data, but "typical for me" rather
+      // than a flat 5, which distorts the baselines it feeds far less.
+      payload[d] = values[d] ?? domainBaselines[d] ?? 5;
     }
 
     let id = checkinId;
@@ -316,7 +357,7 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
                           hint={config.hint}
                           lowLabel={config.lowAnchor}
                           highLabel={config.highAnchor}
-                          value={values[d] ?? 5}
+                          value={values[d] ?? domainBaselines[d] ?? 5}
                           onChange={v => setValues(prev => ({ ...prev, [d]: v }))}
                           color={BODY_COLOR}
                           note={note2}

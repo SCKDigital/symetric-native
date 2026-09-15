@@ -67,10 +67,14 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
 
   const domains: DomainType[] = activeDomains && activeDomains.length > 0 ? activeDomains : ['mood'];
 
+  // Matches the scheduled check-in form: a slider rests at the domain's own
+  // baseline, so an average moment is one tap.
+  const restingValue = (d: DomainType) => Math.round(baselines?.[d] ?? 5);
+
   // The web version keeps `values` in sync with the domain list via an effect.
-  // Not needed here: every read defaults with `?? 5`, so a domain added to
-  // tracking since this component mounted already renders at its resting
-  // position, and syncing it in an effect would only add a render pass.
+  // Not needed here: every read falls back to restingValue(), so a domain
+  // added to tracking since this component mounted already renders at its
+  // resting position, and syncing it in an effect would only add a render pass.
 
   useEffect(() => {
     if (!user) return;
@@ -156,7 +160,7 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
       status: 'completed',
       notes: notes || undefined,
     };
-    for (const d of domains) payload[d] = values[d] ?? 5;
+    for (const d of domains) payload[d] = values[d] ?? restingValue(d);
 
     // The inserted row comes back so it can be handed straight to the edit
     // modal — a bonus check-in is not in Today's list to be found again.
@@ -179,7 +183,7 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
     setCooldownUntil(until);
     setTimeRemaining(COOLDOWN_MS);
     setModalOpen(false);
-    setValues(Object.fromEntries(domains.map(d => [d, 5])));
+    setValues(Object.fromEntries(domains.map(d => [d, restingValue(d)])));
     setNotes('');
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -248,7 +252,7 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
                 key={d}
                 domain={d}
                 label={DOMAIN_COPY[d]?.label ?? d}
-                value={values[d] ?? 5}
+                value={values[d] ?? restingValue(d)}
                 color={getDomainColorFromProfile(d, profile)}
                 onChange={v => setValues(prev => ({ ...prev, [d]: v }))}
               />

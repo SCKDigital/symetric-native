@@ -49,7 +49,14 @@ export default function CheckInForm({
   // scroll travel left to compete for. Locked while a slider is being dragged.
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [values, setValues] = useState<Record<DomainType, number>>(
-    activeDomains.reduce((acc, domain) => ({ ...acc, [domain]: initialValues?.[domain] ?? 5 }), {} as Record<DomainType, number>),
+    // Resting position is the domain's own baseline, not a flat 5, so a
+    // typical day can be submitted without touching anything and still record
+    // "typical for me". initialValues wins when an existing check-in is being
+    // reopened. Falls back to the scale midpoint before a baseline exists.
+    activeDomains.reduce(
+      (acc, domain) => ({ ...acc, [domain]: initialValues?.[domain] ?? Math.round(baselines[domain] ?? 5) }),
+      {} as Record<DomainType, number>,
+    ),
   );
   const [notes, setNotes] = useState(initialNotes ?? '');
   const [saving, setSaving] = useState(false);
