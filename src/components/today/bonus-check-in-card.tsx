@@ -48,7 +48,6 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [values, setValues] = useState<Record<string, number>>({});
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -181,7 +180,6 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
     setTimeRemaining(COOLDOWN_MS);
     setModalOpen(false);
     setValues(Object.fromEntries(domains.map(d => [d, 5])));
-    setTouched({});
     setNotes('');
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -251,12 +249,8 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
                 domain={d}
                 label={DOMAIN_COPY[d]?.label ?? d}
                 value={values[d] ?? 5}
-                touched={touched[d] ?? false}
                 color={getDomainColorFromProfile(d, profile)}
-                onChange={v => {
-                  setValues(prev => ({ ...prev, [d]: v }));
-                  setTouched(prev => ({ ...prev, [d]: true }));
-                }}
+                onChange={v => setValues(prev => ({ ...prev, [d]: v }))}
               />
             ))}
 

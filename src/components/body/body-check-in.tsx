@@ -173,7 +173,6 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       ? 'pain_mechanical'
       : null;
   const isEarlyLog = selectedDate === today && new Date().getHours() < BODY_EARLY_LOG_HOUR;
-  const untouchedRequiredDomains = activeDomains.filter(d => BODY_DOMAINS[d].required && values[d] === undefined);
 
   const toggleEvent = (type: BodyEventType) => {
     setTickedEvents(prev => {
@@ -205,7 +204,10 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       entered_retroactively: retro,
     };
     for (const d of CHECKIN_BODY_DOMAIN_ORDER) {
-      payload[d] = values[d] ?? null;
+      // Optional domains stay null when untouched — not logging something is
+      // real information and must not be invented as a 5. Required ones are
+      // pre-selected in the UI, so they store what the slider was showing.
+      payload[d] = values[d] ?? (BODY_DOMAINS[d]?.required ? 5 : null);
     }
 
     let id = checkinId;
@@ -318,7 +320,7 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
                           onChange={v => setValues(prev => ({ ...prev, [d]: v }))}
                           color={BODY_COLOR}
                           note={note2}
-                          touched={config.required ? values[d] !== undefined : undefined}
+
                         />
                         {d === painCharacterAnchor && showPainCharacter && (
                           <CharacterTags options={PAIN_CHARACTER_TAGS} selected={painCharacter} onChange={setPainCharacter} />
@@ -390,13 +392,10 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
                 )}
               </View>
 
-              <Pressable onPress={handleSave} disabled={saving || untouchedRequiredDomains.length > 0} style={[styles.saveButton, (saving || untouchedRequiredDomains.length > 0) && styles.saveButtonDisabled]}>
-                {saving ? <ActivityIndicator color="#4a5568" /> : <Text style={[styles.saveButtonText, untouchedRequiredDomains.length > 0 && styles.saveButtonTextDisabled]}>{saved ? 'Saved' : checkinId ? 'Save changes' : 'Save'}</Text>}
+              <Pressable onPress={handleSave} disabled={saving} style={[styles.saveButton, saving && styles.saveButtonDisabled]}>
+                {saving ? <ActivityIndicator color="#4a5568" /> : <Text style={styles.saveButtonText}>{saved ? 'Saved' : checkinId ? 'Save changes' : 'Save'}</Text>}
               </Pressable>
 
-              {untouchedRequiredDomains.length > 0 && (
-                <Text style={styles.requiredHint}>Rate {untouchedRequiredDomains.map(d => `"${BODY_DOMAINS[d].label}"`).join(', ')} before saving.</Text>
-              )}
               {error && <Text style={styles.errorText}>{error}</Text>}
             </>
           )}
