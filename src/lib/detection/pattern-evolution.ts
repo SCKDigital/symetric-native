@@ -2,11 +2,12 @@ import { median as medianOf } from '@/lib/baseline-stats';
 import { addDays } from '@/lib/date-utils';
 import { debug } from '@/lib/debug';
 import { BodyDomainType, DomainType } from '@/lib/supabase';
+import { higherIsWorse } from '@/lib/domain-polarity';
 
 // Ported from the web app's src/lib/detection/patternEvolution.ts. Widened
 // to cover body domains too (body detector sub-series chunk 6) — this
 // detector is domain-agnostic (a generic loop over activeDomains, no
-// mind-specific assumptions beyond HIGHER_IS_BETTER below), so covering body
+// mind-specific assumptions — polarity comes from domain-polarity.ts), so body
 // domains is a type-level change only, matching web's TrackedFactor exactly.
 export type TrackedFactor = DomainType | BodyDomainType;
 
@@ -69,7 +70,11 @@ const TYPE_PRIORITY: Record<PatternEvolution['evolution_type'], number> = {
 // domain was improving. Same trap as end of day exhaustion: a relabelled scale
 // that left a polarity assumption behind. See lib/domain-polarity.ts, which
 // this set agrees with.
-const HIGHER_IS_BETTER = new Set<TrackedFactor>(['mood', 'energy', 'concentration', 'motivation']);
+// Polarity comes from lib/domain-polarity.ts, not a second set kept here. The
+// two agreed today, but they were two places to update, and a stale polarity
+// set is exactly what made rising social depletion report as "improving" — the
+// bug that helper was written to end. Body domains and any future mind domain
+// are now covered by construction rather than by remembering this line.
 
 function stdDev(arr: number[]): number {
   if (arr.length < 2) return 0;
@@ -132,7 +137,7 @@ export function detectPatternEvolution(days: DayScores[], activeDomains: Tracked
       const densityRatio = Math.min(firstScores.length, recentScores.length) / Math.max(firstScores.length, recentScores.length);
       if (densityRatio >= DENSITY_RATIO_MIN) {
         const up = recentAvg >= firstAvg;
-        const hib = HIGHER_IS_BETTER.has(domain);
+        const hib = !higherIsWorse(domain);
         candidates.push({ type: 'baseline_shift', magnitude: avgShift, direction: up === hib ? 'improving' : 'worsening' });
       }
     }

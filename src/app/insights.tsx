@@ -47,6 +47,13 @@ import type { InterventionMarker } from '@/types/marker';
 type RangeDays = 7 | 14 | 30 | 60 | 90;
 const RANGE_OPTIONS: RangeDays[] = [7, 14, 30, 60, 90];
 
+/** Day-of-week, lag, rare-event and pattern-evolution findings are only shown
+ *  from this range up. Over a week you get one instance of each weekday and
+ *  nothing can be "rare"; showing findings computed over 90 days while the
+ *  user has 7d selected is worse still, because the dates on screen then
+ *  contradict the range they picked. Under this, the sections are empty. */
+const MIN_RANGE_FOR_WINDOWED_DETECTORS = 30;
+
 const CLUSTER_TYPE_LABEL: Record<string, string> = {
   sustained_deviation: 'Sustained pattern',
   intraday_volatility: 'Volatility spike',
@@ -174,6 +181,15 @@ function AreaIndex({ rows, onSelect }: { rows: AreaRow[]; onSelect: (area: Area)
 const STANDOUT_EMPTY =
   "Nothing stands out yet across these 30 days. Patterns usually need about a month of check-ins before they're worth reading.";
 
+/** Shown whenever the range is too short for the windowed detectors to run at
+ *  all. Without it a 7-day selection reads as "you have no patterns", when what
+ *  actually happened is that day-of-week, lag, rare-day and evolution detection
+ *  were switched off — a week holds one instance of each weekday and nothing
+ *  can be rare in it. Saying nothing here is the difference between an empty
+ *  answer and a wrong one. */
+const RANGE_TOO_SHORT =
+  `Day-of-week, rare days, what-follows-what and pattern changes need at least ${MIN_RANGE_FOR_WINDOWED_DETECTORS} days of range to mean anything, so they are not calculated here. Choose a longer range to see them.`;
+
 // Prose, not cards. Ported from the web app's WhatStandsOut.tsx, whose header
 // comment calls this the point of the redesign: findings sit above the fold as
 // sentences rather than behind bordered panels. Native had them as boxed cards
@@ -196,6 +212,9 @@ function WhatStandsOut({ findings, rangeDays }: { findings: PatternFinding[]; ra
             </Text>
           ))}
         </View>
+      )}
+      {rangeDays < MIN_RANGE_FOR_WINDOWED_DETECTORS && (
+        <Text style={styles.rangeTooShort}>{RANGE_TOO_SHORT}</Text>
       )}
     </View>
   );
@@ -540,12 +559,6 @@ function MedicationSection({ impacts }: { impacts: InterventionImpact[] }) {
 // intentionally stay un-merged (separate per-area passes, own baseline
 // maps) — merging is only for detectors whose whole point is cross-area
 // pairs or a shared per-day domain list.
-/** Day-of-week, lag, rare-event and pattern-evolution findings are only shown
- *  from this range up. Over a week you get one instance of each weekday and
- *  nothing can be "rare"; showing findings computed over 90 days while the
- *  user has 7d selected is worse still, because the dates on screen then
- *  contradict the range they picked. Under this, the sections are empty. */
-const MIN_RANGE_FOR_WINDOWED_DETECTORS = 30;
 
 /** The range-independent half of the Insights fetch, cached per user so
  *  changing the range costs no network. */
@@ -781,19 +794,27 @@ export default function InsightsScreen() {
     setRareEvents(detectRareEvents(daysRangeScoped, resolvedDomains, baselineMap));
     setBodyPatternEvolutions(detectPatternEvolution(bodyDaysRangeScoped, resolvedBodyDomains, bodyBaselineMap));
     setBodyRareEvents(detectRareEvents(bodyDaysRangeScoped, resolvedBodyDomains, bodyBaselineMap));
-    setMarkers(markersData);
+    // Scoped the same way as body events: which markers are *reported* follows
+    // the selected range, while the maths still sees the full 90 days. A marker
+    // needs MIN_DAYS of scores either side of it, so truncating the day data to
+    // the range would silently drop every marker near its start — the finding
+    // would disappear rather than become correctly scoped.
+    const markersInRange = markersData.filter(m => m.marker_date >= fromRange && m.marker_date <= to);
+    setMarkers(markersInRange);
 
     // Merged mind+body window, matching the merge rationale above — a
-    // medication/therapy marker's before/after effect can land on either
-    // side. Window stays 90d, not the selected range — an existing native
-    // choice from the mind-only intervention-impact chunk, predating this
-    // merge pass and left as-is (out of scope to also change here).
-    const impacts = detectInterventionImpacts(markersData, merged90d, combinedDomains);
+    // medication/therapy marker's before/after effect can land on either side.
+    const impacts = detectInterventionImpacts(markersInRange, merged90d, combinedDomains);
     setInterventionImpacts(impacts);
 
     // ── Body: time-of-day (morning vs evening) ───────────────────────────────
+    // Range-scoped like the other windowed detectors: this is a plain
+    // "morning vs evening, over this window" average, so a 30-day selection
+    // should not be answered with 90 days of pairs. Its own MIN_DAYS of 10
+    // pairs then decides whether there is enough to say anything.
     const moPairs: MorningEveningPair[] = [];
-    for (const entry of (bodyCheckIns90dRaw ?? []) as Record<string, unknown>[]) {
+    for (const entry of ((bodyCheckIns90dRaw ?? []) as Record<string, unknown>[])
+      .filter(r => (r.entry_date as string) >= fromRange)) {
       for (const d of MORNING_BODY_DOMAIN_ORDER) {
         const evening = entry[d];
         const morning = entry[`morning_${d}`];
@@ -806,15 +827,36 @@ export default function InsightsScreen() {
 
     // ── Body: event frequency + body-event → mind impact ─────────────────────
     const bodyEventOccurrences = (bodyEvents90dRaw ?? []) as { event_date: string; event_type: any }[];
+
+    // Deliberately NOT range-scoped. detectBodyEventFrequency compares its own
+    // fixed 14-day recent window against at least 30 days of history before it;
+    // handing it 30 days total leaves 16 days of history and it returns nothing.
+    // It is a "last two weeks vs your usual" statistic rather than a statement
+    // about the selected window, and its sentence says "in the last two weeks"
+    // so the reader is told which window it means.
     setBodyEventFrequencyPatterns(detectBodyEventFrequency(bodyEventOccurrences, to));
-    setBodyEventImpacts(detectBodyEventImpacts(bodyEventOccurrences, days90d, resolvedDomains));
+
+    // Scoped by which events are reported, not by the data the maths runs on.
+    // Truncating days90d would cut the before/after window of an event sitting
+    // near the start of the range and change the answer; dropping events from
+    // outside the range just stops the screen claiming things that happened
+    // before the window the user selected.
+    setBodyEventImpacts(detectBodyEventImpacts(
+      bodyEventOccurrences.filter(e => e.event_date >= fromRange),
+      days90d,
+      resolvedDomains,
+    ));
 
     // ── Body × mind: persisted same-day correlations (chunk 3's weekly
     // scheduler pass writes these; de-duplicate to the highest-strength row
     // per pair, matching the web app's fetchLatestDomainConnections) ────────
     const seenConnectionPairs = new Set<string>();
     const latestConnections: BodyMindConnectionRow[] = [];
-    for (const row of (domainConnectionsData ?? []) as BodyMindConnectionRow[]) {
+    for (const row of ((domainConnectionsData ?? []) as BodyMindConnectionRow[])
+      // Persisted rows carry the window they were detected over; only those
+      // overlapping the selection belong under it, same rule as sleep
+      // connections above.
+      .filter(r => (r.window_end ?? '') >= fromRange)) {
       const key = `${row.domain_a}:${row.domain_b}`;
       if (!seenConnectionPairs.has(key)) {
         seenConnectionPairs.add(key);
@@ -856,7 +898,7 @@ export default function InsightsScreen() {
     // (not at render time) since it needs Date.now() — impure, and the
     // React Compiler-era lint rules flag that during render even for a
     // one-off "how many days ago" calculation like this.
-    const eligibleMarkers = markersData.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy');
+    const eligibleMarkers = markersInRange.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy');
     const impactedMarkerIds = new Set(impacts.map(i => i.marker_id));
     const unreadMarkers = eligibleMarkers.filter(m => !impactedMarkerIds.has(m.id));
     const mostRecentUnread = [...unreadMarkers].sort((a, b) => b.marker_date.localeCompare(a.marker_date))[0];
@@ -1137,6 +1179,7 @@ const styles = StyleSheet.create({
   smallCardTitle: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   smallCardBody: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
   smallCardSubtext: { marginTop: 4, color: '#6b7690', fontStyle: 'italic' },
+  rangeTooShort: { fontSize: 12.5, color: '#6b7690', lineHeight: 18, marginTop: 10 },
   rareGroupHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   rareGroupHeading: { flex: 1 },
   rareGroupDetail: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#1e2533', gap: 12 },
