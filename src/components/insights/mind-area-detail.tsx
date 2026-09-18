@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Line, Path, Polyline, Text as SvgText } from 'react-native-svg';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Svg, { Polyline } from 'react-native-svg';
 
 import BackRow from '@/components/insights/back-row';
 import { ClusterCard } from '@/components/insights/cluster-card';
+import { DomainSparklineRow } from '@/components/insights/domain-sparkline';
 import { useAuth } from '@/contexts/auth-context';
-import { useComfort } from '@/hooks/use-comfort';
-import { COMFORT_TOKENS } from '@/lib/comfort-theme';
 import WhatGoesWithWhatSection from '@/components/insights/correlation-section';
 import {
   CollapsibleRow, countRareDayGroups, RareDayGroups,
@@ -66,144 +65,25 @@ function volatilityGroupSummaryLine(group: VolatilityGroup): string {
   return swing != null ? `Swung ${swing} points - ${fmt(group.startDate)}` : `Varied significantly - ${fmt(group.startDate)}`;
 }
 
-function generateTrendLabel(domain: DomainType, days: DayScores[], baseline: number): string {
-  const domainDays = days.filter(d => d.scores[domain] !== undefined);
-  if (domainDays.length < 3) return 'stable';
-  const threshold = 1.5;
-  const daysAbove = domainDays.filter(d => d.scores[domain]! > baseline + threshold).length;
-  const daysBelow = domainDays.filter(d => d.scores[domain]! < baseline - threshold).length;
-  if (daysAbove > 0 && daysBelow > 0) return 'mixed';
-  if (daysAbove > 0) return 'elevated';
-  if (daysBelow > 0) return 'below';
-  return 'stable';
-}
-
-// ── Inline sparkline ────────────────────────────────────────────────────────
-//
-// Geometry ported from the web source, with the coordinate space changed from
-// a fixed 320-unit viewBox to the measured width in points. The old form was
-// `<Svg width="100%" viewBox="0 0 320 80">`, which with the default
-// preserveAspectRatio scales everything by min(renderedWidth / 320, 1) — so the
-// tick labels rendered at ~8.4pt on a small phone, ~8.9pt on a large one, and
-// could never exceed the authored 9 no matter what. Label size was effectively
-// a function of device width.
-//
-// Matching the viewBox to the measured width makes one SVG unit one point, so
-// fontSize means what it says and the gutters can be sized from the text they
-// hold.
-
-interface SparkPoint { x: number; y: number; }
-
-/** Authored size of the axis labels, in points, before any scaling. The old
- *  9/8.5 sat under the ~11pt floor where small UI text stays readable. */
-const CHART_LABEL_PT = 11;
-/** Past roughly this the labels take more of the chart than the chart does. */
-const CHART_LABEL_MAX_SCALE = 1.6;
-/** Reproduces the original 9pt/+4 optical centring at any size: SVG `y` is the
- *  baseline, so the label has to be nudged down to sit on its gridline. */
-const LABEL_BASELINE_SHIFT = 4 / 9;
-
-function InlineDomainChart({ points, baseline, color }: { points: SparkPoint[]; baseline: number; color: string }) {
-  const { active: comfortActive } = useComfort();
-  // Seeded at the old fixed 320 so the first frame matches what shipped before,
-  // then corrected on layout.
-  const [W, setW] = useState(320);
-  const yMin = 1, yMax = 10, H = 80;
-
-  // react-native-svg does not implement allowFontScaling on <Text> (checked
-  // against 15.15.4 — the prop does not exist, and the package's only PixelRatio
-  // use is asset resolution). So the OS text-size setting and comfort mode both
-  // slide straight off vector text unless applied by hand, which is what this
-  // does. Clamped, because Dynamic Type goes to 200%+ and this is a sparkline.
-  const labelSize = Math.min(
-    CHART_LABEL_PT * PixelRatio.getFontScale() * (comfortActive ? COMFORT_TOKENS.scale : 1),
-    CHART_LABEL_PT * CHART_LABEL_MAX_SCALE,
-  );
-
-  // Both gutters are derived from the text they have to hold — "10" on the
-  // left, "base" on the right — rather than fixed. The right one was 12 units
-  // against a label needing ~17, so "base" was clipped by the viewport on every
-  // device; it still is in the web app this was ported from.
-  const PAD = {
-    top: 10,
-    bottom: 24,
-    left: Math.ceil(labelSize * 1.4) + 6,
-    right: Math.ceil(labelSize * 2.0) + 6,
-  };
-  const chartW = Math.max(1, W - PAD.left - PAD.right);
-  const chartH = H - PAD.top - PAD.bottom;
-  const toSvgY = (v: number) => PAD.top + chartH - ((v - yMin) / (yMax - yMin)) * chartH;
-  const baselineY = toSvgY(baseline);
-  const xStep = points.length > 1 ? chartW / (points.length - 1) : chartW / 2;
-  const toSvgX = (i: number) => PAD.left + (points.length > 1 ? i * xStep : chartW / 2);
-  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${toSvgX(i).toFixed(1)},${toSvgY(p.y).toFixed(1)}`).join(' ');
-  const yTicks = [1, 3, 5, 7, 10];
-  const labelShift = labelSize * LABEL_BASELINE_SHIFT;
-
-  return (
-    <View
-      onLayout={e => {
-        const next = Math.round(e.nativeEvent.layout.width);
-        if (next > 0 && next !== W) setW(next);
-      }}>
-      <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-        {yTicks.map(v => (
-          <Line key={v} x1={PAD.left} y1={toSvgY(v)} x2={PAD.left + chartW} y2={toSvgY(v)} stroke="rgba(255,255,255,0.04)" strokeWidth={1} />
-        ))}
-        {yTicks.map(v => (
-          <SvgText key={v} x={PAD.left - 4} y={toSvgY(v) + labelShift} fontSize={labelSize} fill="#3d4b60" textAnchor="end">{v}</SvgText>
-        ))}
-        <Line x1={PAD.left} y1={baselineY} x2={PAD.left + chartW} y2={baselineY} stroke="#4a5e8a" strokeWidth={1.5} strokeDasharray="4 3" />
-        <SvgText x={PAD.left + chartW + 3} y={baselineY + labelShift} fontSize={labelSize} fill="#4a5e8a">base</SvgText>
-        {points.length > 1 && <Path d={linePath} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} />}
-        {points.map((p, i) => (
-          <Circle key={i} cx={toSvgX(i)} cy={toSvgY(p.y)} r={points.length > 20 ? 1.5 : 2.5} fill={color} opacity={0.9} />
-        ))}
-      </Svg>
-    </View>
-  );
-}
-
 function DomainCompactRow({ domain, days, baselines, isExpanded, onToggle }: {
   domain: DomainType; days: DayScores[]; baselines: Partial<Record<DomainType | 'sleep', number>>;
   isExpanded: boolean; onToggle: () => void;
 }) {
   const { profile } = useAuth();
   const baseline = baselines[domain] ?? 5;
-  const domainDays = days.filter(d => d.scores[domain] !== undefined);
-  const avg = domainDays.length > 0 ? domainDays.reduce((s, d) => s + d.scores[domain]!, 0) / domainDays.length : baseline;
-  const trendLabel = generateTrendLabel(domain, days, baseline);
-  const domainColor = getDomainColorFromProfile(domain, profile);
-  const fillPct = Math.min(100, Math.max(0, (avg / 10) * 100));
-  const baselinePct = Math.min(100, Math.max(0, (baseline / 10) * 100));
-  const sparkPoints: SparkPoint[] = domainDays.map((d, i) => ({ x: i, y: d.scores[domain]! }));
-  const hasEnoughForChart = sparkPoints.length >= 5;
+  const values = days
+    .filter(d => d.scores[domain] !== undefined)
+    .map(d => d.scores[domain]!);
 
   return (
-    <View style={[styles.compactRow, { borderLeftColor: domainColor }]}>
-      <Pressable onPress={onToggle} style={styles.compactRowHeader}>
-        <Text style={[styles.compactRowLabel, { color: domainColor }]}>{factorLabel(domain)}</Text>
-        <View style={styles.compactRowBar}>
-          <View style={[styles.compactRowFill, { width: `${fillPct}%`, backgroundColor: domainColor }]} />
-          <View style={[styles.compactRowBaselineTick, { left: `${baselinePct}%` }]} />
-        </View>
-        <View style={styles.compactRowRight}>
-          <Text style={styles.compactRowTrend}>{trendLabel}</Text>
-          <Svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#4a5568" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={isExpanded ? styles.chevronExpanded : undefined}>
-            <Polyline points="6 9 12 15 18 9" />
-          </Svg>
-        </View>
-      </Pressable>
-      {isExpanded && (
-        <View style={styles.compactRowExpanded}>
-          {hasEnoughForChart ? (
-            <InlineDomainChart points={sparkPoints} baseline={baseline} color={domainColor} />
-          ) : (
-            <Text style={styles.compactRowNoData}>Not enough data in this period to show a chart.</Text>
-          )}
-        </View>
-      )}
-    </View>
+    <DomainSparklineRow
+      label={factorLabel(domain)}
+      color={getDomainColorFromProfile(domain, profile)}
+      values={values}
+      baseline={baseline}
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+    />
   );
 }
 

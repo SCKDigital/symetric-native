@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import BackRow from '@/components/insights/back-row';
 import BodySiteHeatmap from '@/components/insights/body-site-heatmap';
+import { DomainSparklineRow } from '@/components/insights/domain-sparkline';
 import WhatGoesWithWhatSection from '@/components/insights/correlation-section';
 import FindingCard from '@/components/insights/finding-card';
 import {
@@ -11,6 +13,7 @@ import {
 import type { CircadianPattern } from '@/lib/circadian-detection';
 import type { ConnectionRow } from '@/lib/correlation-groups';
 import { formatShortDate } from '@/lib/date-utils';
+import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
 import type { RareEvent } from '@/lib/detection/rare-events';
@@ -136,6 +139,9 @@ export default function BodyAreaDetail({
 }: Props) {
   // Ranked, not detector-ordered: firmest evidence first, then most recent,
   // then largest effect. The top one gets the lead treatment.
+  // One expanded row at a time, keyed by domain — or by "<domain>:morning",
+  // since a morning series is its own row.
+  const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
   const ranked = rankFindings(changedFindings);
   const [lead, ...rest] = ranked;
   const rareGroupCount = countRareDayGroups(rareEvents, volatilityClusters);
@@ -174,36 +180,76 @@ export default function BodyAreaDetail({
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Symptom levels</Text>
         <Text style={styles.daysLoggedText}>
-          {daysLogged} day{daysLogged !== 1 ? 's' : ''} logged in this window · tap a symptom for the days behind it
+          {daysLogged} day{daysLogged !== 1 ? 's' : ''} logged in this window · tap a symptom for its readings
         </Text>
 
         {domains.length === 0 ? (
           <Text style={styles.emptyText}>No body check-ins logged in this window yet.</Text>
         ) : (
           <View style={styles.list}>
-            {domains.map(d => {
+            {domains.flatMap(d => {
+              // Newest first for reading; the chart wants the opposite.
               const days = daysForDomain(checkInRows, d.domain);
-              return (
-                <View key={d.domain} style={styles.domainCard}>
-                  <CollapsibleRow
-                    label={d.label}
-                    meta={`avg ${d.avg} · ${d.min === d.max ? d.min : `${d.min}-${d.max}`}`}>
-                    {days.length === 0 ? (
-                      <Text style={styles.emptyText}>No readings in this window.</Text>
-                    ) : days.map(day => (
-                      <DayRow key={day.date} date={day.date}>
-                        <Text style={styles.dayValue}>{dayValueText(day)}</Text>
-                        {day.tags.length > 0 && (
-                          <View style={styles.tagRow}>
-                            {day.tags.map(t => <Text key={t} style={styles.tag}>{t}</Text>)}
-                          </View>
-                        )}
-                        {day.note ? <Text style={styles.dayNote}>{day.note}</Text> : null}
-                      </DayRow>
-                    ))}
-                  </CollapsibleRow>
-                </View>
-              );
+              const chronological = [...days].reverse();
+              const evening = chronological.filter(x => x.pm !== null).map(x => x.pm!);
+              const morning = chronological.filter(x => x.am !== null).map(x => x.am!);
+              const notable = days.filter(x => x.note || x.tags.length > 0);
+
+              // A domain can have morning readings and no evening ones — `pain`
+              // is exactly that since the mechanical/widespread split, because
+              // the morning form still asks it while the evening form no longer
+              // does. Rendering an empty evening row for it would put a bar at
+              // the baseline and the word "stable" against no data at all.
+              const rows = evening.length === 0 ? [] : [
+                <DomainSparklineRow
+                  key={d.domain}
+                  label={d.label}
+                  color={BODY_COLOR}
+                  values={evening}
+                  baseline={rollingBodyBaseline(evening)}
+                  scaleMin={0}
+                  isExpanded={expandedDomain === d.domain}
+                  onToggle={() => setExpandedDomain(prev => (prev === d.domain ? null : d.domain))}>
+                  {notable.length > 0 && (
+                    <View style={styles.notableList}>
+                      {notable.map(day => (
+                        <DayRow key={day.date} date={day.date}>
+                          <Text style={styles.dayValue}>{dayValueText(day)}</Text>
+                          {day.tags.length > 0 && (
+                            <View style={styles.tagRow}>
+                              {day.tags.map(t => <Text key={t} style={styles.tag}>{t}</Text>)}
+                            </View>
+                          )}
+                          {day.note ? <Text style={styles.dayNote}>{day.note}</Text> : null}
+                        </DayRow>
+                      ))}
+                    </View>
+                  )}
+                </DomainSparklineRow>,
+              ];
+
+              // A separate line, never merged into the evening one. Waking stiff
+              // and crashing at 9pm are two different measurements of the same
+              // symptom, and averaging them is how a morning-only pattern
+              // disappears — which is the whole reason the morning check-in
+              // writes its own columns.
+              if (morning.length > 0) {
+                const morningKey = `${d.domain}:morning`;
+                rows.push(
+                  <DomainSparklineRow
+                    key={morningKey}
+                    label={`${d.label} · on waking`}
+                    color={BODY_COLOR}
+                    values={morning}
+                    baseline={rollingBodyBaseline(morning)}
+                    scaleMin={0}
+                    isExpanded={expandedDomain === morningKey}
+                    onToggle={() => setExpandedDomain(prev => (prev === morningKey ? null : morningKey))}
+                  />,
+                );
+              }
+
+              return rows;
             })}
           </View>
         )}
@@ -260,6 +306,7 @@ const styles = StyleSheet.create({
   dayRow: { flexDirection: 'row', gap: 12, paddingVertical: 7, borderTopWidth: 1, borderTopColor: '#1e2533' },
   dayDate: { fontSize: 12, color: '#6b7a99', width: 54, paddingTop: 1 },
   dayBody: { flex: 1, gap: 5 },
+  notableList: { marginTop: 12, gap: 2 },
   dayValue: { fontSize: 13, color: '#c8d0e0' },
   dayNote: { fontSize: 12, color: '#8892a4', lineHeight: 17, fontStyle: 'italic' },
   dayNoteEmpty: { fontSize: 12, color: '#3d4b60', fontStyle: 'italic' },
