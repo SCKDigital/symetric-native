@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { BODY_DOMAIN_ORDER, BODY_DOMAINS, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { BODY_DOMAIN_ORDER, BODY_DOMAINS, MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
 import { BODY_COLOR } from '@/lib/domains';
 import type { BodyColumnMode } from '@/lib/history/day-card-helpers';
 import type { BodyCheckIn as BodyCheckInRow, BodyDomainType } from '@/lib/supabase';
@@ -14,7 +14,7 @@ interface Props {
   eventLabels: string[];
 }
 
-const morningCapable = new Set(MORNING_BODY_DOMAIN_ORDER);
+const morningCapable = new Set(MORNING_READABLE_DOMAIN_ORDER);
 
 // Ported from the web app's BodySection.tsx — an HTML <table> there,
 // View/Text rows here since RN has no table primitive.

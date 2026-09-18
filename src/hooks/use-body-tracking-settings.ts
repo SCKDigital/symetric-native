@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
 import type { BodyDomainType, Profile } from '@/lib/supabase';
-import { BODY_DOMAINS } from '@/lib/body/constants';
+import { BODY_DOMAINS, MORNING_DOMAIN_LIMIT, resolveMorningDomains } from '@/lib/body/constants';
 
 interface Options {
   /** Domains to show active when profile.body_domains_active is empty/unset. */
@@ -26,6 +26,7 @@ export function useBodyTrackingSettings(
   const [bodyReminderTime, setBodyReminderTime] = useState('21:00');
   const [bodyMorningEnabled, setBodyMorningEnabled] = useState(false);
   const [bodyMorningTime, setBodyMorningTime] = useState('08:00');
+  const [bodyMorningDomains, setBodyMorningDomains] = useState<BodyDomainType[]>([]);
 
   // Each of these syncs local editable state to `profile`, which arrives
   // asynchronously (fetched separately from this hook's own mount, and can
@@ -45,6 +46,10 @@ export function useBodyTrackingSettings(
   useEffect(() => { setBodyMorningEnabled(profile?.body_morning_enabled ?? false); }, [profile?.body_morning_enabled]);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBodyMorningTime(profile?.body_morning_time?.slice(0, 5) ?? '08:00'); }, [profile?.body_morning_time]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBodyMorningDomains(resolveMorningDomains(profile?.body_morning_domains, profile?.body_domains_active));
+  }, [profile?.body_morning_domains, profile?.body_domains_active]);
 
   const handleToggleBodyDomain = async (domain: BodyDomainType) => {
     if (!userId || BODY_DOMAINS[domain].required) return;
@@ -54,6 +59,30 @@ export function useBodyTrackingSettings(
     const { error } = await supabase.from('profiles').update({ body_domains_active: next }).eq('id', userId);
     if (error) {
       setBodyDomainsActive(prev);
+      onError?.('Failed to save changes. Please try again.');
+    } else {
+      await refreshProfile();
+    }
+  };
+
+  /**
+   * Add or remove a morning domain, writing immediately like the evening list.
+   *
+   * Silently refuses past MORNING_DOMAIN_LIMIT rather than dropping someone
+   * else's choice to make room — the caller disables the unchosen pills at the
+   * cap, and a picker that quietly swaps your selections is worse than one that
+   * stops responding.
+   */
+  const handleToggleMorningDomain = async (domain: BodyDomainType) => {
+    if (!userId) return;
+    const prev = bodyMorningDomains;
+    const removing = prev.includes(domain);
+    if (!removing && prev.length >= MORNING_DOMAIN_LIMIT) return;
+    const next = removing ? prev.filter(d => d !== domain) : [...prev, domain];
+    setBodyMorningDomains(next);
+    const { error } = await supabase.from('profiles').update({ body_morning_domains: next }).eq('id', userId);
+    if (error) {
+      setBodyMorningDomains(prev);
       onError?.('Failed to save changes. Please try again.');
     } else {
       await refreshProfile();
@@ -82,7 +111,9 @@ export function useBodyTrackingSettings(
     bodyReminderTime,
     bodyMorningEnabled,
     bodyMorningTime,
+    bodyMorningDomains,
     setBodyMorningEnabled,
+    handleToggleMorningDomain,
     handleToggleBodyDomain,
     handleSaveBodyTiming,
   };

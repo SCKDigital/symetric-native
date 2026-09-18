@@ -13,7 +13,7 @@ import { ChevronDownIcon, ChevronRightIcon } from '@/components/shared/chevrons'
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { useAuth } from '@/contexts/auth-context';
 import { AreaRow, buildAreaRows } from '@/lib/area-rows';
-import { BODY_DOMAIN_ORDER, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { BODY_DOMAIN_ORDER, MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
 import { CircadianPattern, fetchCircadianPatterns } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { buildDayScores, DayScores, mergeDays } from '@/lib/day-scores';
@@ -516,7 +516,7 @@ export default function InsightsScreen() {
     const moPairs: MorningEveningPair[] = [];
     for (const entry of ((bodyCheckIns90dRaw ?? []) as Record<string, unknown>[])
       .filter(r => (r.entry_date as string) >= fromRange)) {
-      for (const d of MORNING_BODY_DOMAIN_ORDER) {
+      for (const d of MORNING_READABLE_DOMAIN_ORDER) {
         const evening = entry[d];
         const morning = entry[`morning_${d}`];
         if (typeof evening === 'number' && typeof morning === 'number') {

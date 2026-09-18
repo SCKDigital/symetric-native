@@ -12,7 +12,9 @@ import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
 import { useComfort } from '@/hooks/use-comfort';
 import type { SetupCardState } from '@/hooks/use-setup-cards';
 import { PIN_LENGTH } from '@/lib/app-lock';
-import { BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import {
+  BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER, MORNING_CAPABLE_DOMAIN_ORDER, MORNING_DOMAIN_LIMIT,
+} from '@/lib/body/constants';
 import { BODY_COLOR } from '@/lib/domains';
 import { subscribeToPushNotifications } from '@/lib/push-notifications';
 import { createMarker } from '@/lib/queries/markers';
@@ -342,6 +344,28 @@ export default function SetupCards({ state, onChanged }: Props) {
 
           {body.bodyMorningEnabled && (
             <>
+              <Text style={styles.sheetLabel}>
+                WHAT TO ASK IN THE MORNING · {body.bodyMorningDomains.length} OF {MORNING_DOMAIN_LIMIT}
+              </Text>
+              <View style={styles.pillRow}>
+                {MORNING_CAPABLE_DOMAIN_ORDER
+                  .filter(d => body.bodyDomainsActive.includes(d))
+                  .map(d => {
+                    const active = body.bodyMorningDomains.includes(d);
+                    const disabled = !active && body.bodyMorningDomains.length >= MORNING_DOMAIN_LIMIT;
+                    return (
+                      <Pressable key={d} onPress={() => body.handleToggleMorningDomain(d)} disabled={disabled}
+                        style={[styles.pill, active && styles.pillActive, disabled && styles.pillDisabled]}>
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{BODY_DOMAINS[d].label}</Text>
+                      </Pressable>
+                    );
+                  })}
+              </View>
+              <Text style={styles.sheetHelper}>
+                Only symptoms you already track in the evening — a morning reading is worth having because it can be
+                compared with one.
+              </Text>
+
               <Text style={styles.sheetLabel}>THE MORNING CHECK-IN OPENS AT</Text>
               <TimeField value={bodyMorning ?? body.bodyMorningTime} timeFormat={state.timeFormat} onChange={setBodyMorning} />
             </>
@@ -526,6 +550,7 @@ const styles = StyleSheet.create({
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pill: { borderWidth: 1, borderColor: '#1e2533', borderRadius: 999, paddingVertical: 8, paddingHorizontal: 13 },
   pillActive: { borderColor: BODY_COLOR, backgroundColor: 'rgba(188,129,47,0.12)' },
+  pillDisabled: { opacity: 0.35 },
   pillText: { fontSize: 13, color: '#8892a4' },
   pillTextActive: { color: '#e2c08a' },
   sheetSave: { marginTop: 28, backgroundColor: '#4f46e5', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },

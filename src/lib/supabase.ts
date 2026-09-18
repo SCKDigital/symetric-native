@@ -126,6 +126,10 @@ export interface Profile {
   body_reminder_sent_date?: string | null; // local date the reminder push was last sent, dedup guard
   body_morning_enabled: boolean; // opt-in, off by default — optional morning check-in
   body_morning_time: string; // HH:MM — local time the Today morning card starts showing / reminder fires
+  /** Which domains the morning check-in asks about — the person's own choice,
+   *  capped at 4. Read through resolveMorningDomains, never directly: it is
+   *  intersected with body_domains_active, and can hold stale entries. */
+  body_morning_domains?: BodyDomainType[];
   body_morning_reminder_sent_date?: string | null; // dedup guard, same purpose as body_reminder_sent_date
   cycle_tracking_enabled: boolean; // opt-in for period event markers + phase/day display in History
   date_of_birth?: string | null; // 'YYYY-MM-DD', collected at onboarding for the 18+ age gate
@@ -256,6 +260,12 @@ export interface BodyCheckIn {
   morning_fatigue?: number | null;
   morning_pain?: number | null;
   morning_orthostatic?: number | null;
+  morning_pain_mechanical?: number | null;
+  morning_pain_widespread?: number | null;
+  morning_joint_instability?: number | null;
+  morning_breathlessness?: number | null;
+  morning_gut?: number | null;
+  morning_brain_fog?: number | null;
   morning_logged_at?: string | null;
   pain_diffuse: boolean;
   /** Descriptive tags only — never scored, never enters detection. Shown when pain_mechanical or pain_widespread > 0. */

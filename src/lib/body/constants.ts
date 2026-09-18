@@ -144,14 +144,67 @@ export const CHECKIN_BODY_DOMAIN_ORDER: BodyDomainType[] = BODY_DOMAIN_ORDER.fil
   d => !BODY_DOMAINS[d].deprecated
 );
 
-// The optional morning check-in is a fixed, separate three-question form —
-// not user-configurable like the evening domain list, and not derived from
-// body_domains_active. Filtered by !eveningOnly (defensively — none of these
-// three are marked eveningOnly today, but a future domain added here must
-// still be excluded if it is, per BodyDomainConfig.eveningOnly's contract).
-export const MORNING_BODY_DOMAIN_ORDER: BodyDomainType[] = (
-  ['fatigue', 'pain', 'orthostatic'] as BodyDomainType[]
-).filter(d => !BODY_DOMAINS[d].eveningOnly);
+// ── The morning check-in ────────────────────────────────────────────────────
+//
+// This used to be a fixed three — fatigue, pain, dizziness — chosen for speed
+// rather than because those are the three that differ on waking. They are not.
+// Morning stiffness is a recognised feature of inflammatory arthritis and
+// joint_instability is the domain closest to it, yet it could not be asked;
+// nor could gut, brain fog or breathlessness, all of which are different at 8am
+// than at 9pm for the people this app is for. A fixed list also contradicted
+// the evening check-in's whole premise, which is that the person picks.
+//
+// The old list also still contained `pain`, deprecated since the
+// mechanical/widespread split, so the form kept writing morning_pain while
+// everything reading pain looked for morning_pain_mechanical. See
+// 20260918000006_morning_domain_choice.sql.
+
+/** Everything the morning form may offer: the evening list, minus the domains
+ *  that only make sense at the end of a day. `exhaustion` is the end-of-day
+ *  wrap-up question and means nothing at 8am; `pain` is already excluded by
+ *  CHECKIN_BODY_DOMAIN_ORDER for being deprecated. */
+export const MORNING_CAPABLE_DOMAIN_ORDER: BodyDomainType[] =
+  CHECKIN_BODY_DOMAIN_ORDER.filter(d => !BODY_DOMAINS[d].eveningOnly);
+
+/** Every domain a morning_* column exists for, in BODY_DOMAIN_ORDER order —
+ *  including the deprecated `pain`, whose pre-split morning readings are real
+ *  data someone logged and must keep rendering. Read paths (History, the
+ *  report, morning-vs-evening detection) use this; only the form itself uses
+ *  resolveMorningDomains, because only the form is deciding what to ask. */
+export const MORNING_READABLE_DOMAIN_ORDER: BodyDomainType[] = BODY_DOMAIN_ORDER.filter(
+  d => !BODY_DOMAINS[d].eveningOnly && (!BODY_DOMAINS[d].deprecated || d === 'pain'),
+);
+
+/** Kept small on purpose. The morning form is answered by someone newly awake
+ *  and often in a flare — the reason the old list was three was sound, even if
+ *  the particular three were not. The constraint people accept is "pick your
+ *  few", not "we picked for you". */
+export const MORNING_DOMAIN_LIMIT = 4;
+
+/** What profiles.body_morning_domains defaults to: the old fixed three, with
+ *  pain_mechanical standing in for the deprecated combined pain. */
+export const DEFAULT_MORNING_DOMAINS: BodyDomainType[] =
+  ['fatigue', 'pain_mechanical', 'orthostatic'];
+
+/**
+ * The domains this person's morning check-in actually asks.
+ *
+ * Intersected with the evening list, not merely read: a morning series earns
+ * its place by contrasting with an evening one, so tracking something only in
+ * the morning gives up the comparison that makes it worth asking. Anything
+ * stale — a domain since switched off, or one of the fixed three from before
+ * this was a choice — falls out here rather than at the write path.
+ */
+export function resolveMorningDomains(
+  chosen: string[] | null | undefined,
+  activeEvening: BodyDomainType[] | null | undefined,
+): BodyDomainType[] {
+  const evening = activeEvening?.length ? activeEvening : CHECKIN_BODY_DOMAIN_ORDER;
+  const wanted = chosen?.length ? chosen : DEFAULT_MORNING_DOMAINS;
+  return MORNING_CAPABLE_DOMAIN_ORDER
+    .filter(d => wanted.includes(d) && evening.includes(d))
+    .slice(0, MORNING_DOMAIN_LIMIT);
+}
 
 /** Domains for which logging before the day is effectively over deserves a quiet inline hint. */
 export const BODY_EARLY_LOG_SENSITIVE_DOMAINS: BodyDomainType[] = [];

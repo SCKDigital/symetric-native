@@ -1,5 +1,5 @@
 import { formatEventCharacterLabel, formatEventSiteLabel } from '@/lib/body/format-body-event';
-import { BODY_DOMAIN_ORDER, BODY_DOMAINS, BODY_EVENTS, MORNING_BODY_DOMAIN_ORDER, BODY_MAP_REGIONS, EVENT_SITE_LISTS } from '@/lib/body/constants';
+import { BODY_DOMAIN_ORDER, BODY_DOMAINS, BODY_EVENTS, MORNING_READABLE_DOMAIN_ORDER, BODY_MAP_REGIONS, EVENT_SITE_LISTS } from '@/lib/body/constants';
 import type { BodyEvent, BodyEventSite, BodyPainSite, BodySide } from '@/lib/supabase';
 import type { BodyDomainSummary, BodyEventSummary, BodyEventOccurrence, BodySiteFrequency } from '@/lib/report/types';
 
@@ -22,7 +22,7 @@ export function computeBodySummaries(
   bodyCheckIns: any[],
   bodyEvents: any[],
 ): { domains: BodyDomainSummary[]; events: BodyEventSummary[]; daysLogged: number } {
-  const morningCapable = new Set(MORNING_BODY_DOMAIN_ORDER);
+  const morningCapable = new Set(MORNING_READABLE_DOMAIN_ORDER);
 
   const domains: BodyDomainSummary[] = BODY_DOMAIN_ORDER.flatMap(domain => {
     const values: number[] = [];

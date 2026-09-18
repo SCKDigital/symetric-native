@@ -4,7 +4,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View
 import DomainSlider from '@/components/checkin/domain-slider';
 import { useAuth } from '@/contexts/auth-context';
 import { trackBodyMorningCheckInCompleted } from '@/lib/analytics';
-import { BODY_DOMAINS, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { BODY_DOMAINS, MORNING_READABLE_DOMAIN_ORDER, resolveMorningDomains } from '@/lib/body/constants';
 import { BODY_COLOR } from '@/lib/domains';
 import { todayDateString } from '@/lib/date-utils';
 import { supabase } from '@/lib/supabase';
@@ -26,9 +26,28 @@ type MorningValues = Partial<Record<BodyDomainType, number>>;
 // the shared BODY_DOMAINS hint below.
 const MORNING_HINTS: Partial<Record<BodyDomainType, string>> = {
   fatigue: "How much does it feel like you're wading through mud right now?",
-  pain: 'One number for everything that hurts right now.',
+  pain_mechanical: 'Stiff or sore joints and muscles right now — the places you could point to.',
+  pain_widespread: 'Aching or burning all over right now, skin sore to touch.',
+  joint_instability: 'How loose or unreliable do your joints feel getting out of bed?',
+  breathlessness: 'Breathing as you get up and start moving about.',
+  gut: 'Nausea, bloating or cramping, first thing.',
+  brain_fog: 'How clear is your head before the day has started?',
 };
 
+// One label reads wrong at 8am: "Fatigue across the day" is a question about a
+// day that has not happened yet. Only override where the evening wording
+// actually breaks — orthostatic's "Dizziness" is if anything more apt on
+// standing up for the first time.
+const MORNING_LABELS: Partial<Record<BodyDomainType, string>> = {
+  fatigue: 'Fatigue on waking',
+};
+
+// The domains asked are the person's own choice now (profiles
+// .body_morning_domains, capped at four) rather than a fixed three. Reads cover
+// every morning column that exists so a value logged under a previous choice
+// still appears; writes touch only what is currently asked, so changing the set
+// never nulls a reading this form is no longer showing.
+//
 // Chunk 5 of the body-tracking port (see project_rn_body_tracking_scoping.md):
 // the optional morning check-in — three sliders (fatigue, pain, standing
 // up), no backfill (always today, a same-morning-only snapshot), no
@@ -37,7 +56,11 @@ const MORNING_HINTS: Partial<Record<BodyDomainType, string>> = {
 // availability-window/dismissal logic — same "Settings entry point, no
 // Today-tab card" scoping as the evening check-in's own entry point.
 export default function MorningBodyCheckIn({ visible, onClose }: Props) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  // What this person asked to be asked. Resolved rather than read straight off
+  // the profile — see resolveMorningDomains for why it is intersected with the
+  // evening list.
+  const morningDomains = resolveMorningDomains(profile?.body_morning_domains, profile?.body_domains_active);
   // Always today — there's no backfill for the morning check-in.
   // Sliders live inside this ScrollView. A horizontal drag that starts with
   // any vertical component gets claimed by the scroll, which is what made the
@@ -65,7 +88,9 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
     (async () => {
       const { data: checkin } = await supabase
         .from('body_checkins')
-        .select('id, entered_retroactively, morning_fatigue, morning_pain, morning_orthostatic')
+        // Whole row: the morning columns to read are decided at runtime now, and
+        // a runtime column list defeats supabase-js's typed select parser.
+        .select('*')
         .eq('user_id', user.id)
         .eq('entry_date', selectedDate)
         .maybeSingle();
@@ -77,7 +102,7 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
         setExistingRetro(checkin.entered_retroactively ?? false);
         const row = checkin as unknown as Record<string, number | null>;
         const nextValues: MorningValues = {};
-        for (const d of MORNING_BODY_DOMAIN_ORDER) {
+        for (const d of MORNING_READABLE_DOMAIN_ORDER) {
           const v = row[`morning_${d}`];
           if (v !== null && v !== undefined) nextValues[d] = v;
         }
@@ -106,7 +131,7 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
       entered_retroactively: existingRetro,
       morning_logged_at: new Date().toISOString(),
     };
-    for (const d of MORNING_BODY_DOMAIN_ORDER) {
+    for (const d of morningDomains) {
       payload[`morning_${d}`] = values[d] ?? null;
     }
 
@@ -118,7 +143,7 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
       if (insErr) { setSaving(false); setError('Could not save. Try again.'); return; }
     }
 
-    const domainCount = MORNING_BODY_DOMAIN_ORDER.filter(d => values[d] !== undefined).length;
+    const domainCount = morningDomains.filter(d => values[d] !== undefined).length;
     trackBodyMorningCheckInCompleted(domainCount, false);
 
     setSaving(false);
@@ -151,7 +176,7 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
             <>
               <View style={styles.slidersCard}>
                 <View style={styles.slidersGroup}>
-                  {MORNING_BODY_DOMAIN_ORDER.map(d => {
+                  {morningDomains.map(d => {
                     const config = BODY_DOMAINS[d];
                     return (
                       <DomainSlider
@@ -159,7 +184,7 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
               onSlidingComplete={() => setScrollEnabled(true)}
                         key={d}
                         domain={`morning_${d}`}
-                        label={config.label}
+                        label={MORNING_LABELS[d] ?? config.label}
                         hint={MORNING_HINTS[d] ?? config.hint}
                         lowLabel={config.lowAnchor}
                         highLabel={config.highAnchor}

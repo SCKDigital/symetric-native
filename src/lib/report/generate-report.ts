@@ -10,7 +10,7 @@ import { detectBodyEventFrequency } from '@/lib/detection/body-event-frequency';
 import { detectBodyEventImpacts } from '@/lib/detection/body-event-impact';
 import { detectBodyTimeOfDayPatterns, MorningEveningPair } from '@/lib/detection/body-time-of-day';
 import type { CircadianPattern } from '@/lib/circadian-detection';
-import { MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
 import { resolveActiveDomains } from '@/lib/domains';
 import { median } from '@/lib/baseline-stats';
 import { calculateSortWeight } from '@/lib/priority-scoring';
@@ -80,7 +80,7 @@ function buildMorningEveningPairs(rows: Record<string, unknown>[], domains: Body
   const pairs: MorningEveningPair[] = [];
   for (const entry of rows) {
     for (const d of domains) {
-      if (!(MORNING_BODY_DOMAIN_ORDER as string[]).includes(d)) continue;
+      if (!(MORNING_READABLE_DOMAIN_ORDER as string[]).includes(d)) continue;
       const evening = entry[d];
       const morning = entry[`morning_${d}`];
       if (typeof evening === 'number' && typeof morning === 'number') {

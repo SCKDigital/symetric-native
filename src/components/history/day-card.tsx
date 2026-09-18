@@ -6,7 +6,7 @@ import BodySection from '@/components/history/body-section';
 import MindSection from '@/components/history/mind-section';
 import { CalendarIcon, MoonIcon, NoteIcon, PillIcon, PinIcon } from '@/components/marker-icons';
 import { formatEventLabel, formatPainSiteLabel } from '@/lib/body/format-body-event';
-import { BODY_DOMAIN_ORDER, MORNING_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { BODY_DOMAIN_ORDER, MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
 import type { BodyColumnMode } from '@/lib/history/day-card-helpers';
 import { summariseDay, type BodyReadingPair, type DaySummaryCheckIn } from '@/lib/summarise-day';
 import { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite, CheckIn, Profile, SleepLog } from '@/lib/supabase';
@@ -17,7 +17,7 @@ import type { InterventionMarker } from '@/types/marker';
 function buildBodyPairs(columnMode: Exclude<BodyColumnMode, 'off'> | 'off', bodyEntry?: BodyCheckIn): BodyReadingPair[] {
   if (columnMode !== 'twice' || !bodyEntry) return [];
   const pairs: BodyReadingPair[] = [];
-  for (const key of MORNING_BODY_DOMAIN_ORDER) {
+  for (const key of MORNING_READABLE_DOMAIN_ORDER) {
     const am = bodyEntry[`morning_${key}` as keyof BodyCheckIn] as number | null | undefined;
     const pm = bodyEntry[key] as number | null | undefined;
     if (am != null && pm != null) pairs.push({ am, pm });
@@ -135,7 +135,7 @@ export default function DayCard({
   // behind a mind-check-in-count threshold, only behind bodyColumnMode itself.
   const hasBodyDomainValue = !!bodyEntry && (
     BODY_DOMAIN_ORDER.some(d => bodyEntry[d] != null) ||
-    MORNING_BODY_DOMAIN_ORDER.some(d => bodyEntry[`morning_${d}` as keyof BodyCheckIn] != null)
+    MORNING_READABLE_DOMAIN_ORDER.some(d => bodyEntry[`morning_${d}` as keyof BodyCheckIn] != null)
   );
   const hasBodyData = bodyColumnMode !== 'off' && (hasBodyDomainValue || eventLabels.length > 0 || !!sitesLabel || !!bodyEntry?.note);
 

@@ -23,7 +23,9 @@ import AppLogoHeader from '@/components/shared/app-logo-header';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppLockSettings } from '@/hooks/use-app-lock-settings';
 import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
-import { BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import {
+  BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER, MORNING_CAPABLE_DOMAIN_ORDER, MORNING_DOMAIN_LIMIT,
+} from '@/lib/body/constants';
 import { useComfort } from '@/hooks/use-comfort';
 import { resolveActiveDomains } from '@/lib/domains';
 import { subscribeToPushNotifications, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
@@ -62,6 +64,40 @@ function DomainPills({ activeDomains, onToggle }: { activeDomains: DomainType[];
         return (
           <Pressable key={d.type} onPress={() => onToggle(d.type)} style={[styles.pill, active && styles.pillActive]}>
             <Text style={[styles.pillText, active && styles.pillTextActive]}>{d.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * Which domains the morning check-in asks about.
+ *
+ * Offered from the evening list rather than from every domain: a morning
+ * reading is worth having because it contrasts with an evening one. Capped, so
+ * the form someone answers newly awake stays short — past the cap the unchosen
+ * pills go flat and stop responding rather than silently swapping a choice out.
+ */
+function MorningDomainPills({ activeDomains, morningDomains, onToggle }: {
+  activeDomains: BodyDomainType[];
+  morningDomains: BodyDomainType[];
+  onToggle: (d: BodyDomainType) => void;
+}) {
+  const atLimit = morningDomains.length >= MORNING_DOMAIN_LIMIT;
+  const offered = MORNING_CAPABLE_DOMAIN_ORDER.filter(d => activeDomains.includes(d));
+  return (
+    <View style={styles.pillRow}>
+      {offered.map(d => {
+        const active = morningDomains.includes(d);
+        const disabled = !active && atLimit;
+        return (
+          <Pressable
+            key={d}
+            onPress={() => onToggle(d)}
+            disabled={disabled}
+            style={[styles.pill, active && styles.pillActiveBody, disabled && styles.pillDisabled]}>
+            <Text style={[styles.pillText, active && styles.pillTextActiveBody]}>{BODY_DOMAINS[d].label}</Text>
           </Pressable>
         );
       })}
@@ -108,7 +144,8 @@ export default function SettingsScreen() {
 
   const {
     bodyDomainsActive, bodyAvailableFrom, bodyReminderTime, bodyMorningEnabled, bodyMorningTime,
-    setBodyMorningEnabled, handleToggleBodyDomain, handleSaveBodyTiming,
+    bodyMorningDomains, setBodyMorningEnabled, handleToggleBodyDomain, handleToggleMorningDomain,
+    handleSaveBodyTiming,
   } = useBodyTrackingSettings(user?.id, profile, refreshProfile, {
     defaultDomains: CHECKIN_BODY_DOMAIN_ORDER,
     onError: setToastMessage,
@@ -373,6 +410,17 @@ export default function SettingsScreen() {
               />
               {bodyMorningEnabled && (
                 <>
+                  <RowDivider />
+                  <SettingsRow
+                    icon={<BodyIcon />}
+                    label="What to ask in the morning"
+                    subtitle={`${bodyMorningDomains.length} of ${MORNING_DOMAIN_LIMIT} · from the symptoms you already track`}
+                  />
+                  <MorningDomainPills
+                    activeDomains={bodyDomainsActive}
+                    morningDomains={bodyMorningDomains}
+                    onToggle={handleToggleMorningDomain}
+                  />
                   <RowDivider />
                   <SettingsRow
                     icon={<ClockIcon />} label="Opens at"
@@ -647,6 +695,7 @@ const styles = StyleSheet.create({
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
   pill: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 20, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
   pillActive: { backgroundColor: 'rgba(123,131,240,0.15)', borderColor: 'rgba(123,131,240,0.4)' },
+  pillDisabled: { opacity: 0.35 },
   pillActiveBody: { backgroundColor: 'rgba(188,129,47,0.15)', borderColor: 'rgba(188,129,47,0.4)' },
   pillText: { fontSize: 12, fontWeight: '500', color: '#555c72' },
   pillTextActive: { color: '#a5b4fc' },
