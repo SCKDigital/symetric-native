@@ -716,15 +716,28 @@ export default function InsightsScreen() {
     domain_a: r.domain_a, domain_b: r.domain_b, moves_together: r.moves_together,
     strength: r.strength, sample_size: r.sample_size, window_end: r.window_end,
   }));
-  const bodyFindings: PatternFinding[] = [
+  // The Body drill-down's buckets. Each finding has exactly one home there —
+  // see pattern-sections.tsx. Day-of-week, lag and rare-event findings are
+  // deliberately absent from this list: the drill-down renders those through
+  // the shared sections, and passing them as cards *as well* is what made that
+  // screen show the same finding twice, once near the top and once further
+  // down under a different heading.
+  const bodyChangedFindings: PatternFinding[] = [
     ...allClusterFindings.filter(f => f.areas.includes('body')),
+    ...(range >= EVOLUTION_MIN_SPAN_DAYS ? patternEvolutionFindings(bodyPatternEvolutions) : []),
+    ...bodyEventFrequencyFindings(bodyEventFrequencyPatterns),
+  ];
+  const bodyImpactFindings = bodyEventImpactFindings(bodyEventImpacts);
+  const bodyTimeOfDayFindingList = bodyTimeOfDayFindings(bodyTimeOfDayPatterns);
+  // The full set still feeds the index's "What stands out" and the Body area
+  // row's count, where there is no second rendering to collide with.
+  const bodyFindings: PatternFinding[] = [
+    ...bodyChangedFindings,
     ...allDowFindings.filter(f => f.areas.includes('body')),
     ...allLagFindings.filter(f => f.areas.includes('body')),
-    ...(range >= EVOLUTION_MIN_SPAN_DAYS ? patternEvolutionFindings(bodyPatternEvolutions) : []),
     ...rareEventFindings(bodyRareEvents, 'body'),
-    ...bodyTimeOfDayFindings(bodyTimeOfDayPatterns),
-    ...bodyEventFrequencyFindings(bodyEventFrequencyPatterns),
-    ...bodyEventImpactFindings(bodyEventImpacts),
+    ...bodyTimeOfDayFindingList,
+    ...bodyImpactFindings,
     ...bodyMindConnectionFindings(bodyMindConnectionInput),
   ];
   const sleepFindings = [
@@ -744,6 +757,10 @@ export default function InsightsScreen() {
   const bodyDayOfWeek = dayOfWeekPatterns.filter(p => involvesBody([p.domain]));
   const mindLag = lagRelationships.filter(r => involvesMind([r.predictor, r.outcome]));
   const bodyLag = lagRelationships.filter(r => involvesBody([r.predictor, r.outcome]));
+  // Same rule for the same-day correlations. Every persisted row involves a
+  // body domain (they are filtered that way on fetch), so Body sees all of
+  // them and Mind sees the cross-area ones.
+  const mindConnectionRows = bodyMindConnectionInput.filter(r => involvesMind([r.domain_a, r.domain_b]));
 
   const standoutFindings = selectStandoutFindings([...mindFindings, ...sleepFindings, ...bodyFindings, ...medicationFindings], 3);
   const areaRows = buildAreaRows({
@@ -770,6 +787,7 @@ export default function InsightsScreen() {
           trackedDomains={activeDomains}
           dayOfWeekPatterns={mindDayOfWeek}
           lagRelationships={mindLag}
+          connectionRows={mindConnectionRows}
           rareEvents={rareEvents}
           circadianPatterns={circadianPatterns}
           days90dCount={days90dCount}
@@ -796,7 +814,10 @@ export default function InsightsScreen() {
           siteFrequency={bodySiteFrequency}
           checkInRows={bodyCheckInRows}
           daysLogged={bodyDaysLogged}
-          findings={bodyFindings}
+          changedFindings={bodyChangedFindings}
+          connectionRows={bodyMindConnectionInput}
+          impactFindings={bodyImpactFindings}
+          timeOfDayFindings={bodyTimeOfDayFindingList}
           rareEvents={bodyRareEvents}
           volatilityClusters={volatilityClusters.filter(c => isBodyDomain((c.domains_involved ?? [])[0] ?? ''))}
           lagRelationships={bodyLag}

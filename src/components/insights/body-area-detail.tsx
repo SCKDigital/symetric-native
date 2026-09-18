@@ -2,18 +2,22 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import BackRow from '@/components/insights/back-row';
 import BodySiteHeatmap from '@/components/insights/body-site-heatmap';
+import WhatGoesWithWhatSection from '@/components/insights/correlation-section';
+import FindingCard from '@/components/insights/finding-card';
 import {
-  CollapsibleRow, PredictivePatternsSection, RareDaysSection, TimeAndDaySection,
+  CollapsibleRow, countRareDayGroups, RareDayGroups,
+  WhatComesBeforeWhatSection, WhenItHappensSection,
 } from '@/components/insights/pattern-sections';
-import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import type { CircadianPattern } from '@/lib/circadian-detection';
+import type { ConnectionRow } from '@/lib/correlation-groups';
 import { formatShortDate } from '@/lib/date-utils';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
 import type { RareEvent } from '@/lib/detection/rare-events';
 import { BODY_COLOR } from '@/lib/domains';
-import { CONFIDENCE_COPY, PatternFinding } from '@/lib/pattern-findings';
+import { PatternFinding } from '@/lib/pattern-findings';
 import type { BodyDomainSummary, BodyEventOccurrence, BodyEventSummary, BodySiteFrequency } from '@/lib/report/types';
+import { rankFindings } from '@/lib/standout-ranking';
 import type { DetectedCluster } from '@/lib/supabase';
 
 // The "Body" drill-down.
@@ -30,6 +34,12 @@ import type { DetectedCluster } from '@/lib/supabase';
 //
 // So the numbers are the way *in* rather than the whole answer: a domain row
 // still leads with its average, and opens onto the days behind it.
+//
+// The findings above those numbers now sit in the same four buckets the Mind
+// screen uses, in the same order — see pattern-sections.tsx. Before that they
+// were one flat "Patterns" list printed in detector order, with no ranking and
+// no cap, and the day-of-week/lag/rare-event cards in it were rendered a second
+// time by the sections underneath.
 
 interface DomainDay {
   date: string;
@@ -51,10 +61,16 @@ interface Props {
   /** Range-scoped body_checkins rows, for the per-domain day breakdown. */
   checkInRows: Record<string, unknown>[];
   daysLogged: number;
-  findings: PatternFinding[];
+  /** Clusters, evolution and event-frequency findings — the "what's changed" bucket. */
+  changedFindings: PatternFinding[];
+  /** Same-day correlations involving a body domain, ungrouped. */
+  connectionRows: ConnectionRow[];
+  /** "X rises in the days after Y" — belongs with the lag relationships. */
+  impactFindings: PatternFinding[];
+  /** Morning-vs-evening — belongs with the day-of-week and circadian patterns. */
+  timeOfDayFindings: PatternFinding[];
   rareEvents: RareEvent[];
-  /** Intraday swings for body domains. Mind renders these as tappable cards in
-   *  its own Patterns list; Body has no such list, so they surface here. */
+  /** Intraday swings for body domains, shown as rare days rather than patterns. */
   volatilityClusters: DetectedCluster[];
   lagRelationships: LagRelationship[];
   dayOfWeekPatterns: DayOfWeekPattern[];
@@ -99,10 +115,16 @@ function DayRow({ date, children }: { date: string; children: React.ReactNode })
 }
 
 export default function BodyAreaDetail({
-  onBack, domains, events, eventOccurrences, siteFrequency, checkInRows, daysLogged, findings,
+  onBack, domains, events, eventOccurrences, siteFrequency, checkInRows, daysLogged,
+  changedFindings, connectionRows, impactFindings, timeOfDayFindings,
   rareEvents, volatilityClusters, lagRelationships, dayOfWeekPatterns, circadianPatterns, daysOfData,
 }: Props) {
-  const shown = findings.filter(f => f.grade !== 'limited');
+  // Ranked, not detector-ordered: firmest evidence first, then most recent,
+  // then largest effect. The top one gets the lead treatment.
+  const ranked = rankFindings(changedFindings);
+  const [lead, ...rest] = ranked;
+  const rareGroupCount = countRareDayGroups(rareEvents, volatilityClusters);
+  const changedCount = ranked.length + rareGroupCount;
 
   const occurrencesByType = new Map<string, BodyEventOccurrence[]>();
   for (const o of eventOccurrences) {
@@ -115,29 +137,24 @@ export default function BodyAreaDetail({
     <ScrollView contentContainerStyle={styles.content}>
       <BackRow label="Body" onBack={onBack} />
 
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Patterns</Text>
-        {shown.length === 0 ? (
+      {changedCount === 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>What&rsquo;s changed</Text>
           <Text style={styles.emptyText}>Nothing standing out yet. This usually needs a few weeks of body check-ins.</Text>
-        ) : (
-          <View style={styles.list}>
-            {shown.map(f => (
-              <View key={`${f.patternSource ?? 'x'}-${f.id}`} style={styles.findingCard}>
-                <Text style={styles.findingSentence}>
-                  <HighlightedSentence sentence={f.sentence} highlights={f.sentenceHighlights} />
-                </Text>
-                <Text style={styles.findingEvidence}>{f.evidenceLine} · {CONFIDENCE_COPY[f.grade].short}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
+        </View>
+      ) : (
+        <CollapsibleRow label="What&rsquo;s changed" defaultOpen meta={`${changedCount}`}>
+          {lead && <FindingCard finding={lead} lead accent={BODY_COLOR} />}
+          {rest.map(f => (
+            <FindingCard key={`${f.patternSource ?? 'x'}-${f.id}`} finding={f} accent={BODY_COLOR} />
+          ))}
+          <RareDayGroups events={rareEvents} volatilityClusters={volatilityClusters} daysOfData={daysOfData} />
+        </CollapsibleRow>
+      )}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Where it shows up</Text>
-        <Text style={styles.daysLoggedText}>Pain, instability and event sites across the selected range. Brighter means logged on more days.</Text>
-        <BodySiteHeatmap sites={siteFrequency} />
-      </View>
+      <WhatGoesWithWhatSection rows={connectionRows} />
+      <WhatComesBeforeWhatSection relationships={lagRelationships} impactFindings={impactFindings} />
+      <WhenItHappensSection circadian={circadianPatterns} dayOfWeek={dayOfWeekPatterns} timeOfDayFindings={timeOfDayFindings} />
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Symptom levels</Text>
@@ -182,6 +199,12 @@ export default function BodyAreaDetail({
         )}
       </View>
 
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Where it shows up</Text>
+        <Text style={styles.daysLoggedText}>Pain, instability and event sites across the selected range. Brighter means logged on more days.</Text>
+        <BodySiteHeatmap sites={siteFrequency} />
+      </View>
+
       {events.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Events</Text>
@@ -212,12 +235,6 @@ export default function BodyAreaDetail({
           </View>
         </View>
       )}
-
-      <View style={styles.sections}>
-        <RareDaysSection events={rareEvents} volatilityClusters={volatilityClusters} daysOfData={daysOfData} />
-        <PredictivePatternsSection relationships={lagRelationships} />
-        <TimeAndDaySection circadian={circadianPatterns} dayOfWeek={dayOfWeekPatterns} />
-      </View>
     </ScrollView>
   );
 }
@@ -225,13 +242,9 @@ export default function BodyAreaDetail({
 const styles = StyleSheet.create({
   content: { padding: 20, gap: 24, paddingBottom: 48 },
   section: { gap: 0 },
-  sections: { gap: 24 },
   sectionLabel: { fontSize: 11, color: '#8892a4', textTransform: 'uppercase', letterSpacing: 1.1, fontWeight: '600', marginBottom: 12 },
   emptyText: { fontSize: 14, color: '#8892a4', lineHeight: 20 },
   list: { gap: 10 },
-  findingCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderLeftWidth: 4, borderLeftColor: BODY_COLOR, borderRadius: 12, padding: 14, paddingHorizontal: 16 },
-  findingSentence: { fontSize: 14, color: '#e2e8f0', marginBottom: 6, lineHeight: 21 },
-  findingEvidence: { fontSize: 12, color: '#4a5568' },
   daysLoggedText: { fontSize: 12, color: '#4a5568', marginBottom: 10, lineHeight: 17 },
   domainCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderLeftWidth: 4, borderLeftColor: BODY_COLOR, borderRadius: 12, padding: 14, paddingHorizontal: 16 },
   dayRow: { flexDirection: 'row', gap: 12, paddingVertical: 7, borderTopWidth: 1, borderTopColor: '#1e2533' },

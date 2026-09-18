@@ -7,9 +7,12 @@ import { ClusterCard } from '@/components/insights/cluster-card';
 import { useAuth } from '@/contexts/auth-context';
 import { useComfort } from '@/hooks/use-comfort';
 import { COMFORT_TOKENS } from '@/lib/comfort-theme';
+import WhatGoesWithWhatSection from '@/components/insights/correlation-section';
 import {
-  CollapsibleRow, PredictivePatternsSection, RareDaysSection, TimeAndDaySection,
+  CollapsibleRow, countRareDayGroups, RareDayGroups,
+  WhatComesBeforeWhatSection, WhenItHappensSection,
 } from '@/components/insights/pattern-sections';
+import type { ConnectionRow } from '@/lib/correlation-groups';
 import { clusterDurationDays, factorLabel } from '@/lib/pattern-findings';
 import type { CircadianPattern } from '@/lib/circadian-detection';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
@@ -242,6 +245,9 @@ interface Props {
   trackedDomains: DomainType[];
   dayOfWeekPatterns: DayOfWeekPattern[];
   lagRelationships: LagRelationship[];
+  /** Same-day correlations involving a mind domain, ungrouped. A cross-area
+   *  relationship belongs to both screens — that is what it is about. */
+  connectionRows: ConnectionRow[];
   rareEvents: RareEvent[];
   circadianPatterns: CircadianPattern[];
   days90dCount: number;
@@ -253,7 +259,7 @@ interface Props {
 
 export default function MindAreaDetail({
   onBack, days, baselines, clusters, contextTags, checkIns, trackedDomains,
-  dayOfWeekPatterns, lagRelationships, rareEvents, circadianPatterns,
+  dayOfWeekPatterns, lagRelationships, connectionRows, rareEvents, circadianPatterns,
   days90dCount, timeFormat, onViewCluster, onViewVolatilityGroup, onToggleFlag,
 }: Props) {
   const { profile } = useAuth();
@@ -291,13 +297,21 @@ export default function MindAreaDetail({
   const visibleGroups = showAllGroups ? domainGroups : domainGroups.slice(0, 3);
   const hiddenCount = domainGroups.length - 3;
   const totalPatternCount = nonVolatility.length + volatilityGroups.length;
+  // Everything that belongs under "What's changed", including the parts that
+  // are not cluster cards — the section header counts what is behind it.
+  const changedCount = totalPatternCount + highDespitePoorSleep.length + countRareDayGroups(rareEvents);
 
   return (
     <ScrollView contentContainerStyle={styles.root}>
       <BackRow label="Mind" onBack={onBack} />
 
-      {totalPatternCount > 0 ? (
+      {changedCount === 0 ? (
         <View>
+          <Text style={styles.sectionLabel}>What&rsquo;s changed</Text>
+          <Text style={styles.emptyText}>No standout patterns in this window yet.</Text>
+        </View>
+      ) : (
+        <CollapsibleRow label="What&rsquo;s changed" defaultOpen meta={`${changedCount}`}>
           <Text style={styles.intro}>Deviations from your personal baseline that lasted several days or kept recurring.</Text>
           <View style={styles.list}>
             {/* Grouped, not flattened. domainGroups was already built here and
@@ -339,23 +353,23 @@ export default function MindAreaDetail({
               </Pressable>
             )}
           </View>
-        </View>
-      ) : (
-        <Text style={styles.emptyText}>No standout patterns in this window yet.</Text>
+
+          {highDespitePoorSleep.length > 0 && (
+            <View style={styles.subBlock}>
+              <Text style={styles.subLabel}>Key differentiating patterns</Text>
+              <View style={styles.list}>
+                {highDespitePoorSleep.map(c => <HighDespitePoorSleepCard key={c.id} cluster={c} onView={() => onViewCluster(c)} />)}
+              </View>
+            </View>
+          )}
+
+          <RareDayGroups events={rareEvents} daysOfData={days90dCount} />
+        </CollapsibleRow>
       )}
 
-      {highDespitePoorSleep.length > 0 && (
-        <View>
-          <Text style={styles.sectionLabel}>Key differentiating patterns</Text>
-          <View style={styles.list}>
-            {highDespitePoorSleep.map(c => <HighDespitePoorSleepCard key={c.id} cluster={c} onView={() => onViewCluster(c)} />)}
-          </View>
-        </View>
-      )}
-
-      <RareDaysSection events={rareEvents} daysOfData={days90dCount} />
-      <PredictivePatternsSection relationships={lagRelationships} />
-      <TimeAndDaySection circadian={circadianPatterns} dayOfWeek={dayOfWeekPatterns} />
+      <WhatGoesWithWhatSection rows={connectionRows} />
+      <WhatComesBeforeWhatSection relationships={lagRelationships} />
+      <WhenItHappensSection circadian={circadianPatterns} dayOfWeek={dayOfWeekPatterns} />
 
       <CollapsibleRow label="Tracked symptoms" defaultOpen>
         {trackedDomains.map(domain => (
@@ -390,6 +404,8 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: '#8892a4', lineHeight: 20 },
   sectionLabel: { fontSize: 11, color: '#8892a4', textTransform: 'uppercase', letterSpacing: 1.1, fontWeight: '600', marginBottom: 12 },
   domainGroup: { gap: 8 },
+  subBlock: { gap: 8, marginTop: 4 },
+  subLabel: { fontSize: 12, fontWeight: '600', color: '#8892a4', letterSpacing: 0.3 },
   domainGroupLabel: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
   showMoreText: { fontSize: 13, color: '#6366f1', paddingVertical: 4 },
   volCard: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)', borderLeftWidth: 4, borderRadius: 14, padding: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

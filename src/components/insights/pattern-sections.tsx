@@ -8,8 +8,9 @@ import { formatShortDate } from '@/lib/date-utils';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
 import type { RareEvent } from '@/lib/detection/rare-events';
+import FindingCard from '@/components/insights/finding-card';
 import { getDomainColorFromProfile } from '@/lib/domains';
-import { factorLabel } from '@/lib/pattern-findings';
+import { factorLabel, type PatternFinding } from '@/lib/pattern-findings';
 import type { DetectedCluster } from '@/lib/supabase';
 
 /**
@@ -27,8 +28,23 @@ import type { DetectedCluster } from '@/lib/supabase';
  * how the Mind screen came to render body domains through a mind-only label
  * map in the first place.
  *
+ * Both drill-downs are now built from the same four buckets, in the same
+ * order, named for the kind of answer a finding is rather than for the
+ * detector that produced it:
+ *
+ *   What's changed          clusters, evolution, event frequency, rare days
+ *   What goes with what     same-day correlations (correlation-section.tsx)
+ *   What comes before what  lag relationships, body-event impact
+ *   When it happens         day-of-week, circadian, morning-vs-evening
+ *
+ * Every finding has exactly one home in that list. That is the point: Body
+ * used to render its day-of-week, lag and rare-event findings as cards under
+ * "Patterns" *and* again in the sections underneath, so scrolling far enough
+ * showed the same finding twice. Routing by kind removes the duplication by
+ * construction rather than by filtering it back out at each call site.
+ *
  * Each section owns its open/closed state and renders nothing when it has no
- * content, so a caller can drop all three in and let them decide.
+ * content, so a caller can drop them all in and let them decide.
  */
 
 export function CollapsibleRow({ label, meta, defaultOpen = false, children }: {
@@ -292,9 +308,21 @@ function RareDayGroupCard({ group }: { group: RareDayGroup }) {
   );
 }
 
-export function RareDaysSection({ events, volatilityClusters = [], daysOfData }: {
+/** How many rare-day groups a screen has, for its section count. */
+export function countRareDayGroups(events: RareEvent[], volatilityClusters: DetectedCluster[] = []): number {
+  return buildRareDayGroups(events, volatilityClusters).length;
+}
+
+/**
+ * The rare-day cards on their own, for embedding under "What's changed".
+ *
+ * A rare day *is* something that changed, so it belongs in that bucket rather
+ * than in a section of its own — and a collapsible inside a collapsible is a
+ * worse thing to hand someone than a sub-heading.
+ */
+export function RareDayGroups({ events, volatilityClusters = [], daysOfData }: {
   events: RareEvent[];
-  /** Intraday swings. Grouped in here rather than listed under Patterns —
+  /** Intraday swings. Grouped in here rather than listed as patterns —
    *  a one-day swing is a rare day, not a pattern that persisted. */
   volatilityClusters?: DetectedCluster[];
   daysOfData: number;
@@ -305,43 +333,55 @@ export function RareDaysSection({ events, volatilityClusters = [], daysOfData }:
   );
   if (groups.length === 0) return null;
   return (
-    <CollapsibleRow label="Rare days" meta={`${groups.length} domain${groups.length !== 1 ? 's' : ''}`}>
+    <View style={styles.subBlock}>
+      <Text style={styles.subLabel}>Rare days</Text>
       <Text style={styles.collapsibleIntro}>Days that looked statistically different from your typical pattern.</Text>
       {groups.map(g => <RareDayGroupCard key={g.domain} group={g} />)}
       <Text style={styles.collapsibleFooter}>Based on {daysOfData} days of data.</Text>
-    </CollapsibleRow>
+    </View>
   );
 }
 
-export function PredictivePatternsSection({ relationships }: { relationships: LagRelationship[] }) {
-  if (relationships.length === 0) return null;
+export function WhatComesBeforeWhatSection({ relationships, impactFindings = [] }: {
+  relationships: LagRelationship[];
+  /** Body-event impact findings — "X tends to rise in the days after Y" is the
+   *  same kind of statement as a lag relationship, so it belongs here. */
+  impactFindings?: PatternFinding[];
+}) {
+  const total = relationships.length + impactFindings.length;
+  if (total === 0) return null;
   return (
     <CollapsibleRow
-      label="What tends to follow what"
-      meta={`${relationships.length} relationship${relationships.length !== 1 ? 's' : ''}`}>
+      label="What comes before what"
+      meta={`${total} relationship${total !== 1 ? 's' : ''}`}>
       {[...relationships].sort((a, b) => b.instanceCount - a.instanceCount).map(rel => (
         <LagRelationshipCard key={`${rel.predictor}-${rel.outcome}-${rel.lagDays}`} rel={rel} />
       ))}
+      {impactFindings.map(f => <FindingCard key={f.id} finding={f} />)}
     </CollapsibleRow>
   );
 }
 
-export function TimeAndDaySection({ circadian, dayOfWeek }: {
+export function WhenItHappensSection({ circadian, dayOfWeek, timeOfDayFindings = [] }: {
   circadian: CircadianPattern[];
   dayOfWeek: DayOfWeekPattern[];
+  /** Body morning-vs-evening findings — a time-of-day statement, same bucket. */
+  timeOfDayFindings?: PatternFinding[];
 }) {
   // A sub-2-point swing across the day is noise dressed as a finding.
   const meaningful = circadian.filter(p => p.range >= 2.0);
-  if (meaningful.length === 0 && dayOfWeek.length === 0) return null;
+  const timeOfDayCount = meaningful.length + timeOfDayFindings.length;
+  if (timeOfDayCount === 0 && dayOfWeek.length === 0) return null;
 
   return (
     <CollapsibleRow
-      label="Time &amp; day patterns"
+      label="When it happens"
       meta={[
-        meaningful.length > 0 && `${meaningful.length} time-of-day`,
         dayOfWeek.length > 0 && `${dayOfWeek.length} day-of-week`,
+        timeOfDayCount > 0 && `${timeOfDayCount} time-of-day`,
       ].filter(Boolean).join(' · ')}>
       {dayOfWeek.map((pat, i) => <DayOfWeekPatternCard key={`${pat.domain}-${pat.type}-${i}`} pat={pat} />)}
+      {timeOfDayFindings.map(f => <FindingCard key={f.id} finding={f} />)}
       {meaningful.map(pattern => {
         const formatted = formatCircadianPattern(pattern);
         return (
@@ -387,6 +427,8 @@ const styles = StyleSheet.create({
   collapsibleBody: { gap: 8, marginTop: 16 },
   collapsibleIntro: { fontSize: 12, color: '#4a5568', marginBottom: 4, lineHeight: 18 },
   collapsibleFooter: { fontSize: 12, color: '#4a5568', marginTop: 4, lineHeight: 18 },
+  subBlock: { gap: 8, marginTop: 4 },
+  subLabel: { fontSize: 12, fontWeight: '600', color: '#8892a4', letterSpacing: 0.3 },
   chevronExpanded: { transform: [{ rotate: '180deg' }] },
   rareGroupHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   rareGroupHeading: { flex: 1 },

@@ -4,6 +4,29 @@
 import { Area, GRADE_ORDER, PatternFinding } from '@/lib/pattern-findings';
 
 /**
+ * How firm the evidence is, then how recent, then how large the effect.
+ *
+ * Exported because the drill-downs need the same order. Body used to render
+ * its findings in the order the detectors happened to be listed in — clusters,
+ * then day-of-week, then lag, and so on — so the first card on the screen was
+ * an artefact of an array literal rather than the thing most worth reading.
+ */
+export function compareFindings(a: PatternFinding, b: PatternFinding): number {
+  if (GRADE_ORDER[a.grade] !== GRADE_ORDER[b.grade]) {
+    return GRADE_ORDER[a.grade] - GRADE_ORDER[b.grade];
+  }
+  if (a.onsetDate !== b.onsetDate) {
+    return b.onsetDate.localeCompare(a.onsetDate);
+  }
+  return b.effectSize - a.effectSize;
+}
+
+/** Everything worth showing, best first. Drops 'limited' like the summary does. */
+export function rankFindings(findings: PatternFinding[]): PatternFinding[] {
+  return findings.filter(f => f.grade !== 'limited').slice().sort(compareFindings);
+}
+
+/**
  * Selects up to `maxCount` findings for "What stands out":
  *  1. Excludes 'limited' grade entirely — never surfaced here.
  *  2. Ranks by grade (solid first), then recency of onset, then effect size.
@@ -11,18 +34,7 @@ import { Area, GRADE_ORDER, PatternFinding } from '@/lib/pattern-findings';
  *     not yet represented is chosen over the next-best same-area candidate.
  */
 export function selectStandoutFindings(findings: PatternFinding[], maxCount = 3): PatternFinding[] {
-  const eligible = findings
-    .filter(f => f.grade !== 'limited')
-    .slice()
-    .sort((a, b) => {
-      if (GRADE_ORDER[a.grade] !== GRADE_ORDER[b.grade]) {
-        return GRADE_ORDER[a.grade] - GRADE_ORDER[b.grade];
-      }
-      if (a.onsetDate !== b.onsetDate) {
-        return b.onsetDate.localeCompare(a.onsetDate);
-      }
-      return b.effectSize - a.effectSize;
-    });
+  const eligible = rankFindings(findings);
 
   const selected: PatternFinding[] = [];
   const usedAreas = new Set<Area>();
