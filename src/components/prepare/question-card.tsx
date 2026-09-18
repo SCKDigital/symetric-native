@@ -1,9 +1,33 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import Svg, { Polygon } from 'react-native-svg';
+import Svg, { Path, Polygon, Polyline } from 'react-native-svg';
 
 import { deleteQuestion, markQuestionAddressed, updateQuestion } from '@/lib/api/questions';
 import type { PrepareQuestion } from '@/lib/supabase';
+
+// Edit/delete glyphs, traced from the web app's QuestionCard.tsx — same path
+// data, same 24-unit viewBox, same 14px render size and 2 stroke.
+function EditIcon() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#4a5568"
+      strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </Svg>
+  );
+}
+
+function DeleteIcon() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#4a5568"
+      strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Polyline points="3 6 5 6 21 6" />
+      <Path d="M19 6l-1 14H6L5 6" />
+      <Path d="M10 11v6M14 11v6" />
+      <Path d="M9 6V4h6v2" />
+    </Svg>
+  );
+}
 
 interface Props {
   question: PrepareQuestion;
@@ -109,10 +133,10 @@ export default function QuestionCard({ question, onChange, onDelete, onTogglePri
         {!editing && (
           <View style={styles.actions}>
             <Pressable onPress={() => setEditing(true)} hitSlop={6} style={styles.iconButton}>
-              <Text style={styles.iconButtonText}>✎</Text>
+              <EditIcon />
             </Pressable>
             <Pressable onPress={() => setShowDelete(v => !v)} hitSlop={6} style={styles.iconButton}>
-              <Text style={styles.iconButtonText}>🗑</Text>
+              <DeleteIcon />
             </Pressable>
           </View>
         )}
@@ -171,7 +195,6 @@ const styles = StyleSheet.create({
   autoGenText: { fontSize: 11, color: '#4a5568', marginTop: 4 },
   actions: { flexDirection: 'row', gap: 6 },
   iconButton: { padding: 2 },
-  iconButtonText: { fontSize: 13, color: '#4a5568' },
   editActions: { flexDirection: 'row', gap: 8, marginTop: 8, paddingLeft: 28 },
   saveButton: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: '#4f46e5', borderRadius: 7 },
   saveButtonDisabled: { backgroundColor: '#2d3748' },

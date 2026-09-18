@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Line, Rect } from 'react-native-svg';
 
 import AppointmentContext from '@/components/prepare/appointment-context';
 import DateRangeControl from '@/components/prepare/date-range-control';
@@ -169,7 +170,14 @@ export default function PrepareScreen() {
           </>
         ) : (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>📅</Text>
+            <Svg width={32} height={32} viewBox="0 0 16 16" fill="none" stroke="#7b83f0"
+              strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={styles.emptyIcon}>
+              <Rect x={2} y={3} width={12} height={11} rx={1.5} />
+              <Line x1={2} y1={7} x2={14} y2={7} />
+              <Line x1={5} y1={1} x2={5} y2={4} />
+              <Line x1={11} y1={1} x2={11} y2={4} />
+              <Line x1={6} y1={10.5} x2={10} y2={10.5} />
+            </Svg>
             <Text style={styles.emptyTitle}>Set your next appointment</Text>
             <Text style={styles.emptyBody}>
               Tell Symetric when your next appointment is and it will help you review patterns, prepare questions, and generate a summary to bring with you.
@@ -199,7 +207,7 @@ const styles = StyleSheet.create({
   collapseButton: { paddingVertical: 12, paddingBottom: 16 },
   collapseButtonText: { fontSize: 12, color: '#4a5568' },
   emptyCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 28, paddingHorizontal: 24, alignItems: 'center' },
-  emptyEmoji: { fontSize: 32, marginBottom: 12 },
+  emptyIcon: { marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#c8d0e0', marginBottom: 8 },
   emptyBody: { fontSize: 14, color: '#6b7a99', lineHeight: 22, marginBottom: 20, textAlign: 'center' },
   emptyHint: { fontSize: 13, color: '#4a5568' },
