@@ -17,7 +17,7 @@ import {
 } from '@/components/settings/settings-primitives';
 import {
   ActiveWindowSheet, BaselineModal, ConfirmDisableSheet, DndSheet, FrequencySheet,
-  TimeFormatSheet, formatWindowTime,
+  TimeFormatSheet,
 } from '@/components/settings/settings-sheets';
 import AppLogoHeader from '@/components/shared/app-logo-header';
 import { useAuth } from '@/contexts/auth-context';
@@ -30,7 +30,7 @@ import { subscribeToPushNotifications, unsubscribeFromPushNotifications } from '
 import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
 import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
-import type { TimeFormat } from '@/lib/time-format';
+import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 
 // Rebuilt against the web app's SettingsScreen.tsx. This screen previously
 // carried four of its controls (markers, body tracking, app lock, push) in a

@@ -25,9 +25,8 @@ import { fetchUpcomingAppointment } from '@/lib/api/appointments';
 import { trackCheckInCompleted } from '@/lib/analytics';
 import { createMarker } from '@/lib/queries/markers';
 import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
-import { formatWindowTime } from '@/components/settings/settings-sheets';
 import { timeOfDayInTZ } from '@/lib/scheduler';
-import { formatTime } from '@/lib/time-format';
+import { formatTime, formatWindowTime } from '@/lib/time-format';
 import { supabase, type Appointment, type CheckIn } from '@/lib/supabase';
 import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
 
@@ -404,7 +403,7 @@ function TodayHome() {
             prompt, then the evening card. Both were only reachable from
             Settings here until the Settings rebuild moved them out. */}
         <MorningBodyCheckInCard />
-        <BodyCheckInCard />
+        <BodyCheckInCard timeFormat={timeFormat} />
       </ScrollView>
 
       {showMarkerModal && (

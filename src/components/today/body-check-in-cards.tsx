@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { supabase } from '@/lib/supabase';
 import { useComfort } from '@/hooks/use-comfort';
 import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
+import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 
 // Ports of the web app's BodyCheckInCard.tsx and MorningBodyCheckInCard.tsx —
 // the Today entry points into the body check-in forms. Native already had both
@@ -42,7 +43,7 @@ function TickIcon() {
   );
 }
 
-export function BodyCheckInCard() {
+export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
   const styles = useComfort().active ? STYLES.comfort : STYLES.normal;
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
@@ -76,7 +77,7 @@ export function BodyCheckInCard() {
     return (
       <View style={[styles.card, styles.cardPending]}>
         <Text style={styles.eyebrow}>BODY CHECK-IN</Text>
-        <Text style={styles.status}>Opens at {availableFrom}</Text>
+        <Text style={styles.status}>Opens at {formatWindowTime(availableFrom, timeFormat)}</Text>
       </View>
     );
   }

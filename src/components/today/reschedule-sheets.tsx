@@ -3,10 +3,9 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChevronRight, SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
-import { formatWindowTime } from '@/components/settings/settings-sheets';
 import { localTimeToUTC, timeOfDayInTZ } from '@/lib/scheduler';
 import type { CheckIn, CheckInSettings } from '@/lib/supabase';
-import { formatTime, type TimeFormat } from '@/lib/time-format';
+import { formatTime, formatWindowTime, type TimeFormat } from '@/lib/time-format';
 
 // Ports of the web app's RescheduleListSheet and RescheduleTimePickerSheet
 // from today/TodayCards.tsx. Today's next-check-in block has always shown a

@@ -2,6 +2,8 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text } from 'react-native';
 
+import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
+
 /**
  * A tappable HH:MM field backed by the platform time picker.
  *
@@ -20,7 +22,12 @@ function toTimeString(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-export function TimeField({ value, onChange }: { value: string; onChange: (t: string) => void }) {
+export function TimeField({ value, timeFormat = '24hr', onChange }: {
+  value: string;
+  /** Display only — the value written is always 'HH:MM'. */
+  timeFormat?: TimeFormat;
+  onChange: (t: string) => void;
+}) {
   const [open, setOpen] = useState(false);
 
   const handle = (event: DateTimePickerEvent, selected?: Date) => {
@@ -34,7 +41,7 @@ export function TimeField({ value, onChange }: { value: string; onChange: (t: st
   return (
     <>
       <Pressable onPress={() => setOpen(true)} style={({ pressed }) => [styles.field, pressed && styles.pressed]}>
-        <Text style={styles.text}>{value}</Text>
+        <Text style={styles.text}>{formatWindowTime(value, timeFormat)}</Text>
       </Pressable>
       {open && (
         <DateTimePicker

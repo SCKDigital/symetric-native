@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
-import type { TimeFormat } from '@/lib/time-format';
+import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 
 // The scheduling and preference sheets, ported from the web app's
 // ActiveWindowSheet.tsx, FrequencySheet.tsx and sheets/SettingsSheets.tsx.
@@ -25,16 +25,6 @@ function timeStringToDate(t: string): Date {
 
 function dateToTimeString(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-export function formatWindowTime(time: string, fmt: TimeFormat): string {
-  const [hStr, mStr] = time.split(':');
-  const h = parseInt(hStr, 10);
-  const m = mStr ?? '00';
-  if (fmt === '24hr') return `${String(h).padStart(2, '0')}:${m}`;
-  const period = h < 12 ? 'am' : 'pm';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${m}${period}`;
 }
 
 /** A tappable time value that opens the platform time picker. */
