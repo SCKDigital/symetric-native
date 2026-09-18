@@ -301,10 +301,15 @@ async function upsertCluster(userId: string, domain: DomainType | 'sleep', direc
   const streakStart = streak[0].date;
   const streakEnd = streak[streak.length - 1].date;
 
-  const checkInsInPeriod = checkIns.filter(ci => {
+  const checkInsForDomain = checkIns.filter(ci => {
     const ciDate = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
     return ciDate >= streakStart && ciDate <= streakEnd && (domain === 'sleep' ? true : ci[domain] !== null && ci[domain] !== undefined);
-  }).length;
+  });
+  const checkInsInPeriod = checkInsForDomain.length;
+  // Rows the user logged through comfort mode's one-tap. They count toward
+  // coverage but cap the finding's confidence at 'partial' — see
+  // checkSustainedDeviationQuality.
+  const lowDemandInPeriod = checkInsForDomain.filter(ci => ci.low_demand === true).length;
 
   const sleepInPeriod = sleepLogs.filter(sl => !sl.skipped && sl.score != null && sl.log_date >= streakStart && sl.log_date <= streakEnd);
 
@@ -352,6 +357,7 @@ async function upsertCluster(userId: string, domain: DomainType | 'sleep', direc
     today,
     checkInsInPeriod,
     checkInsPerDay,
+    lowDemandInPeriod,
     extraFields: {
       avg_sleep_during_pattern: avgSleepDuringPattern,
       improved_with_sleep: improvedWithSleep,

@@ -24,6 +24,11 @@ export interface DataQualityCheck {
   expectedPoints: number;
 }
 
+/** A window made mostly of one-tap check-ins can reach 'partial', never
+ *  'solid'. Half is the line: below it the deliberate entries still carry the
+ *  finding, above it they no longer do. */
+const LOW_DEMAND_SOLID_CEILING = 0.5;
+
 /**
  * Validates data quality for sustained deviation detection.
  * VALIDATION RULES:
@@ -33,8 +38,22 @@ export interface DataQualityCheck {
  * - solid  : ≥75% coverage AND ≥2 pts/day
  * - partial: ≥50% coverage
  * - limited: 40–49% coverage (minimum acceptable)
+ *
+ * `lowDemandInPeriod` counts rows submitted through comfort mode's one-tap
+ * rather than by moving the sliders. Those rows are real data — the form rests
+ * every slider at that domain's own baseline, so a one-tap records "typical for
+ * me" — but they are weaker evidence than five deliberate movements, and a
+ * stretch of them during a genuine flare would read as calm. They still count
+ * toward coverage; they just cannot carry a finding to 'solid' on their own.
+ * Mind check-ins only: body check-ins have no one-tap path, so callers there
+ * pass nothing.
  */
-export function checkSustainedDeviationQuality(checkInsInPeriod: number, streakDays: number, checkInsPerDay: number): DataQualityCheck {
+export function checkSustainedDeviationQuality(
+  checkInsInPeriod: number,
+  streakDays: number,
+  checkInsPerDay: number,
+  lowDemandInPeriod = 0,
+): DataQualityCheck {
   const expectedPoints = streakDays * Math.max(checkInsPerDay, 1);
   const actualPoints = checkInsInPeriod;
   const coveragePct = (actualPoints / expectedPoints) * 100;
@@ -58,6 +77,15 @@ export function checkSustainedDeviationQuality(checkInsInPeriod: number, streakD
     dataQuality = 'partial';
   } else {
     dataQuality = 'limited';
+  }
+
+  const lowDemandShare = actualPoints > 0 ? lowDemandInPeriod / actualPoints : 0;
+  if (dataQuality === 'solid' && lowDemandShare > LOW_DEMAND_SOLID_CEILING) {
+    debug.log('Data Quality', 'Sustained deviation capped at partial:', {
+      lowDemandInPeriod, actualPoints, lowDemandShare: (lowDemandShare * 100).toFixed(0) + '%',
+      reason: 'mostly one-tap check-ins',
+    });
+    dataQuality = 'partial';
   }
 
   debug.log('Data Quality', 'Sustained deviation accepted:', { quality: dataQuality, actualPoints, coveragePct: coveragePct.toFixed(1) + '%' });

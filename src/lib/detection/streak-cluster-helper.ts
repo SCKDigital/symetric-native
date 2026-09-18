@@ -20,6 +20,9 @@ export async function upsertStreakCluster(params: {
   today: string;
   checkInsInPeriod: number;
   checkInsPerDay: number;
+  /** How many of checkInsInPeriod came from comfort mode's one-tap. Mind only;
+   *  body check-ins have no one-tap path. Caps confidence at 'partial'. */
+  lowDemandInPeriod?: number;
   /** Mind-only sleep-context fields (avg_sleep_during_pattern, improved_with_sleep,
    *  high_despite_poor_sleep); omitted entirely for body-domain clusters. */
   extraFields?: Record<string, unknown>;
@@ -27,7 +30,7 @@ export async function upsertStreakCluster(params: {
   logSource: string;
   onInsertError: (error: unknown) => void;
 }): Promise<void> {
-  const { userId, domain, direction, streak, allClusters, today, checkInsInPeriod, checkInsPerDay, extraFields = {}, logSource, onInsertError } = params;
+  const { userId, domain, direction, streak, allClusters, today, checkInsInPeriod, checkInsPerDay, lowDemandInPeriod = 0, extraFields = {}, logSource, onInsertError } = params;
 
   const streakStart = streak[0].date;
   const streakEnd = streak[streak.length - 1].date;
@@ -36,7 +39,7 @@ export async function upsertStreakCluster(params: {
   const meanDeviation = streak.reduce((sum, s) => sum + s.deviation, 0) / streak.length;
   const severity = Math.round(streak.length * meanDeviation * 10) / 10;
 
-  const qualityCheck = checkSustainedDeviationQuality(checkInsInPeriod, streak.length, checkInsPerDay);
+  const qualityCheck = checkSustainedDeviationQuality(checkInsInPeriod, streak.length, checkInsPerDay, lowDemandInPeriod);
   if (!qualityCheck.isValid) {
     debug.log(logSource, `Skipping sustained_deviation ${domain} ${streakStart}→${streakEnd}:`, {
       actualPoints: qualityCheck.actualPoints,
