@@ -63,7 +63,3 @@ export const COMFORT_TOKENS: ComfortTokens = {
   scale: COMFORT_SCALE,
   fs: scaled,
 };
-
-export function comfortTokens(active: boolean): ComfortTokens {
-  return active ? COMFORT_TOKENS : NORMAL_TOKENS;
-}

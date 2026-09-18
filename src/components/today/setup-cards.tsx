@@ -100,10 +100,15 @@ export default function SetupCards({ state, onChanged }: Props) {
     if (enable) {
       const result = await subscribeToPushNotifications(user.id);
       if (!result.success) {
-        // A refusal is an answer: record it so the card stops asking, and say
-        // what happened rather than failing silently.
         setError(result.message);
-        await markAcked({ setup_notifications_ack_at: new Date().toISOString() });
+        // Only a decision gets recorded. 'denied' and 'blocked' are the user
+        // answering; 'error' covers a missing project id, an expired session
+        // or a failed write, and 'unsupported' just means a simulator. Acking
+        // on those would let one bad moment permanently hide the card for the
+        // feature the whole app runs on — and the user would never know why.
+        if (result.reason === 'denied' || result.reason === 'blocked') {
+          await markAcked({ setup_notifications_ack_at: new Date().toISOString() });
+        }
         await refreshProfile();
         setBusy(false);
         return;
