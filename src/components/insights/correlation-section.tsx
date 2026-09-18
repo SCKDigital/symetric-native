@@ -6,7 +6,7 @@ import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { useAuth } from '@/contexts/auth-context';
 import {
   type ConnectionRow, type CorrelationGroup, type CorrelationPair,
-  groupConnections, groupEvidenceLine, groupHeadline, pairSentence,
+  groupClaimLine, groupConnections, groupEvidenceLine, groupHeadline, pairSentence,
 } from '@/lib/correlation-groups';
 import { getDomainColorFromProfile } from '@/lib/domains';
 import { CONFIDENCE_COPY, factorLabel } from '@/lib/pattern-findings';
@@ -36,7 +36,7 @@ function GroupCard({ group }: { group: CorrelationGroup }) {
       <View style={styles.chips}>
         {group.members.map(m => <DomainChip key={m} factor={m} />)}
       </View>
-      <Text style={styles.sub}>When one of these is bad, the others usually are too.</Text>
+      <Text style={styles.sub}>{groupClaimLine(group)}</Text>
       <Text style={styles.evidence}>
         {groupEvidenceLine(group)} · {CONFIDENCE_COPY[group.grade].short}
       </Text>
@@ -76,13 +76,21 @@ function DomainChipInline({ factor }: { factor: string }) {
   return <Text style={{ color: getDomainColorFromProfile(factor, profile) }}>{factorLabel(factor)}</Text>;
 }
 
+// Not dimmed by confidence, unlike FindingCard.
+//
+// That card dims everything below the section's lead so the ranking is legible
+// at a glance. There is no lead here — a block and a pair are two shapes of the
+// same finding, ranked against nothing — so dimming only said "this one is
+// Partial" next to an equally Partial block card at full strength, which read
+// as the pair being the weaker of the two when it isn't. The grade is still on
+// the card, in the word, next to the day count.
 function PairCard({ pair }: { pair: CorrelationPair }) {
   const highlights = [
     { text: factorLabel(pair.a), factor: pair.a },
     { text: factorLabel(pair.b), factor: pair.b },
   ];
   return (
-    <View style={[styles.pairCard, { opacity: CONFIDENCE_COPY[pair.grade].barFraction }]}>
+    <View style={styles.pairCard}>
       <Text style={styles.pairSentence}>
         <HighlightedSentence sentence={pairSentence(pair)} highlights={highlights} />
       </Text>

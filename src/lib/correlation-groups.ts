@@ -171,6 +171,28 @@ export function groupHeadline(group: CorrelationGroup): string {
   return `${word} things move together`;
 }
 
+/**
+ * What the block is entitled to claim, which depends on how much of it was
+ * actually measured.
+ *
+ * A block is a connected component, so five factors can be joined by as few as
+ * four edges out of the ten pairings between them. "When one of these is bad,
+ * the others usually are too" asserts all ten. For a partly-connected block
+ * that is a claim about pairs the detector never compared — and this app's
+ * findings are read out to clinicians by people whose symptoms have been
+ * explained away for years, so a sentence that says more than the data does is
+ * worse than no sentence at all.
+ *
+ * A fully-connected block has earned the strong wording, so it still gets it.
+ */
+export function groupClaimLine(group: CorrelationGroup): string {
+  const n = group.members.length;
+  const complete = group.pairs.length >= (n * (n - 1)) / 2;
+  return complete
+    ? 'When one of these is bad, the others usually are too.'
+    : 'Each of these moved with at least one other. Not every pair was compared.';
+}
+
 /** "16–20 days compared", or "17 days compared" when every edge agrees. */
 export function groupEvidenceLine(group: CorrelationGroup): string {
   const range = group.minSample === group.maxSample

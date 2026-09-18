@@ -105,6 +105,21 @@ function daysForDomain(rows: Record<string, unknown>[], domain: string): DomainD
   return out.sort((a, b) => b.date.localeCompare(a.date));
 }
 
+/**
+ * The readings for one day, as words rather than as column names.
+ *
+ * This printed the raw shape — "pm 3", or "am 2 · pm 3" — which reads as a time
+ * of day rather than as the check-in it came from, and is doubly confusing for
+ * anyone on the 12-hour clock, where "pm 7" could be a time. Most days have
+ * only the evening reading, and on those the label carries nothing at all: the
+ * number is the reading, and the date beside it already says which day.
+ */
+function dayValueText(day: DomainDay): string {
+  if (day.am === null) return String(day.pm);
+  if (day.pm === null) return `Morning ${day.am}`;
+  return `Morning ${day.am} · Evening ${day.pm}`;
+}
+
 function DayRow({ date, children }: { date: string; children: React.ReactNode }) {
   return (
     <View style={styles.dayRow}>
@@ -177,12 +192,7 @@ export default function BodyAreaDetail({
                       <Text style={styles.emptyText}>No readings in this window.</Text>
                     ) : days.map(day => (
                       <DayRow key={day.date} date={day.date}>
-                        <Text style={styles.dayValue}>
-                          {[
-                            day.am !== null ? `am ${day.am}` : null,
-                            day.pm !== null ? `pm ${day.pm}` : null,
-                          ].filter(Boolean).join(' · ')}
-                        </Text>
+                        <Text style={styles.dayValue}>{dayValueText(day)}</Text>
                         {day.tags.length > 0 && (
                           <View style={styles.tagRow}>
                             {day.tags.map(t => <Text key={t} style={styles.tag}>{t}</Text>)}
