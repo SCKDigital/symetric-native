@@ -185,7 +185,7 @@ export default function SetupCards({ state, onChanged }: Props) {
       {state.needsNotifications && (
         <SetupCard
           title="Turn on reminders"
-          body="Symetric nudges you at unpredictable times inside your chosen hours — that's what stops it becoming a diary you forget. Without reminders you'd have to remember to open the app."
+          body="Symetric nudges you at different times during your chosen hours, so we need to be able to send you notifications."
           action={busy ? 'Working…' : 'Turn on'}
           onPress={() => handleNotifications(true)}
           onSecondary={() => handleNotifications(false)}
