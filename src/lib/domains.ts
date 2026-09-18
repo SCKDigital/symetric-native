@@ -1,4 +1,5 @@
 import { BODY_DOMAINS } from '@/lib/body/constants';
+import { COMFORT_TOKENS } from '@/lib/comfort-theme';
 import { DomainType, Profile } from '@/lib/supabase';
 
 // Scoped port of what MindSetup needs from the web app's src/utils/domainUtils.ts
@@ -75,17 +76,56 @@ export const BRAND_COLOR = '#818CF8';
 export const BODY_COLOR = '#BC812F';
 export const MIND_AREA_COLOR = '#e2e8f0';
 
-const SIMPLIFIED_COLOR = BRAND_COLOR;
+/**
+ * The one colour every domain takes in comfort mode.
+ *
+ * Not BRAND_COLOR, which is what the old simplified-colours toggle used. Comfort
+ * mode drops the accents to COMFORT_TOKENS' quieter set, so painting every chip
+ * and sparkline the full-strength brand indigo made the calm mode the loudest
+ * one on some screens — thirteen bright chips where there had been a spread of
+ * hues. Same value as COMFORT_TOKENS.accentText, for the same reason: muted is
+ * the point.
+ */
+const COMFORT_DOMAIN_COLOR = COMFORT_TOKENS.accentText;
 
-export function getDomainColor(domain: string, simplifiedMode = false): string {
-  if (simplifiedMode) return SIMPLIFIED_COLOR;
+export function getDomainColor(domain: string, comfortMode = false): string {
+  if (comfortMode) return COMFORT_DOMAIN_COLOR;
   const normalized = domain.toLowerCase().replace(/ /g, '_');
   if (normalized in BODY_DOMAINS) return BODY_COLOR;
   return DOMAIN_COLORS[normalized] ?? BRAND_COLOR;
 }
 
+/**
+ * Comfort mode, read off a bare profile row rather than through useComfort().
+ *
+ * Same two ways in as the hook — the standing `comfort_mode` preference or an
+ * unexpired `comfort_until` window — because the colour helpers are called from
+ * plain functions and from components that already hold the profile, and
+ * threading a hook through every one of them to answer "which palette" would be
+ * a lot of wiring for one boolean. The cost is that an armed window expiring
+ * mid-session only changes colours on the next render, where the hook's ticker
+ * would have done it within thirty seconds; nothing here is time-critical.
+ */
+export function comfortActiveForProfile(profile: Profile | null | undefined): boolean {
+  if (profile?.comfort_mode) return true;
+  if (!profile?.comfort_until) return false;
+  const endsAt = new Date(profile.comfort_until).getTime();
+  return !Number.isNaN(endsAt) && endsAt > Date.now();
+}
+
+/**
+ * Per-domain colour, unless comfort mode is on — then everything is one quiet
+ * lavender.
+ *
+ * Simplified colours used to be its own Settings toggle sitting directly under
+ * comfort mode, which is two switches for one need: someone reaching for
+ * quieter colours is in the state comfort mode exists for, and having to find
+ * and set both is the kind of small admin that state makes expensive. It is now
+ * one of the things comfort mode does, and `profiles.simplified_colors` is no
+ * longer read — the column stays for the web app until it makes the same move.
+ */
 export function getDomainColorFromProfile(domain: string, profile: Profile | null | undefined): string {
-  return getDomainColor(domain, profile?.simplified_colors ?? false);
+  return getDomainColor(domain, comfortActiveForProfile(profile));
 }
 
 /** Returns a heading label for one or more domains. Ported from the web

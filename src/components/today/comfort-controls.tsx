@@ -20,7 +20,16 @@ function ComfortIcon({ color }: { color: string }) {
   );
 }
 
-/** Sits in AppLogoHeader's trailing slot next to the date. */
+/**
+ * Sits in AppLogoHeader's trailing slot next to the date.
+ *
+ * The on state used to be one step of grey on the icon plus a #12162b fill,
+ * which against a #0a0c12 page was close to invisible — and since the banner
+ * that says comfort mode is on scrolls away with the rest of Today, this button
+ * is what is left to say so. It is now a filled, bordered pill. Still quiet, in
+ * keeping with the mode, but no longer ambiguous: a mode that changes what the
+ * app asks of you must never be something you cannot tell is running.
+ */
 export function ComfortButton({ active, onPress }: { active: boolean; onPress: () => void }) {
   return (
     <Pressable
@@ -29,7 +38,7 @@ export function ComfortButton({ active, onPress }: { active: boolean; onPress: (
       accessibilityLabel={active ? 'Comfort mode is on' : 'Turn on comfort mode'}
       hitSlop={10}
       style={({ pressed }) => [styles.iconButton, active && styles.iconButtonActive, pressed && styles.pressed]}>
-      <ComfortIcon color={active ? '#cbd5e0' : '#7886a0'} />
+      <ComfortIcon color={active ? '#e2e8f0' : '#7886a0'} />
     </Pressable>
   );
 }
@@ -58,6 +67,7 @@ export function ComfortBanner({ comfort, timeFormat, onTurnOff }: {
         <Text style={styles.bannerMeta}>
           {endsLabel}
           {comfort.reducesDemand ? ' · reminders paused' : ''}
+          {comfort.endsAt && !comfort.pausesReminders ? ' · reminders still on' : ''}
         </Text>
       </View>
       <Pressable onPress={onTurnOff} accessibilityRole="button" hitSlop={8}
@@ -87,7 +97,9 @@ export function ComfortSheet({ comfort, onClose }: { comfort: Comfort; onClose: 
   return (
     <SheetShell
       title="Comfort mode"
-      description="Quieter colours, larger text, no countdown. Reminders pause and you can log a day in one tap."
+      description={comfort.pausesReminders
+        ? 'One quiet colour, larger text, no countdown. Reminders pause and you can log a day in one tap.'
+        : 'One quiet colour, larger text, no countdown, and you can log a day in one tap. Reminders keep coming — you asked them to, in Settings.'}
       onClose={onClose}>
       <View style={styles.options}>
         {DURATIONS.map(d => (
@@ -130,7 +142,7 @@ const styles = StyleSheet.create({
     width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: 'transparent',
   },
-  iconButtonActive: { borderColor: '#252a44', backgroundColor: '#12162b' },
+  iconButtonActive: { borderColor: '#4a5078', backgroundColor: '#232842' },
 
   banner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,

@@ -50,7 +50,8 @@ export interface Comfort {
   /**
    * The layers that reduce what the app asks for: reminder push is muted and
    * the one-tap check-in is offered. Armed windows ONLY, never the standing
-   * preference.
+   * preference — and only when comfort_pauses_reminders is on, since that is
+   * the layer it governs.
    *
    * That split is deliberate and load-bearing. checkSustainedDeviationQuality
    * rejects any window below 40% coverage or 1.5 check-ins/day, so a user who
@@ -64,6 +65,10 @@ export interface Comfort {
   arm: (duration: ComfortDuration) => Promise<void>;
   disarm: () => Promise<void>;
   setStanding: (on: boolean) => Promise<void>;
+  /** Whether an armed window also mutes reminder push. A preference, not a
+   *  fixed behaviour — see setPausesReminders. */
+  pausesReminders: boolean;
+  setPausesReminders: (on: boolean) => Promise<void>;
   /** Set when the last write failed; the optimistic value has been rolled back. */
   error: string | null;
 }
@@ -108,7 +113,9 @@ export function useComfort(): Comfort {
   const [error, setError] = useState<string | null>(null);
   // Held only until refreshProfile brings the written value back, so the
   // Settings switch and the sheet respond on tap rather than after a round trip.
-  const [override, setOverride] = useState<{ comfort_mode?: boolean; comfort_until?: string | null } | null>(null);
+  const [override, setOverride] = useState<
+    { comfort_mode?: boolean; comfort_until?: string | null; comfort_pauses_reminders?: boolean } | null
+  >(null);
   // Stamped per write so a slow round trip can't clear an override that a
   // later tap has already replaced. Only ever touched inside write(), never
   // during render.
@@ -126,7 +133,7 @@ export function useComfort(): Comfort {
   }, [untilRaw, nowMs]);
 
   const write = useCallback(
-    async (patch: { comfort_mode?: boolean; comfort_until?: string | null }) => {
+    async (patch: { comfort_mode?: boolean; comfort_until?: string | null; comfort_pauses_reminders?: boolean }) => {
       if (!user) return;
       const seq = ++writeSeqRef.current;
       setError(null);
@@ -158,15 +165,26 @@ export function useComfort(): Comfort {
 
   const disarm = useCallback(() => write({ comfort_until: null }), [write]);
   const setStanding = useCallback((on: boolean) => write({ comfort_mode: on }), [write]);
+  const setPausesReminders = useCallback(
+    (on: boolean) => write({ comfort_pauses_reminders: on }),
+    [write],
+  );
+
+  // Defaults to true for a profile read before the column existed, matching the
+  // column's own default and the behaviour that shipped.
+  const pausesReminders =
+    override?.comfort_pauses_reminders ?? profile?.comfort_pauses_reminders ?? true;
 
   return {
     active: standing || endsAt !== null,
     standing,
-    reducesDemand: endsAt !== null,
+    reducesDemand: endsAt !== null && pausesReminders,
     endsAt,
     arm,
     disarm,
     setStanding,
+    pausesReminders,
+    setPausesReminders,
     error,
   };
 }
