@@ -139,11 +139,11 @@ export default function BodyAreaDetail({
 
       {changedCount === 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>What&rsquo;s changed</Text>
+          <Text style={styles.sectionLabel}>What’s changed</Text>
           <Text style={styles.emptyText}>Nothing standing out yet. This usually needs a few weeks of body check-ins.</Text>
         </View>
       ) : (
-        <CollapsibleRow label="What&rsquo;s changed" defaultOpen meta={`${changedCount}`}>
+        <CollapsibleRow label="What’s changed" defaultOpen meta={`${changedCount}`}>
           {lead && <FindingCard finding={lead} lead accent={BODY_COLOR} />}
           {rest.map(f => (
             <FindingCard key={`${f.patternSource ?? 'x'}-${f.id}`} finding={f} accent={BODY_COLOR} />

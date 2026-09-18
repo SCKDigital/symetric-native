@@ -1,5 +1,6 @@
-// Ported from the web app's src/lib/standoutRanking.ts, unchanged — pure
-// selection logic for the Insights "What stands out" summary.
+// Ported from the web app's src/lib/standoutRanking.ts — pure selection logic
+// for the Insights "What stands out" summary, plus the comparator behind it,
+// which the Mind and Body drill-downs now order their own lists with.
 
 import { Area, GRADE_ORDER, PatternFinding } from '@/lib/pattern-findings';
 

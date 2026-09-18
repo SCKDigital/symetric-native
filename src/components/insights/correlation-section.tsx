@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CollapsibleRow } from '@/components/insights/pattern-sections';
+import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { useAuth } from '@/contexts/auth-context';
 import {
   type ConnectionRow, type CorrelationGroup, type CorrelationPair,
@@ -76,22 +77,14 @@ function DomainChipInline({ factor }: { factor: string }) {
 }
 
 function PairCard({ pair }: { pair: CorrelationPair }) {
-  const { profile } = useAuth();
-  const sentence = pairSentence(pair);
-  const labelA = factorLabel(pair.a);
-  const labelB = factorLabel(pair.b);
-  // Same substring-colouring HighlightedSentence does, without routing a
-  // synthesised PatternFinding through it for two known labels.
-  const [before, rest] = sentence.split(labelA);
-  const [middle, after] = rest.split(labelB);
+  const highlights = [
+    { text: factorLabel(pair.a), factor: pair.a },
+    { text: factorLabel(pair.b), factor: pair.b },
+  ];
   return (
     <View style={[styles.pairCard, { opacity: CONFIDENCE_COPY[pair.grade].barFraction }]}>
       <Text style={styles.pairSentence}>
-        {before}
-        <Text style={{ color: getDomainColorFromProfile(pair.a, profile) }}>{labelA}</Text>
-        {middle}
-        <Text style={{ color: getDomainColorFromProfile(pair.b, profile) }}>{labelB}</Text>
-        {after}
+        <HighlightedSentence sentence={pairSentence(pair)} highlights={highlights} />
       </Text>
       <Text style={styles.evidence}>
         {pair.sampleSize} days compared · {CONFIDENCE_COPY[pair.grade].short}

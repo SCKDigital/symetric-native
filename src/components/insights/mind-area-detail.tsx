@@ -307,11 +307,11 @@ export default function MindAreaDetail({
 
       {changedCount === 0 ? (
         <View>
-          <Text style={styles.sectionLabel}>What&rsquo;s changed</Text>
+          <Text style={styles.sectionLabel}>What’s changed</Text>
           <Text style={styles.emptyText}>No standout patterns in this window yet.</Text>
         </View>
       ) : (
-        <CollapsibleRow label="What&rsquo;s changed" defaultOpen meta={`${changedCount}`}>
+        <CollapsibleRow label="What’s changed" defaultOpen meta={`${changedCount}`}>
           <Text style={styles.intro}>Deviations from your personal baseline that lasted several days or kept recurring.</Text>
           <View style={styles.list}>
             {/* Grouped, not flattened. domainGroups was already built here and

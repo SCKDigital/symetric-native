@@ -427,8 +427,10 @@ const styles = StyleSheet.create({
   collapsibleBody: { gap: 8, marginTop: 16 },
   collapsibleIntro: { fontSize: 12, color: '#4a5568', marginBottom: 4, lineHeight: 18 },
   collapsibleFooter: { fontSize: 12, color: '#4a5568', marginTop: 4, lineHeight: 18 },
-  subBlock: { gap: 8, marginTop: 4 },
-  subLabel: { fontSize: 12, fontWeight: '600', color: '#8892a4', letterSpacing: 0.3 },
+  // No gap: the rare-day cards carry their own marginBottom, and stacking the
+  // two puts a 16pt trench between every group.
+  subBlock: { marginTop: 4 },
+  subLabel: { fontSize: 12, fontWeight: '600', color: '#8892a4', letterSpacing: 0.3, marginBottom: 6 },
   chevronExpanded: { transform: [{ rotate: '180deg' }] },
   rareGroupHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   rareGroupHeading: { flex: 1 },
