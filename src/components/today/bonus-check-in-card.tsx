@@ -38,15 +38,28 @@ function formatTimeRemaining(ms: number): string {
 
 interface Props {
   activeDomains?: DomainType[];
+  /** Opens the sheet from outside — the Today "Check in now" card uses this so
+   *  a new user can log something immediately instead of waiting for their
+   *  first scheduled slot. Mirrors the web app's forceOpen on QuickMoodCard. */
+  forceOpen?: boolean;
+  onForceOpenHandled?: () => void;
   /** Only forwarded to the edit modal, which shows each domain's baseline. */
   baselines?: Record<DomainType, number>;
   onLogged?: () => void;
 }
 
-export default function BonusCheckInCard({ activeDomains, baselines, onLogged }: Props) {
+export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, onForceOpenHandled, onLogged }: Props) {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  // Opening from outside is just another reason the sheet is visible, so it is
+  // derived rather than copied into state by an effect. closeModal clears both
+  // sources, so dismissing can't be undone by a stale flag on the next render.
+  const sheetVisible = modalOpen || !!forceOpen;
+  const closeModal = () => {
+    closeModal();
+    onForceOpenHandled?.();
+  };
   const [values, setValues] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -182,7 +195,7 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
     await AsyncStorage.setItem(cooldownKey(user.id), String(until));
     setCooldownUntil(until);
     setTimeRemaining(COOLDOWN_MS);
-    setModalOpen(false);
+    closeModal();
     setValues(Object.fromEntries(domains.map(d => [d, restingValue(d)])));
     setNotes('');
     setSaved(true);
@@ -241,7 +254,7 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
         />
       )}
 
-      <Modal visible={modalOpen} animationType="slide" onRequestClose={() => setModalOpen(false)}>
+      <Modal visible={sheetVisible} animationType="slide" onRequestClose={closeModal}>
         <View style={styles.sheet}>
           <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.sheetLabel}>BONUS MIND CHECK-IN</Text>
@@ -275,7 +288,7 @@ export default function BonusCheckInCard({ activeDomains, baselines, onLogged }:
               style={({ pressed }) => [styles.submit, pressed && styles.pressed]}>
               <Text style={styles.submitText}>{saving ? 'Saving...' : 'Done'}</Text>
             </Pressable>
-            <Pressable onPress={() => setModalOpen(false)} disabled={saving}>
+            <Pressable onPress={closeModal} disabled={saving}>
               <Text style={styles.cancel}>Cancel</Text>
             </Pressable>
           </ScrollView>

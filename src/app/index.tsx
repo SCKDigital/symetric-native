@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import CheckInForm from '@/components/checkin/check-in-form';
 import EditCheckInModal from '@/components/checkin/edit-check-in-modal';
 import MarkerModal from '@/components/marker-modal';
-import MindSetup from '@/components/onboarding/mind-setup';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
 import { BodyCheckInCard, MorningBodyCheckInCard } from '@/components/today/body-check-in-cards';
@@ -13,11 +12,12 @@ import { ActiveCheckInCard, LateCheckInCard, PendingCheckInCard } from '@/compon
 import AppointmentReminderCard, { daysUntil } from '@/components/today/appointment-reminder-card';
 import BonusCheckInCard from '@/components/today/bonus-check-in-card';
 import { ComfortBanner, ComfortButton, ComfortSheet } from '@/components/today/comfort-controls';
+import SetupCards from '@/components/today/setup-cards';
 import { RescheduleListSheet, RescheduleTimePickerSheet } from '@/components/today/reschedule-sheets';
 import SleepCard from '@/components/today/sleep-card';
 import { useAuth } from '@/contexts/auth-context';
 import { useComfort } from '@/hooks/use-comfort';
-import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
+import { useSetupCards } from '@/hooks/use-setup-cards';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@/lib/edit-window';
 import { forcePatternDetection, runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
@@ -36,43 +36,10 @@ function formatDate(): string {
 }
 
 export default function TodayScreen() {
-  const styles = useComfort().active ? STYLES.comfort : STYLES.normal;
-  const { mindSetupComplete, markComplete } = useMindSetupStatus();
-  const [showMindSetup, setShowMindSetup] = useState(false);
-
-  if (mindSetupComplete === undefined) return <PulseLoadingScreen />;
-
-  if (showMindSetup) {
-    return (
-      <MindSetup
-        onSetupComplete={() => {
-          markComplete();
-          setShowMindSetup(false);
-        }}
-      />
-    );
-  }
-
-  if (!mindSetupComplete) {
-    return (
-      <SafeAreaView style={styles.root} edges={['top']}>
-        <View style={styles.staticPage}>
-          <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
-          <View style={styles.setupPrompt}>
-            <Text style={styles.setupHeading}>Set up Mind tracking</Text>
-            <Text style={styles.setupBody}>
-              Pick the domains you want to track, answer a few baseline questions, and choose when check-ins should
-              happen — takes about two minutes.
-            </Text>
-            <Pressable onPress={() => setShowMindSetup(true)} style={({ pressed }) => [styles.setupButton, pressed && styles.pressed]}>
-              <Text style={styles.setupButtonText}>Get started</Text>
-            </Pressable>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
+  // Onboarding stops after consent. There is no setup gate in front of this
+  // screen any more — MindSetup and its baseline questions are gone, and what
+  // they asked for is asked by cards on the screen itself, with the app
+  // visible behind them. See components/today/setup-cards.tsx.
   return <TodayHome />;
 }
 
@@ -97,6 +64,8 @@ function TodayHome() {
   const [showMarkerModal, setShowMarkerModal] = useState(false);
   const [markerError, setMarkerError] = useState<string | null>(null);
   const comfort = useComfort();
+  const setupCards = useSetupCards();
+  const [openBonus, setOpenBonus] = useState(false);
   const styles = comfort.active ? STYLES.comfort : STYLES.normal;
   const [showComfortSheet, setShowComfortSheet] = useState(false);
   const [showRescheduleList, setShowRescheduleList] = useState(false);
@@ -321,6 +290,8 @@ function TodayHome() {
         {header}
         <ComfortBanner comfort={comfort} timeFormat={timeFormat} onTurnOff={comfort.disarm} />
 
+        <SetupCards state={setupCards} onChanged={() => { setupCards.refresh(); refresh(); }} />
+
         {snoozedCheckIn && (
           <PendingCheckInCard
             checkIn={snoozedCheckIn}
@@ -412,9 +383,22 @@ function TodayHome() {
           <Text style={styles.windowClosed}>(Editing window closed)</Text>
         )}
 
+        {!setupCards.anyOutstanding && !setupCards.loading && completedCount === 0 && !activeCheckIn && (
+          <Pressable onPress={() => setOpenBonus(true)} style={({ pressed }) => [styles.checkInNow, pressed && styles.pressed]}>
+            <Text style={styles.checkInNowTitle}>Check in now</Text>
+            <Text style={styles.checkInNowBody}>Your first scheduled check-in may be hours away. You don&apos;t have to wait for it.</Text>
+          </Pressable>
+        )}
+
         {upcomingAppointment && <AppointmentReminderCard appointment={upcomingAppointment} />}
 
-        <BonusCheckInCard activeDomains={activeDomains} baselines={baselines} onLogged={refresh} />
+        <BonusCheckInCard
+          activeDomains={activeDomains}
+          baselines={baselines}
+          forceOpen={openBonus}
+          onForceOpenHandled={() => setOpenBonus(false)}
+          onLogged={refresh}
+        />
 
         {/* Body logging, in the web app's own order: the optional morning
             prompt, then the evening card. Both were only reachable from
@@ -511,10 +495,11 @@ function makeStyles(t: ComfortTokens) {
   editButtonMeta: { fontSize: t.fs(11), color: '#4a5568' },
   windowClosed: { fontSize: t.fs(12), color: '#4a5568', marginBottom: 16 },
 
-  setupPrompt: { flex: 1, justifyContent: 'center', gap: 16 },
-  setupHeading: { fontSize: t.fs(22), fontWeight: '600', color: '#e2e8f0' },
-  setupBody: { fontSize: t.fs(15), color: '#8892a4', lineHeight: 22 },
-  setupButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4f46e5', alignItems: 'center' },
-  setupButtonText: { fontSize: t.fs(15), fontWeight: '600', color: '#ffffff' },
+  checkInNow: {
+    backgroundColor: 'rgba(79,70,229,0.10)', borderWidth: 1, borderColor: 'rgba(79,70,229,0.28)',
+    borderRadius: 12, padding: 16, marginBottom: 16, gap: 6,
+  },
+  checkInNowTitle: { fontSize: t.fs(15), fontWeight: '600', color: '#a5b4fc' },
+  checkInNowBody: { fontSize: t.fs(13), color: '#8892a4', lineHeight: 19 },
   });
 }

@@ -66,7 +66,21 @@ export function BodyCheckInCard() {
     refreshLoggedState();
   }, [refreshLoggedState]);
 
-  if (!enabled || nowMinutes() < parseTimeToMinutes(availableFrom)) return null;
+  if (!enabled) return null;
+
+  // Before the evening window opens, say so rather than rendering nothing.
+  // An absent card is indistinguishable from a broken one, and "it opens at
+  // 17:00" is the answer to the question someone is actually asking when they
+  // look for it and it isn't there.
+  if (nowMinutes() < parseTimeToMinutes(availableFrom)) {
+    return (
+      <View style={[styles.card, styles.cardPending]}>
+        <Text style={styles.eyebrow}>BODY CHECK-IN</Text>
+        <Text style={styles.status}>Opens at {availableFrom}</Text>
+      </View>
+    );
+  }
+
 
   return (
     <>
@@ -153,6 +167,7 @@ function makeStyles(t: ComfortTokens) {
     paddingTop: 32, paddingHorizontal: 28, paddingBottom: 28, gap: 24,
   },
   cardDone: { opacity: 0.55 },
+  cardPending: { opacity: 0.45 },
   eyebrow: { fontSize: t.fs(12), color: '#818cf8', letterSpacing: 1.4, fontWeight: '700', marginBottom: 12 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   status: { fontSize: t.fs(22), color: '#e2e8f0', fontWeight: '600', letterSpacing: -0.4 },

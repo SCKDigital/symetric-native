@@ -128,6 +128,10 @@ export interface Profile {
   mind_consent_recorded_at?: string | null;
   body_consent_recorded_at?: string | null; // set only when body_tracking_enabled was turned on at onboarding
   cycle_consent_recorded_at?: string | null; // set only when cycle_tracking_enabled was turned on at onboarding
+  /** When the user dismissed the optional "when did your last period start"
+   *  card. The card also hides once a cycle_phase marker exists, so this only
+   *  records the no-thanks case. */
+  cycle_day_one_prompt_ack_at?: string | null;
   consent_ip_address?: string | null; // server-observed, stamped by the record-consent edge function
   consent_user_agent?: string | null;
   app_lock_enabled: boolean; // opt-in, off by default — requires PIN before showing the app
@@ -171,6 +175,13 @@ export interface CheckInSettings {
   dnd_enabled: boolean;
   dnd_start_time: string | null; // HH:MM:SS format
   dnd_end_time: string | null;
+  /** When the user confirmed their window and frequency on the Today setup
+   *  card. Null means that card is still showing. Every other column here has
+   *  a NOT NULL default, so the row existing proves nothing about intent. */
+  setup_times_confirmed_at: string | null;
+  /** When the user answered the reminders card, enabled or declined. Distinct
+   *  from profiles.push_enabled, which only records success. */
+  setup_notifications_ack_at: string | null;
   created_at: string;
   updated_at: string;
 }
