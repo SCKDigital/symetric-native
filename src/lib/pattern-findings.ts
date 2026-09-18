@@ -312,13 +312,19 @@ export function sleepConnectionFindings(conns: SleepSymptomConnection[]): Patter
         id: c.id,
         patternSource: 'sleep_connection' as PatternSource,
         patternId: c.id,
-        areas: ['sleep', 'mind'] as Area[],
+        // sleep-connections.ts covers body domains as well as mind ones, so
+        // the second area is whichever this row is about. Hardcoding 'mind'
+        // filed every body row — fatigue after a bad night, pain after a bad
+        // night — under the Mind drill-down.
+        areas: ['sleep', c.domain in BODY_DOMAINS ? 'body' : 'mind'] as Area[],
         grade,
         onsetDate: c.window_end,
         effectSize: c.difference,
         sentence: `Your ${label} tends to be ${direction} after good sleep.`,
         sentenceHighlights: [{ text: label, factor: c.domain }, { text: 'sleep', factor: 'sleep' }],
-        evidenceLine: `${c.sample_size} check-in${c.sample_size !== 1 ? 's' : ''} with sleep data`,
+        // Days, not check-ins: evaluateDomain keys its scores by date, so a
+        // day with three check-ins counts once on both halves of the detector.
+        evidenceLine: `${c.sample_size} day${c.sample_size !== 1 ? 's' : ''} with sleep data`,
       };
     });
 }

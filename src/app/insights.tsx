@@ -564,7 +564,15 @@ export default function InsightsScreen() {
         latestConnections.push(row);
       }
     }
-    setBodyMindConnectionRows(latestConnections.filter(r => isBodyDomain(r.domain_a) || isBodyDomain(r.domain_b)));
+    // Sleep rows are dropped outright: body-mind-connections.ts used to
+    // correlate sleep against every body domain, duplicating what
+    // sleep-connections.ts already answers with its good-night/bad-night
+    // comparison. The detector no longer writes them, but persisted rows stay
+    // readable while their window overlaps the range, so they are filtered on
+    // the way in too. 20260918000004 removes the rows themselves.
+    setBodyMindConnectionRows(latestConnections.filter(r =>
+      r.domain_a !== 'sleep' && r.domain_b !== 'sleep'
+      && (isBodyDomain(r.domain_a) || isBodyDomain(r.domain_b))));
 
     // Written by the weekly sleep detector — a separate table from
     // domain_connections, with its own good/poor-sleep grouping rather than a

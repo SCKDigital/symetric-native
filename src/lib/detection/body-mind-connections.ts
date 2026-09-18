@@ -115,11 +115,25 @@ export async function detectBodyMindConnections(userId: string): Promise<void> {
   });
 
   // Only pairs where at least one side is a body domain — mind×mind is
-  // already covered by the (not yet ported) domainConnections.ts's raw-
-  // check-in method, and duplicating it at daily grain here would produce a
-  // second, differently-computed number for the same pair.
+  // already covered by domainConnections.ts's raw-check-in method, and
+  // duplicating it at daily grain here would produce a second, differently-
+  // computed number for the same pair.
+  //
+  // Sleep is excluded for exactly that reason, having been included for
+  // exactly as long as this detector has existed. sleep-connections.ts covers
+  // sleep against mind AND body domains, as a good-night/bad-night mean
+  // difference — deliberately not a correlation, because the question ("is
+  // this worse after a bad night") is binary. Correlating it here as well
+  // wrote a second answer for the same pair, by a second method, into a second
+  // table, and Insights could show both: "Joint & muscle pain and Sleep move
+  // in opposite directions" beside "Joint & muscle pain tends to be lower
+  // after good sleep". Two cards, one relationship, and nothing on the screen
+  // to say which to believe.
+  //
+  // Both detectors run in the same weekly pass — see
+  // pattern-detection-scheduler.ts — so nothing is lost by dropping it here.
   const bodySideFactors: string[] = bodyDomains;
-  const otherFactors: string[] = [...mindDomains, 'sleep', ...bodyDomains];
+  const otherFactors: string[] = [...mindDomains, ...bodyDomains];
 
   // Collect every qualifying pair first, then upsert them all in one batched
   // call instead of one round-trip per pair.
