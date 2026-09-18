@@ -5,6 +5,8 @@ import Svg, { Path } from 'react-native-svg';
 import DomainSlider from '@/components/checkin/domain-slider';
 import { useAuth } from '@/contexts/auth-context';
 import { trackCheckInCompleted } from '@/lib/analytics';
+import { useComfort } from '@/hooks/use-comfort';
+import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
 import { getDomainColorFromProfile, DOMAIN_COPY } from '@/lib/domains';
 import { CheckIn, DomainType, supabase } from '@/lib/supabase';
 
@@ -43,6 +45,8 @@ export default function CheckInForm({
   quickCheckInMode = false,
 }: CheckInFormProps) {
   const { user, profile } = useAuth();
+  const { active: comfortActive } = useComfort();
+  const styles = comfortActive ? STYLES.comfort : STYLES.normal;
   // Sliders live inside this ScrollView. A horizontal drag that starts with
   // any vertical component gets claimed by the scroll, which is what made the
   // sliders feel sticky — worst on the last domain, where there is the most
@@ -107,7 +111,7 @@ export default function CheckInForm({
       <View style={styles.confirmationRoot}>
         <View style={styles.confirmationIcon}>
           <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
-            <Path d="M3 8l3.5 3.5L13 5" stroke="#818cf8" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            <Path d="M3 8l3.5 3.5L13 5" stroke={comfortActive ? COMFORT_TOKENS.accentText : '#818cf8'} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
           </Svg>
         </View>
         <Text style={styles.confirmationLogged}>Logged</Text>
@@ -169,9 +173,12 @@ export default function CheckInForm({
   );
 }
 
-const styles = StyleSheet.create({
+const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+
+function makeStyles(t: ComfortTokens) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
-  saveError: { fontSize: 13, color: '#f87171', marginBottom: 12, lineHeight: 19 },
+  saveError: { fontSize: t.fs(13), color: '#f87171', marginBottom: 12, lineHeight: 19 },
   content: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 96 },
   card: {
     backgroundColor: '#1e2840',
@@ -182,17 +189,17 @@ const styles = StyleSheet.create({
     paddingTop: 28,
     marginBottom: 16,
   },
-  cardHeader: { fontSize: 13, color: '#818cf8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 24 },
+  cardHeader: { fontSize: t.fs(13), color: t.accentText, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 24 },
   slidersGroup: { gap: 28 },
   notesCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
-  notesLabel: { fontSize: 13, color: '#718096', marginBottom: 10 },
-  notesInput: { color: '#e2e8f0', fontSize: 13, minHeight: 60, textAlignVertical: 'top', padding: 0 },
+  notesLabel: { fontSize: t.fs(13), color: '#718096', marginBottom: 10 },
+  notesInput: { color: '#e2e8f0', fontSize: t.fs(13), minHeight: 60, textAlignVertical: 'top', padding: 0 },
   notesFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 },
-  notesCount: { fontSize: 11, color: '#4a5568' },
+  notesCount: { fontSize: t.fs(11), color: '#4a5568' },
   notesCountWarn: { color: '#f6ad55' },
-  submitButton: { padding: 14, borderRadius: 12, backgroundColor: '#4f46e5', alignItems: 'center' },
+  submitButton: { padding: 14, borderRadius: 12, backgroundColor: t.accent, alignItems: 'center' },
   submitButtonDisabled: { backgroundColor: '#1e2533' },
-  submitButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
+  submitButtonText: { color: '#ffffff', fontSize: t.fs(15), fontWeight: '600' },
   pressed: { opacity: 0.85 },
   confirmationRoot: { flex: 1, backgroundColor: '#0a0c12', alignItems: 'center', justifyContent: 'center' },
   confirmationIcon: {
@@ -206,6 +213,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 16,
   },
-  confirmationLogged: { fontSize: 15, color: '#a0aec0', marginBottom: 6 },
-  confirmationCount: { fontSize: 13, color: '#718096' },
-});
+  confirmationLogged: { fontSize: t.fs(15), color: '#a0aec0', marginBottom: 6 },
+  confirmationCount: { fontSize: t.fs(13), color: '#718096' },
+  });
+}

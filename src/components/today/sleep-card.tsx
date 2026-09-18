@@ -7,6 +7,8 @@ import { useEditWindowCountdown } from '@/hooks/use-edit-window-countdown';
 import { trackSleepLogged } from '@/lib/analytics';
 import { SLEEP_COPY as copy, SLEEP_OPTIONS, sleepScoreToMeta } from '@/lib/sleep';
 import { SleepLog, supabase } from '@/lib/supabase';
+import { useComfort } from '@/hooks/use-comfort';
+import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
 
 // Port of the web app's SleepCard.tsx — the Today-screen sleep row, in its
 // three states: a CTA when nothing is logged, the expanded question when
@@ -21,6 +23,7 @@ interface Props {
 }
 
 export default function SleepCard({ onLogged }: Props) {
+  const styles = useComfort().active ? STYLES.comfort : STYLES.normal;
   const { user } = useAuth();
   const [sleepLog, setSleepLog] = useState<SleepLog | null | undefined>(undefined);
   const [expanded, setExpanded] = useState(false);
@@ -209,7 +212,10 @@ export default function SleepCard({ onLogged }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+
+function makeStyles(t: ComfortTokens) {
+  return StyleSheet.create({
   block: { marginBottom: 12 },
   pressed: { opacity: 0.7 },
 
@@ -219,48 +225,49 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', opacity: 0.7,
   },
   loggedText: { flex: 1 },
-  loggedLabel: { fontSize: 11, color: '#8892a4', letterSpacing: 0.9, marginBottom: 3 },
+  loggedLabel: { fontSize: t.fs(11), color: '#8892a4', letterSpacing: 0.9, marginBottom: 3 },
   loggedValueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  loggedValue: { fontSize: 15, color: '#9aabb8' },
-  loggedHours: { fontSize: 15, color: '#6b7688' },
+  loggedValue: { fontSize: t.fs(15), color: '#9aabb8' },
+  loggedHours: { fontSize: t.fs(15), color: '#6b7688' },
   dots: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotOn: { backgroundColor: '#818cf8' },
   dotOff: { backgroundColor: '#2d3748' },
-  tick: { fontSize: 14, color: '#2d3748' },
+  tick: { fontSize: t.fs(14), color: '#2d3748' },
 
   editButton: {
     marginTop: 8, backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1,
     borderColor: 'rgba(99,102,241,0.15)', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editButtonText: { fontSize: 13, color: '#818cf8' },
-  editButtonMeta: { fontSize: 11, color: '#4a5568' },
+  editButtonText: { fontSize: t.fs(13), color: '#818cf8' },
+  editButtonMeta: { fontSize: t.fs(11), color: '#4a5568' },
 
   expanded: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#263045', borderRadius: 16,
     padding: 18, marginBottom: 12,
   },
-  question: { fontSize: 15, fontWeight: '600', color: '#e2e8f0', marginBottom: 14 },
-  hoursLabel: { fontSize: 12, color: '#8892a4', marginBottom: 6 },
+  question: { fontSize: t.fs(15), fontWeight: '600', color: '#e2e8f0', marginBottom: 14 },
+  hoursLabel: { fontSize: t.fs(12), color: '#8892a4', marginBottom: 6 },
   hoursInput: {
     backgroundColor: '#1e2533', borderWidth: 1, borderColor: '#2d3748', borderRadius: 10,
-    paddingVertical: 12, paddingHorizontal: 16, fontSize: 14, color: '#cbd5e0', marginBottom: 14,
+    paddingVertical: 12, paddingHorizontal: 16, fontSize: t.fs(14), color: '#cbd5e0', marginBottom: 14,
   },
   options: { gap: 6, marginBottom: 12 },
   option: {
     backgroundColor: '#1e2533', borderWidth: 1, borderColor: '#2d3748', borderRadius: 10,
     paddingVertical: 12, paddingHorizontal: 16,
   },
-  optionText: { fontSize: 14, color: '#cbd5e0' },
+  optionText: { fontSize: t.fs(14), color: '#cbd5e0' },
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  footerLink: { fontSize: 13, color: '#64748b', paddingVertical: 4 },
+  footerLink: { fontSize: t.fs(13), color: '#64748b', paddingVertical: 4 },
 
   ctaCard: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#263045', borderRadius: 16,
     paddingVertical: 14, paddingHorizontal: 18, marginBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  ctaLabel: { fontSize: 11, color: '#6366f1', letterSpacing: 0.9, fontWeight: '700', marginBottom: 3 },
-  ctaText: { fontSize: 15, color: '#cbd5e0', fontWeight: '500' },
-});
+  ctaLabel: { fontSize: t.fs(11), color: '#6366f1', letterSpacing: 0.9, fontWeight: '700', marginBottom: 3 },
+  ctaText: { fontSize: t.fs(15), color: '#cbd5e0', fontWeight: '500' },
+  });
+}

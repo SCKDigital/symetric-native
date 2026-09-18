@@ -9,6 +9,7 @@ import { DeleteAllSheet, DeleteRangeSheet, ExportSheet, ResetBaselineSheet } fro
 import {
   BellIcon, BellSlashIcon, BodyIcon, BrainIcon, CalendarIcon, ClockIcon, ClockSimpleIcon,
   CycleIcon, DownloadIcon, LockIcon, PaletteIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
+  EyeIcon,
 } from '@/components/settings/settings-icons';
 import {
   ChevronRight, InlineMessage, RowValue, SectionCard, SectionLabel, SettingsRow, RowDivider,
@@ -23,6 +24,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
 import { generateSalt, hashPin } from '@/lib/app-lock';
 import { BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { useComfort } from '@/hooks/use-comfort';
 import { resolveActiveDomains } from '@/lib/domains';
 import { subscribeToPushNotifications, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
 import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
@@ -95,6 +97,7 @@ function BodyDomainPills({ activeDomains, onToggle }: { activeDomains: BodyDomai
 }
 
 export default function SettingsScreen() {
+  const comfort = useComfort();
   const { user, profile, signOut, refreshProfile } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -494,13 +497,27 @@ export default function SettingsScreen() {
         {/* ── Preferences ─────────────────────────────────────────────────── */}
         <SectionLabel>Preferences</SectionLabel>
         <SectionCard>
-          {/* Comfort mode is deliberately absent here. On the web app it adds
-              a `zoom: 1.12` CSS class and kills animations; React Native has
-              no zoom, so scaling text app-wide needs a font-scale system
-              threaded through every StyleSheet. Until that exists the toggle
-              wrote a profile field that nothing read, which is worse than not
-              offering it. profiles.comfort_mode is untouched, so a user who
-              set it on the web keeps their setting. */}
+          {/* The STANDING half of comfort mode. The in-the-moment half lives on
+              Today, because being overstimulated is episodic — it is not a
+              preference someone sets once, while calm, in anticipation of a bad
+              hour they have not had yet. Both read profiles.comfort_mode /
+              comfort_until through useComfort().
+
+              This row deliberately does NOT mute reminder push; only an armed
+              window from Today does. checkSustainedDeviationQuality rejects any
+              window below 40% coverage or 1.5 check-ins/day, so a permanent
+              mute would quietly starve detection until it stopped finding
+              anything. See 20260918000001_comfort_mode_state.sql. */}
+          <SettingsRow
+            icon={<EyeIcon />}
+            label="Comfort mode"
+            subtitle="Quieter colours, larger check-in text, no countdown"
+            right={<Toggle
+              value={comfort.standing}
+              onValueChange={() => comfort.setStanding(!comfort.standing)}
+            />}
+          />
+          <RowDivider />
           <SettingsRow
             icon={<PaletteIcon />}
             label="Simplified colours"

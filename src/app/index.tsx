@@ -12,26 +12,31 @@ import { BodyCheckInCard, MorningBodyCheckInCard } from '@/components/today/body
 import { ActiveCheckInCard, LateCheckInCard, PendingCheckInCard } from '@/components/today/check-in-cards';
 import AppointmentReminderCard, { daysUntil } from '@/components/today/appointment-reminder-card';
 import BonusCheckInCard from '@/components/today/bonus-check-in-card';
+import { ComfortBanner, ComfortButton, ComfortSheet } from '@/components/today/comfort-controls';
 import { RescheduleListSheet, RescheduleTimePickerSheet } from '@/components/today/reschedule-sheets';
 import SleepCard from '@/components/today/sleep-card';
 import { useAuth } from '@/contexts/auth-context';
+import { useComfort } from '@/hooks/use-comfort';
 import { useMindSetupStatus } from '@/hooks/use-mind-setup-status';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@/lib/edit-window';
 import { forcePatternDetection, runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
 import { fetchUpcomingAppointment } from '@/lib/api/appointments';
+import { trackCheckInCompleted } from '@/lib/analytics';
 import { createMarker } from '@/lib/queries/markers';
 import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 import { formatWindowTime } from '@/components/settings/settings-sheets';
 import { timeOfDayInTZ } from '@/lib/scheduler';
 import { formatTime } from '@/lib/time-format';
 import { supabase, type Appointment, type CheckIn } from '@/lib/supabase';
+import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
 
 function formatDate(): string {
   return new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
 }
 
 export default function TodayScreen() {
+  const styles = useComfort().active ? STYLES.comfort : STYLES.normal;
   const { mindSetupComplete, markComplete } = useMindSetupStatus();
   const [showMindSetup, setShowMindSetup] = useState(false);
 
@@ -91,6 +96,9 @@ function TodayHome() {
   const [editingCheckIn, setEditingCheckIn] = useState<CheckIn | null>(null);
   const [showMarkerModal, setShowMarkerModal] = useState(false);
   const [markerError, setMarkerError] = useState<string | null>(null);
+  const comfort = useComfort();
+  const styles = comfort.active ? STYLES.comfort : STYLES.normal;
+  const [showComfortSheet, setShowComfortSheet] = useState(false);
   const [showRescheduleList, setShowRescheduleList] = useState(false);
   const [reschedulingCheckIn, setReschedulingCheckIn] = useState<CheckIn | null>(null);
   const [startedCheckIn, setStartedCheckIn] = useState<CheckIn | null>(null);
@@ -220,6 +228,51 @@ function TodayHome() {
     refresh();
   };
 
+  const header = (
+    <AppLogoHeader
+      trailing={
+        <View style={styles.headerTrailing}>
+          <Text style={styles.date}>{formatDate()}</Text>
+          <ComfortButton active={comfort.active} onPress={() => setShowComfortSheet(true)} />
+        </View>
+      }
+    />
+  );
+
+  /**
+   * The one-tap check-in, offered only inside an armed comfort window.
+   *
+   * It submits exactly what the form would have submitted if the user had
+   * opened it and touched nothing: every slider already rests at that domain's
+   * own baseline rather than a flat 5, so this records "typical for me" — a
+   * real answer, not a skip. That is why the copy is "Nothing unusual today"
+   * and never "Skip": it is an affirmative claim about the day, which is the
+   * only thing standing between this button and a masked flare.
+   *
+   * low_demand marks it so detection can cap its confidence at partial. The
+   * row still counts toward coverage, because it genuinely is a data point.
+   */
+  const logAsUsual = async (target: CheckIn) => {
+    if (!user) return;
+    const values = activeDomains.reduce<Record<string, number>>(
+      (acc, domain) => ({ ...acc, [domain]: Math.round(baselines[domain] ?? 5) }),
+      {},
+    );
+    const { error } = await supabase.from('check_ins').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      low_demand: true,
+      ...values,
+    }).eq('id', target.id);
+    if (error) {
+      console.error('[Today] one-tap check-in failed:', error);
+      return;
+    }
+    trackCheckInCompleted(activeDomains.length);
+    refresh();
+    if (user) forcePatternDetection(user.id).catch(e => console.error('[Today] force detection:', e));
+  };
+
   // A check-in that is due, or one from earlier still inside its rescue
   // window, takes the whole screen — the same "one thing to do" treatment the
   // web app gives it, rather than being buried in the dashboard.
@@ -227,16 +280,19 @@ function TodayHome() {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
         <View style={styles.staticPage}>
-          <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
+          {header}
+          <ComfortBanner comfort={comfort} timeFormat={timeFormat} onTurnOff={comfort.disarm} />
           <View style={styles.heroWrap}>
             <ActiveCheckInCard
               checkIn={activeCheckIn}
               nowMs={nowMs}
               onStart={() => setStartedCheckIn(activeCheckIn)}
               onSnooze={() => { setSnoozedId(activeCheckIn.id); setSnoozedUntil(Date.now() + 5 * 60_000); }}
+              onLogAsUsual={() => logAsUsual(activeCheckIn)}
             />
           </View>
         </View>
+        {showComfortSheet && <ComfortSheet comfort={comfort} onClose={() => setShowComfortSheet(false)} />}
       </SafeAreaView>
     );
   }
@@ -245,11 +301,16 @@ function TodayHome() {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
         <View style={styles.staticPage}>
-          <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
+          {header}
+          <ComfortBanner comfort={comfort} timeFormat={timeFormat} onTurnOff={comfort.disarm} />
           <View style={styles.heroWrap}>
-            <LateCheckInCard onStart={() => setStartedCheckIn(rescuableCheckIn)} />
+            <LateCheckInCard
+              onStart={() => setStartedCheckIn(rescuableCheckIn)}
+              onLogAsUsual={() => logAsUsual(rescuableCheckIn)}
+            />
           </View>
         </View>
+        {showComfortSheet && <ComfortSheet comfort={comfort} onClose={() => setShowComfortSheet(false)} />}
       </SafeAreaView>
     );
   }
@@ -257,7 +318,8 @@ function TodayHome() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-        <AppLogoHeader trailing={<Text style={styles.date}>{formatDate()}</Text>} />
+        {header}
+        <ComfortBanner comfort={comfort} timeFormat={timeFormat} onTurnOff={comfort.disarm} />
 
         {snoozedCheckIn && (
           <PendingCheckInCard
@@ -408,45 +470,51 @@ function TodayHome() {
           onSaved={() => { setEditingCheckIn(null); refresh(); }}
         />
       )}
+      {showComfortSheet && <ComfortSheet comfort={comfort} onClose={() => setShowComfortSheet(false)} />}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+
+function makeStyles(t: ComfortTokens) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   page: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 60 },
   staticPage: { flex: 1, paddingHorizontal: 24, paddingTop: 20 },
   heroWrap: { flex: 1, justifyContent: 'center', paddingBottom: 40 },
   pressed: { opacity: 0.7 },
-  date: { fontSize: 12, color: '#8892a4', letterSpacing: 0.5 },
+  date: { fontSize: t.fs(12), color: '#8892a4', letterSpacing: 0.5 },
+  headerTrailing: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   addEvent: {
     borderWidth: 1, borderColor: 'rgba(165,180,252,0.25)', borderRadius: 8,
     paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center', marginBottom: 20,
   },
-  addEventText: { fontSize: 13, fontWeight: '500', color: '#a5b4fc' },
-  error: { fontSize: 13, color: '#f87171', marginBottom: 12 },
+  addEventText: { fontSize: t.fs(13), fontWeight: '500', color: '#a5b4fc' },
+  error: { fontSize: t.fs(13), color: '#f87171', marginBottom: 12 },
 
   statusBlock: { paddingTop: 12, marginBottom: 24 },
-  nextLabel: { fontSize: 13, color: '#b0b8c8', letterSpacing: 1, marginBottom: 6 },
-  nextTime: { fontSize: 32, fontWeight: '700', color: '#dde4f0', letterSpacing: -1 },
-  nextThen: { fontSize: 14, color: '#8892a4', marginTop: 4 },
-  reschedule: { fontSize: 13, color: '#4a5568', paddingTop: 10 },
-  statusHeading: { fontSize: 20, fontWeight: '600', color: '#c8d0e0', marginBottom: 6 },
-  statusBody: { fontSize: 15, color: '#b0b8c8', lineHeight: 22 },
+  nextLabel: { fontSize: t.fs(13), color: '#b0b8c8', letterSpacing: 1, marginBottom: 6 },
+  nextTime: { fontSize: t.fs(32), fontWeight: '700', color: '#dde4f0', letterSpacing: -1 },
+  nextThen: { fontSize: t.fs(14), color: '#8892a4', marginTop: 4 },
+  reschedule: { fontSize: t.fs(13), color: '#4a5568', paddingTop: 10 },
+  statusHeading: { fontSize: t.fs(20), fontWeight: '600', color: '#c8d0e0', marginBottom: 6 },
+  statusBody: { fontSize: t.fs(15), color: '#b0b8c8', lineHeight: 22 },
 
   editButton: {
     backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.15)',
     borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editButtonText: { fontSize: 13, color: '#818cf8' },
-  editButtonMeta: { fontSize: 11, color: '#4a5568' },
-  windowClosed: { fontSize: 12, color: '#4a5568', marginBottom: 16 },
+  editButtonText: { fontSize: t.fs(13), color: '#818cf8' },
+  editButtonMeta: { fontSize: t.fs(11), color: '#4a5568' },
+  windowClosed: { fontSize: t.fs(12), color: '#4a5568', marginBottom: 16 },
 
   setupPrompt: { flex: 1, justifyContent: 'center', gap: 16 },
-  setupHeading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0' },
-  setupBody: { fontSize: 15, color: '#8892a4', lineHeight: 22 },
+  setupHeading: { fontSize: t.fs(22), fontWeight: '600', color: '#e2e8f0' },
+  setupBody: { fontSize: t.fs(15), color: '#8892a4', lineHeight: 22 },
   setupButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4f46e5', alignItems: 'center' },
-  setupButtonText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
-});
+  setupButtonText: { fontSize: t.fs(15), fontWeight: '600', color: '#ffffff' },
+  });
+}

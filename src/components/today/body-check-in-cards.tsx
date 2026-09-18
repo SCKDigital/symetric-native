@@ -6,6 +6,8 @@ import BodyCheckIn from '@/components/body/body-check-in';
 import MorningBodyCheckIn from '@/components/body/morning-body-check-in';
 import { useAuth } from '@/contexts/auth-context';
 import { supabase } from '@/lib/supabase';
+import { useComfort } from '@/hooks/use-comfort';
+import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
 
 // Ports of the web app's BodyCheckInCard.tsx and MorningBodyCheckInCard.tsx —
 // the Today entry points into the body check-in forms. Native already had both
@@ -41,6 +43,7 @@ function TickIcon() {
 }
 
 export function BodyCheckInCard() {
+  const styles = useComfort().active ? STYLES.comfort : STYLES.normal;
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [loggedToday, setLoggedToday] = useState(false);
@@ -88,6 +91,7 @@ export function BodyCheckInCard() {
 }
 
 export function MorningBodyCheckInCard() {
+  const styles = useComfort().active ? STYLES.comfort : STYLES.normal;
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [loggedToday, setLoggedToday] = useState(false);
@@ -137,7 +141,10 @@ export function MorningBodyCheckInCard() {
   );
 }
 
-const styles = StyleSheet.create({
+const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+
+function makeStyles(t: ComfortTokens) {
+  return StyleSheet.create({
   pressed: { opacity: 0.85 },
 
   card: {
@@ -146,12 +153,12 @@ const styles = StyleSheet.create({
     paddingTop: 32, paddingHorizontal: 28, paddingBottom: 28, gap: 24,
   },
   cardDone: { opacity: 0.55 },
-  eyebrow: { fontSize: 12, color: '#818cf8', letterSpacing: 1.4, fontWeight: '700', marginBottom: 12 },
+  eyebrow: { fontSize: t.fs(12), color: '#818cf8', letterSpacing: 1.4, fontWeight: '700', marginBottom: 12 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  status: { fontSize: 22, color: '#e2e8f0', fontWeight: '600', letterSpacing: -0.4 },
+  status: { fontSize: t.fs(22), color: '#e2e8f0', fontWeight: '600', letterSpacing: -0.4 },
   cta: { paddingVertical: 18, borderRadius: 14, backgroundColor: '#4f46e5', alignItems: 'center' },
   ctaSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#3730a3' },
-  ctaText: { fontSize: 17, fontWeight: '700', color: '#ffffff' },
+  ctaText: { fontSize: t.fs(17), fontWeight: '700', color: '#ffffff' },
   ctaTextSecondary: { color: '#a5b4fc' },
 
   morningCard: {
@@ -159,13 +166,14 @@ const styles = StyleSheet.create({
     padding: 16, marginBottom: 12, gap: 12,
   },
   morningText: { gap: 3 },
-  morningLabel: { fontSize: 15, fontWeight: '500', color: '#e2e8f0' },
-  morningSub: { fontSize: 12, color: '#8892a4', lineHeight: 17 },
+  morningLabel: { fontSize: t.fs(15), fontWeight: '500', color: '#e2e8f0' },
+  morningSub: { fontSize: t.fs(12), color: '#8892a4', lineHeight: 17 },
   morningActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   morningButton: {
     paddingVertical: 9, paddingHorizontal: 18, borderRadius: 10,
     backgroundColor: 'rgba(99,102,241,0.15)',
   },
-  morningButtonText: { fontSize: 13, fontWeight: '600', color: '#a5b4fc' },
-  morningDismiss: { fontSize: 13, color: '#64748b' },
-});
+  morningButtonText: { fontSize: t.fs(13), fontWeight: '600', color: '#a5b4fc' },
+  morningDismiss: { fontSize: t.fs(13), color: '#64748b' },
+  });
+}

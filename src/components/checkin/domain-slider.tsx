@@ -2,6 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { useComfort } from '@/hooks/use-comfort';
+import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
 import { SLIDER_LABELS } from '@/lib/domains';
 import { DomainType } from '@/lib/supabase';
 
@@ -54,6 +56,8 @@ export default function DomainSlider({
   onSlidingStart,
   onSlidingComplete,
 }: DomainSliderProps) {
+  const { active } = useComfort();
+  const styles = active ? STYLES.comfort : STYLES.normal;
   const fillPercent = ((value - 1) / 9) * 100;
 
   const builtIn = SLIDER_LABELS[domain as DomainType];
@@ -78,7 +82,7 @@ export default function DomainSlider({
         <View style={styles.trackBg} pointerEvents="none">
           {touched ? (
             <LinearGradient
-              colors={['#4f46e5', '#818cf8']}
+              colors={active ? [COMFORT_TOKENS.accent, COMFORT_TOKENS.accentText] : ['#4f46e5', '#818cf8']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={[styles.trackFill, { width: `${fillPercent}%` }]}
@@ -102,7 +106,7 @@ export default function DomainSlider({
           tapToSeek
           minimumTrackTintColor="transparent"
           maximumTrackTintColor="transparent"
-          thumbTintColor="#818cf8"
+          thumbTintColor={active ? COMFORT_TOKENS.accentText : '#818cf8'}
         />
       </View>
 
@@ -125,17 +129,24 @@ export default function DomainSlider({
 
 const TRACK_HEIGHT = 4;
 
-const styles = StyleSheet.create({
+const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+
+// The anchor copy is the tightest box in the daily-use flow — fontSize 10 in a
+// 45%-wide column. Comfort mode scales it like everything else, so the width
+// cap lifts to 48% and the line height is derived rather than fixed, letting a
+// scaled anchor wrap to a second line instead of clipping.
+function makeStyles(t: ComfortTokens) {
+  return StyleSheet.create({
   root: {},
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   headerLabels: { flex: 1 },
   // No textTransform: the labels are authored with their own capitalisation
   // ('End of day exhaustion', 'Joint & muscle pain'), and 'capitalize' turned
   // those into 'End Of Day Exhaustion'.
-  label: { fontSize: 14, color: '#cbd5e0', fontWeight: '400' },
-  hint: { fontSize: 12, color: '#6b7690', marginTop: 2, lineHeight: 17 },
-  value: { fontSize: 13, color: '#6366f1', fontFamily: 'DM Mono', fontWeight: '500' },
-  valueUntouched: { fontSize: 11.5, color: '#6b7690', fontStyle: 'italic' },
+  label: { fontSize: t.fs(14), color: '#cbd5e0', fontWeight: '400' },
+  hint: { fontSize: t.fs(12), color: '#6b7690', marginTop: 2, lineHeight: t.fs(17) },
+  value: { fontSize: t.fs(13), color: '#6366f1', fontFamily: 'DM Mono', fontWeight: '500' },
+  valueUntouched: { fontSize: t.fs(11.5), color: '#6b7690', fontStyle: 'italic' },
   trackWrap: { justifyContent: 'center', paddingVertical: 8, height: 40 },
   trackBg: { position: 'absolute', left: 0, right: 0, height: TRACK_HEIGHT, borderRadius: 2, backgroundColor: '#2d3748', overflow: 'hidden' },
   trackFill: { height: '100%', borderRadius: 2 },
@@ -148,9 +159,10 @@ const styles = StyleSheet.create({
   // component gets claimed by the scroll and the slider feels sticky.
   slider: { width: '100%', height: 40 },
   rangeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  rangeText: { fontSize: 11, color: '#4a5568', fontFamily: 'DM Mono' },
+  rangeText: { fontSize: t.fs(11), color: '#4a5568', fontFamily: 'DM Mono' },
   anchorRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
-  anchorText: { fontSize: 10, color: '#4a5568', opacity: 0.7, maxWidth: '45%', lineHeight: 13 },
+  anchorText: { fontSize: t.fs(10), color: '#4a5568', opacity: 0.7, maxWidth: t.scale > 1 ? '48%' : '45%', lineHeight: t.fs(13) },
   anchorTextRight: { textAlign: 'right' },
-  note: { fontSize: 11.5, color: '#8892a4', marginTop: 8, fontStyle: 'italic' },
-});
+  note: { fontSize: t.fs(11.5), color: '#8892a4', marginTop: 8, fontStyle: 'italic' },
+  });
+}

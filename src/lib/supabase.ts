@@ -99,7 +99,14 @@ export interface Profile {
   onboarding_complete: boolean;
   push_enabled: boolean;
   simplified_colors: boolean;
+  /** Always-on comfort mode. Quiet colours, larger check-in type, no expiry
+   *  countdown. Deliberately does NOT mute push — see comfort_until. */
   comfort_mode: boolean;
+  /** Comfort mode armed until this moment; null or past means not armed.
+   *  Adds push muting and the one-tap check-in on top of what comfort_mode
+   *  does. Bounded on purpose: a permanent push mute would starve detection
+   *  of the coverage it needs. */
+  comfort_until?: string | null;
   haptic_feedback_enabled: boolean;
   symptom_summary_enabled: boolean;  // WP4: off by default, requires product/clinical sign-off
   report_display_name?: string | null; // optional name/nickname for the clinical report header
@@ -189,6 +196,10 @@ export interface CheckIn {
   notified_at?: string | null;
   edited_at?: string | null;
   edit_count?: number;
+  /** Submitted via comfort mode's one-tap rather than by moving the sliders.
+   *  Real data — the form rests at the user's own baseline — but weaker
+   *  evidence, so detection caps confidence at partial, never excludes it. */
+  low_demand?: boolean;
 }
 
 export interface SleepLog {
