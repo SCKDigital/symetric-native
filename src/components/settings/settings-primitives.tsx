@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { useAuth } from '@/contexts/auth-context';
+import { comfortActiveForProfile } from '@/lib/domains';
 
 // Ports of the web SettingsScreen.tsx's own layout primitives — the grouped
 // card, its labelled sections, and the icon + label + subtitle + accessory row
@@ -30,6 +31,23 @@ export function ChevronRight({ color = '#555c72' }: { color?: string }) {
   );
 }
 
+/** The app's switch, in one place. Lifted out of settings.tsx once the Today
+ *  setup sheets needed the same control — a second hand-styled Switch would
+ *  have drifted from this one within a release. */
+export function Toggle({ value, onValueChange, disabled }: {
+  value: boolean; onValueChange: (v: boolean) => void; disabled?: boolean;
+}) {
+  return (
+    <Switch
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+      trackColor={{ true: '#6366f1', false: '#252b3b' }}
+      thumbColor="#ffffff"
+    />
+  );
+}
+
 export function InlineMessage({ type, children }: { type: 'error' | 'info'; children: React.ReactNode }) {
   return <Text style={[styles.inlineMessage, type === 'error' && styles.inlineMessageError]}>{children}</Text>;
 }
@@ -42,9 +60,15 @@ const ICON_BG: Record<IconColor, string> = {
   slate: 'rgba(139,144,164,0.12)',
 };
 
+/** The single tile colour comfort mode collapses all three into — the quiet
+ *  accent rather than the indigo one, same call as COMFORT_DOMAIN_COLOR. */
+const COMFORT_ICON_BG = 'rgba(165,171,201,0.12)';
+
 export function RowIcon({ color, children }: { color: IconColor; children: React.ReactNode }) {
   const { profile } = useAuth();
-  const bg = profile?.simplified_colors ? ICON_BG.indigo : ICON_BG[color];
+  // One tile colour in comfort mode, which is where simplified colours now
+  // lives — see getDomainColorFromProfile.
+  const bg = comfortActiveForProfile(profile) ? COMFORT_ICON_BG : ICON_BG[color];
   return <View style={[styles.rowIcon, { backgroundColor: bg }]}>{children}</View>;
 }
 

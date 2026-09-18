@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
@@ -8,12 +8,12 @@ import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
 import { DeleteAllSheet, DeleteRangeSheet, ExportSheet, ResetBaselineSheet } from '@/components/settings/data-sheets';
 import {
   BellIcon, BellSlashIcon, BodyIcon, BrainIcon, CalendarIcon, ClockIcon, ClockSimpleIcon,
-  CycleIcon, DownloadIcon, LockIcon, PaletteIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
+  CycleIcon, DownloadIcon, LockIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
   EyeIcon,
 } from '@/components/settings/settings-icons';
 import {
   ChevronRight, InlineMessage, RowValue, SectionCard, SectionLabel, SettingsRow, RowDivider,
-  Toast,
+  Toast, Toggle,
 } from '@/components/settings/settings-primitives';
 import {
   ActiveWindowSheet, BaselineModal, ConfirmDisableSheet, DndSheet, FrequencySheet,
@@ -21,8 +21,8 @@ import {
 } from '@/components/settings/settings-sheets';
 import AppLogoHeader from '@/components/shared/app-logo-header';
 import { useAuth } from '@/contexts/auth-context';
+import { useAppLockSettings } from '@/hooks/use-app-lock-settings';
 import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
-import { generateSalt, hashPin } from '@/lib/app-lock';
 import { BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
 import { useComfort } from '@/hooks/use-comfort';
 import { resolveActiveDomains } from '@/lib/domains';
@@ -36,7 +36,7 @@ import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 // carried four of its controls (markers, body tracking, app lock, push) in a
 // marker FlatList with hand-rolled rows in its footer — no sections, no shared
 // row layout, and none of Mind tracking, cycle tracking, do not disturb,
-// comfort mode, simplified colours, time format, export, delete a date range,
+// comfort mode, time format, export, delete a date range,
 // reset baselines or delete account, all of which shipped to the stores
 // missing.
 //
@@ -53,18 +53,6 @@ import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 
 type SheetType = 'activeWindow' | 'frequency' | 'bodyTracking' | 'dnd' | 'timeFormat'
   | 'export' | 'deleteRange' | 'deleteAll' | 'resetBaseline' | null;
-
-function Toggle({ value, onValueChange, disabled }: { value: boolean; onValueChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <Switch
-      value={value}
-      onValueChange={onValueChange}
-      disabled={disabled}
-      trackColor={{ true: '#6366f1', false: '#252b3b' }}
-      thumbColor="#ffffff"
-    />
-  );
-}
 
 function DomainPills({ activeDomains, onToggle }: { activeDomains: DomainType[]; onToggle: (d: DomainType) => void }) {
   return (
@@ -98,6 +86,7 @@ function BodyDomainPills({ activeDomains, onToggle }: { activeDomains: BodyDomai
 
 export default function SettingsScreen() {
   const comfort = useComfort();
+  const appLock = useAppLockSettings();
   const { user, profile, signOut, refreshProfile } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -289,24 +278,20 @@ export default function SettingsScreen() {
   };
 
   const handleSetAppLockPin = async (pin: string) => {
-    if (!user) return;
-    const salt = generateSalt();
-    const hash = await hashPin(pin, salt);
-    const { error } = await supabase.from('profiles').update({
-      app_lock_enabled: true, app_lock_pin_hash: hash, app_lock_pin_salt: salt,
-    }).eq('id', user.id);
-    if (error) { setToastMessage('Failed to save changes. Please try again.'); return; }
-    setToastMessage(appLockSheetMode === 'change' ? 'PIN updated' : 'App lock enabled');
-    await refreshProfile();
+    try {
+      await appLock.setPin(pin);
+      setToastMessage(appLockSheetMode === 'change' ? 'PIN updated' : 'App lock enabled');
+    } catch {
+      setToastMessage('Failed to save changes. Please try again.');
+    }
   };
 
   const handleDisableAppLock = async () => {
-    if (!user) return;
-    const { error } = await supabase.from('profiles').update({
-      app_lock_enabled: false, app_lock_pin_hash: null, app_lock_pin_salt: null,
-    }).eq('id', user.id);
-    if (error) { setToastMessage('Failed to save changes. Please try again.'); return; }
-    await refreshProfile();
+    try {
+      await appLock.disable();
+    } catch {
+      setToastMessage('Failed to save changes. Please try again.');
+    }
   };
 
   if (loading) return <PulseLoadingScreen />;
@@ -507,24 +492,32 @@ export default function SettingsScreen() {
               window from Today does. checkSustainedDeviationQuality rejects any
               window below 40% coverage or 1.5 check-ins/day, so a permanent
               mute would quietly starve detection until it stopped finding
-              anything. See 20260918000001_comfort_mode_state.sql. */}
+              anything. See 20260918000001_comfort_mode_state.sql.
+
+              Simplified colours used to be a second toggle directly below this
+              one. It is now part of comfort mode rather than its own setting —
+              see getDomainColorFromProfile. */}
           <SettingsRow
             icon={<EyeIcon />}
             label="Comfort mode"
-            subtitle="Quieter colours, larger check-in text, no countdown"
+            subtitle="One quiet colour, larger check-in text, no countdown"
             right={<Toggle
               value={comfort.standing}
               onValueChange={() => comfort.setStanding(!comfort.standing)}
             />}
           />
           <RowDivider />
+          {/* Governs armed windows only — the standing toggle above has never
+              muted anything. Default on, which is how comfort mode shipped;
+              off is for people whose day only gets logged because the app
+              asked. See 20260918000005_comfort_reminder_pref.sql. */}
           <SettingsRow
-            icon={<PaletteIcon />}
-            label="Simplified colours"
-            subtitle="Uses one colour instead of per-domain colours"
+            icon={<BellSlashIcon />}
+            label="Pause reminders in comfort mode"
+            subtitle="Only while comfort mode is switched on from Today, for a couple of hours or the rest of the day"
             right={<Toggle
-              value={profile?.simplified_colors ?? false}
-              onValueChange={() => toggleProfileField('simplified_colors', profile?.simplified_colors ?? false)}
+              value={comfort.pausesReminders}
+              onValueChange={on => comfort.setPausesReminders(on)}
             />}
           />
           <RowDivider />

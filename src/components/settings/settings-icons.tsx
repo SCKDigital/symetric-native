@@ -73,10 +73,6 @@ export function EyeIcon() {
   return <Frame><Path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" /><Circle cx={8} cy={8} r={2} /></Frame>;
 }
 
-export function PaletteIcon() {
-  return <Frame><Circle cx={8} cy={8} r={5.5} /><Path d="M8 2.5v11M2.5 8h11" /></Frame>;
-}
-
 export function PaperPlaneIcon() {
   return <Frame><Path d="M14 2L2 7l4.5 1.5L8 14l2-4 4-8z" /><Line x1={6.5} y1={8.5} x2={14} y2={2} /></Frame>;
 }
