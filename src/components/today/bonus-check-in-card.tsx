@@ -56,8 +56,11 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
   // derived rather than copied into state by an effect. closeModal clears both
   // sources, so dismissing can't be undone by a stale flag on the next render.
   const sheetVisible = modalOpen || !!forceOpen;
+  // Clears both reasons the sheet can be open. This called itself instead of
+  // setModalOpen, so every Cancel, back gesture and successful save recursed
+  // until the stack blew and Android killed the app mid-check-in.
   const closeModal = () => {
-    closeModal();
+    setModalOpen(false);
     onForceOpenHandled?.();
   };
   const [values, setValues] = useState<Record<string, number>>({});
@@ -282,11 +285,20 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
 
             {error !== '' && <Text style={styles.error}>{error}</Text>}
 
+            {/* The cooldown used to be invisible until Done was pressed, which
+                read as a dead button. Say so up front, and don't offer a
+                control that cannot do anything. */}
+            {isOnCooldown && (
+              <Text style={styles.cooldownNotice}>
+                You have logged a bonus check-in in the last hour. You can log another in {formatTimeRemaining(timeRemaining)}.
+              </Text>
+            )}
+
             <Pressable
               onPress={handleSubmit}
-              disabled={saving}
-              style={({ pressed }) => [styles.submit, pressed && styles.pressed]}>
-              <Text style={styles.submitText}>{saving ? 'Saving...' : 'Done'}</Text>
+              disabled={saving || isOnCooldown}
+              style={({ pressed }) => [styles.submit, (saving || isOnCooldown) && styles.submitDisabled, pressed && !isOnCooldown && styles.pressed]}>
+              <Text style={[styles.submitText, (saving || isOnCooldown) && styles.submitTextDisabled]}>{saving ? 'Saving...' : 'Done'}</Text>
             </Pressable>
             <Pressable onPress={closeModal} disabled={saving}>
               <Text style={styles.cancel}>Cancel</Text>
@@ -329,10 +341,13 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   error: { fontSize: 13, color: '#f87171', marginTop: 10 },
+  cooldownNotice: { fontSize: 13, color: '#9aabb8', marginTop: 16, lineHeight: 19 },
   submit: {
     marginTop: 20, backgroundColor: '#4f46e5', borderRadius: 12,
     paddingVertical: 14, alignItems: 'center',
   },
+  submitDisabled: { backgroundColor: '#1e2533' },
   submitText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
+  submitTextDisabled: { color: '#4a5568' },
   cancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
 });
