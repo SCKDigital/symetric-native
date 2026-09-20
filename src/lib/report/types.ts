@@ -42,4 +42,8 @@ export interface BodySiteFrequency {
   label: string;
   dayCount: number;
   source: 'pain' | 'event' | 'both';
+  /** First and last day this site was reported in the range — see
+   *  computeBodySiteFrequency for why a count alone is not enough. */
+  firstSeen: string;
+  lastSeen: string;
 }

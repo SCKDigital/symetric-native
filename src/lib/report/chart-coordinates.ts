@@ -46,7 +46,7 @@ export interface DomainConnection {
   n: number; // overlapping check-in count
 }
 
-type DailyMeans = Record<string, Record<string, number | null>>;
+export type DailyMeans = Record<string, Record<string, number | null>>;
 
 function mean(vals: number[]): number {
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;

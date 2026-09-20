@@ -38,7 +38,7 @@ function clusterColor(type: string | undefined): string {
   return theme.colors.coral;
 }
 
-const TIMELINE_MAX_ENTRIES = 4;
+const TIMELINE_MAX_ENTRIES = 3;
 
 type TimelineEntry =
   | { kind: 'cluster'; date: string; cluster: DetectedCluster }
@@ -117,8 +117,14 @@ export function buildDomainSparklineSectionHtml(params: {
     const headerColor = current != null && baseline != null && Math.abs(current - baseline) >= 0.5 ? theme.colors.heading : theme.colors.gray;
     const isLowerBetter = isLowerBetterFn(cd.domain);
     const svg = renderSparklineSvg(cd, dates, lineColor, isLowerBetter);
+    // Coverage, stated per domain. A line with readings on 12 of 60 days and
+    // one with 58 are drawn identically, and a gap for "not logged" looks the
+    // same as a flat stretch — so a sparse series reads as an equally solid
+    // trend unless the page says otherwise. This is also the answer to "why
+    // is this one spotty": it is the days, not the chart.
+    const logged = cd.points.filter(p => p.value != null).length;
     return `<div class="spark-cell">
-      <div class="spark-header"><span style="color:${headerColor}; font-weight:bold;">${esc(label)} ${arrow}</span><span class="spark-meta">base ${bVal} &middot; now ${cVal}</span></div>
+      <div class="spark-header"><span style="color:${headerColor}; font-weight:bold;">${esc(label)} ${arrow}</span><span class="spark-meta">base ${bVal} &middot; now ${cVal} &middot; ${logged}/${dates.length} days</span></div>
       ${svg || `<div class="spark-no-data">Insufficient data</div>`}
     </div>`;
   }).join('');
@@ -146,6 +152,14 @@ export function buildDomainSparklineSectionHtml(params: {
       ${markerLines}
       ${markerNumbers}
     </div>
+    <!-- Every chart in the stack shares one x-axis, so the range is stated
+         once beneath it rather than repeated per row. Without it the reader
+         has to hunt back to the footer to learn what span they are looking
+         at, and marker numbers alone give no sense of when. -->
+    <div class="spark-axis" style="width:${SPARKLINE_WIDTH}px;">
+      <span>${esc(fmtDay(dates[0] ?? ''))}</span>
+      <span>${esc(fmtDay(dates[dates.length - 1] ?? ''))}</span>
+    </div>
   </div>`;
 }
 
@@ -163,13 +177,13 @@ export function buildDomainSparklineSectionHtml(params: {
  * sheet — which carries no header, no footer, and no page number, while the
  * "Page 3 of 5" printed above it goes on claiming otherwise.
  *
- * Six rows is 498pt, plus a 17pt section label and a 14pt gap: 529pt, leaving
- * headroom for the explainer box that follows the last page of charts. It is
- * deliberately conservative — this layout is measured by a print engine that
- * isn't available to test against here, so the cost of being wrong by a row
- * should be white space, not a lost page number.
+ * Five, not six, and no longer a guess: scripts/check-report-layout.mjs
+ * renders the real document in Chromium — the engine family Android's print
+ * WebView belongs to — and measures it. Six rows came out at 93% of a sheet
+ * under the wider of the two platform fonts, which is not enough margin for
+ * a domain label that wraps.
  */
-export const SPARKLINES_PER_PAGE = 6;
+export const SPARKLINES_PER_PAGE = 5;
 
 export interface SparklineLayout {
   /** Renders on the parent page: the "fewer than 7 days" note, or nothing
@@ -282,11 +296,11 @@ export function buildEpisodeTimelineHtml(params: {
 
 const RARE_MAX_ENTRIES = 3;
 
-export function buildRareEventsSectionHtml(rareEvents: RareEvent[], patternEvolution: PatternEvolution[]): string {
+export function buildRareEventsSectionHtml(rareEvents: RareEvent[], patternEvolution: PatternEvolution[], maxEntries: number = RARE_MAX_ENTRIES): string {
   if (rareEvents.length === 0 && patternEvolution.length === 0) return '';
 
-  const shownRare = rareEvents.slice(0, RARE_MAX_ENTRIES);
-  const shownEvo = patternEvolution.slice(0, Math.max(0, RARE_MAX_ENTRIES - shownRare.length));
+  const shownRare = rareEvents.slice(0, maxEntries);
+  const shownEvo = patternEvolution.slice(0, Math.max(0, maxEntries - shownRare.length));
   const hiddenCount = (rareEvents.length - shownRare.length) + (patternEvolution.length - shownEvo.length);
 
   const rareRows = shownRare.map(ev => {

@@ -5,6 +5,9 @@ export interface WeeklyCompletion {
   scheduled: number;
   completed: number;
   pct: number;
+  /** Of the completed ones, how many were comfort mode's one-tap answer —
+   *  see report/how-collected.ts for why a week's total alone can mislead. */
+  oneTap: number;
 }
 
 // Direct port of the week-by-week completion breakdown from the web app's
@@ -20,22 +23,26 @@ export function computeWeeklyCompletion(checkIns: CheckIn[], dateFrom: string, d
     return mon.toISOString().slice(0, 10);
   }
 
-  const byWeek: Record<string, { scheduled: number; completed: number }> = {};
+  const byWeek: Record<string, { scheduled: number; completed: number; oneTap: number }> = {};
   for (const ci of checkIns) {
     const date = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
     if (date < dateFrom || date > dateTo) continue;
     const ws = getWeekStart(date);
-    if (!byWeek[ws]) byWeek[ws] = { scheduled: 0, completed: 0 };
+    if (!byWeek[ws]) byWeek[ws] = { scheduled: 0, completed: 0, oneTap: 0 };
     byWeek[ws].scheduled++;
-    if (ci.status === 'completed') byWeek[ws].completed++;
+    if (ci.status === 'completed') {
+      byWeek[ws].completed++;
+      if (ci.low_demand === true) byWeek[ws].oneTap++;
+    }
   }
 
   return Object.entries(byWeek)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([weekStart, { scheduled, completed }]) => ({
+    .map(([weekStart, { scheduled, completed, oneTap }]) => ({
       weekStart,
       scheduled,
       completed,
+      oneTap,
       pct: scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0,
     }));
 }

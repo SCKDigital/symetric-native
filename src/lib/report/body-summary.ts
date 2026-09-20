@@ -140,7 +140,18 @@ export function computeBodySiteFrequency(
       const label = side ? `${side} ${regionLabel}` : regionLabel;
       const source: BodySiteFrequency['source'] =
         sources.size === 2 ? 'both' : (sources.has('pain') ? 'pain' : 'event');
-      return { region, side, label, dayCount: days.size, source };
+      // First and last are carried alongside the count because a total hides
+      // the shape entirely: "R shoulder, 22 days" reads the same whether it
+      // is one shoulder that has hurt all period or a joint recruited in week
+      // six. For a hypermobility picture, new sites appearing over time is
+      // the progression, and the ranked total was the one view guaranteed not
+      // to show it.
+      const sorted = [...days].sort();
+      return {
+        region, side, label, dayCount: days.size, source,
+        firstSeen: sorted[0],
+        lastSeen: sorted[sorted.length - 1],
+      };
     })
     .sort((a, b) => b.dayCount - a.dayCount);
 }
