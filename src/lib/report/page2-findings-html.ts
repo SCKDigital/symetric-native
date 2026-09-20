@@ -134,7 +134,14 @@ export function buildDomainSparklineSectionHtml(params: {
 
   return `<div class="section-gap">
     <p class="section-label">${esc(label)}</p>
-    <div class="spark-stack" style="width:${SPARKLINE_WIDTH}pt;">
+    <!-- px, not pt. SPARKLINE_WIDTH is the <svg width> attribute, which is
+         read as CSS pixels; declaring the container in points made it 590pt
+         against a 442.5pt chart. The marker lines and numbers below are
+         positioned as a percentage of THIS box, so every medication, therapy
+         and cycle marker was drawn a third of the way right of the date it
+         marks — the last ones off the printable area entirely — on a chart a
+         clinician reads dates off. -->
+    <div class="spark-stack" style="width:${SPARKLINE_WIDTH}px;">
       ${rows}
       ${markerLines}
       ${markerNumbers}
