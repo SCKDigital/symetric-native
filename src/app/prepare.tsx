@@ -6,9 +6,7 @@ import Svg, { Line, Rect } from 'react-native-svg';
 import AppointmentContext from '@/components/prepare/appointment-context';
 import DateRangeControl from '@/components/prepare/date-range-control';
 import GenerateReportSection from '@/components/prepare/generate-report-section';
-import NotableChangesSection from '@/components/prepare/notable-changes-section';
 import PastAppointmentsSection from '@/components/prepare/past-appointments-section';
-import PatternReviewSection from '@/components/prepare/pattern-review-section';
 import PostAppointmentSection from '@/components/prepare/post-appointment-section';
 import PrepareInfoSheet from '@/components/prepare/prepare-info-sheet';
 import QuestionsSection from '@/components/prepare/questions-section';
@@ -18,27 +16,11 @@ import { fetchUpcomingAppointment, fetchAllAppointments } from '@/lib/api/appoin
 import { trackPrepareTabOpened } from '@/lib/analytics';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { addDays, todayDateString } from '@/lib/date-utils';
-import { clusterFindings, type PatternFinding } from '@/lib/pattern-findings';
 import { defaultRangeForPreset, loadSavedRange, saveRange, type PrepareRange } from '@/lib/prepare-range';
 import { fetchMarkers } from '@/lib/queries/markers';
 import type { Appointment, DetectedCluster } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 
-function CollapsedPatternsRow({ count, onExpand }: { count: number; onExpand: () => void }) {
-  return (
-    <Pressable onPress={onExpand} style={styles.collapsedRow}>
-      <View style={styles.collapsedLeft}>
-        <Text style={styles.collapsedLabel}>Patterns</Text>
-        {count > 0 && (
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{count}</Text>
-          </View>
-        )}
-      </View>
-      <Text style={styles.chevron}>▼</Text>
-    </Pressable>
-  );
-}
 
 // Chunk 6 of the Prepare tab port — every sub-component is now wired,
 // including PDF report generation (chunk 1 of that sub-feature's own
@@ -59,9 +41,7 @@ export default function PrepareScreen() {
 
   const [range, setRange] = useState<PrepareRange>(() => defaultRangeForPreset('30'));
   const [rangeReady, setRangeReady] = useState(false);
-  const [patternsOpen, setPatternsOpen] = useState(false);
   const [allClusters, setAllClusters] = useState<DetectedCluster[]>([]);
-  const [clustersLoaded, setClustersLoaded] = useState(false);
   const [lastVisitDate, setLastVisitDate] = useState<string | null>(null);
   const [markers, setMarkers] = useState<InterventionMarker[]>([]);
 
@@ -100,7 +80,6 @@ export default function PrepareScreen() {
 
   const handleRangeChange = useCallback((r: PrepareRange) => {
     setRange(r);
-    setPatternsOpen(false);
     if (user) saveRange(user.id, r);
   }, [user]);
 
@@ -110,8 +89,7 @@ export default function PrepareScreen() {
     const from = addDays(todayStr, -90);
     fetchClustersForDateRange(user.id, from, todayStr)
       .then(data => setAllClusters(data ?? []))
-      .catch(console.error)
-      .finally(() => setClustersLoaded(true));
+      .catch(console.error);
 
     fetchAllAppointments(user.id).then(all => {
       const completed = all.filter(a => a.is_completed).sort((a, b) => b.appointment_date.localeCompare(a.appointment_date));
@@ -124,7 +102,6 @@ export default function PrepareScreen() {
   if (loading) return <PulseLoadingScreen />;
 
   const rangeClusters = allClusters.filter(c => c.start_date <= range.end && (c.ongoing || !c.end_date || c.end_date >= range.start));
-  const findings: PatternFinding[] = clusterFindings(rangeClusters, todayDateString());
   const mostRecentMarker = [...markers].sort((a, b) => b.marker_date.localeCompare(a.marker_date))[0] ?? null;
 
   return (
@@ -146,21 +123,6 @@ export default function PrepareScreen() {
             {rangeReady && (
               <DateRangeControl range={range} onChange={handleRangeChange} lastVisitDate={lastVisitDate} mostRecentMarker={mostRecentMarker} />
             )}
-
-            {clustersLoaded && (
-              patternsOpen ? (
-                <View>
-                  <PatternReviewSection appointmentId={appointment.id} findings={findings} />
-                  <Pressable onPress={() => setPatternsOpen(false)} style={styles.collapseButton}>
-                    <Text style={styles.collapseButtonText}>↑ Collapse patterns</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <CollapsedPatternsRow count={findings.length} onExpand={() => setPatternsOpen(true)} />
-              )
-            )}
-
-            <NotableChangesSection fromDate={range.start} toDate={range.end} />
 
             <QuestionsSection appointmentId={appointment.id} />
 
@@ -198,14 +160,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   heading: { fontSize: 26, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.6 },
   infoIcon: { fontSize: 18, color: '#4a5568' },
-  collapsedRow: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  collapsedLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  collapsedLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9 },
-  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: 'rgba(129,140,248,0.15)', borderRadius: 20 },
-  countBadgeText: { fontSize: 11, fontWeight: '600', color: '#818cf8' },
-  chevron: { fontSize: 10, color: '#6b7a99' },
-  collapseButton: { paddingVertical: 12, paddingBottom: 16 },
-  collapseButtonText: { fontSize: 12, color: '#4a5568' },
   emptyCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 28, paddingHorizontal: 24, alignItems: 'center' },
   emptyIcon: { marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#c8d0e0', marginBottom: 8 },
