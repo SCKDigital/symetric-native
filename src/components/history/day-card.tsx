@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   fullDate: { fontSize: 12, color: '#8892a4', marginBottom: 10 },
   summary: { fontSize: 14, color: '#b0b8c8', lineHeight: 21.7 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#1e2533', borderRadius: 20, paddingVertical: 4, paddingHorizontal: 9 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#1e2533', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 9 },
   chipLabel: { fontSize: 11, color: '#8892a4' },
   bodySectionSpaced: { marginTop: 20 },
   expandButton: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12, paddingVertical: 4 },

@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
   swungValue: { color: '#e2e8f0', fontWeight: '600' },
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   durationText: { fontSize: 14, color: '#8892a4' },
-  ongoingPill: { paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)', borderRadius: 20 },
+  ongoingPill: { paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)', borderRadius: 8 },
   ongoingText: { fontSize: 11, color: '#f59e0b', fontWeight: '500' },
   notesBox: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)', borderRadius: 12, padding: 14, paddingHorizontal: 16, marginBottom: 20 },
   notesLabel: { fontSize: 11, color: '#818cf8', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: 6 },

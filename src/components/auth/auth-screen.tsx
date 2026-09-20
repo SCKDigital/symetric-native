@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   wordmark: { fontSize: 24, fontWeight: '600', color: '#ffffff', letterSpacing: -0.5 },
   tagline: { fontSize: 16, color: '#6b6882', maxWidth: 210, textAlign: 'center' },
   buttonGroup: { maxWidth: 340, width: '100%', gap: 12 },
-  continueButton: { paddingVertical: 18, backgroundColor: '#5d52e0', borderRadius: 999, alignItems: 'center' },
+  continueButton: { paddingVertical: 18, backgroundColor: '#5d52e0', borderRadius: 8, alignItems: 'center' },
   continueButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   pressed: { opacity: 0.88 },
   disclaimer: { fontSize: 11, color: '#38364a', textAlign: 'center' },

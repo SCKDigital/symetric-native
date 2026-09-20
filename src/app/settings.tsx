@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
   loadErrorText: { fontSize: 13, color: '#f87171' },
 
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
-  pill: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 20, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
+  pill: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 8, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
   pillActive: { backgroundColor: 'rgba(123,131,240,0.15)', borderColor: 'rgba(123,131,240,0.4)' },
   pillDisabled: { opacity: 0.35 },
   pillActiveBody: { backgroundColor: 'rgba(188,129,47,0.15)', borderColor: 'rgba(188,129,47,0.4)' },

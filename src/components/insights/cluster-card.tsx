@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   viewPatternText: { fontSize: 12, color: '#6b7a99' },
   summary: { fontSize: 14, color: '#b0b8c8', lineHeight: 20 },
   summaryMuted: { color: '#6b7a99', fontSize: 13 },
-  ongoingPill: { alignSelf: 'flex-start', marginTop: 6, paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)', borderRadius: 20 },
+  ongoingPill: { alignSelf: 'flex-start', marginTop: 6, paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)', borderRadius: 8 },
   ongoingText: { fontSize: 11, color: '#f59e0b', fontWeight: '500' },
   expanded: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(99,102,241,0.15)', gap: 0 },
   expandedDescription: { fontSize: 14, color: '#c8d0e0', lineHeight: 21, marginBottom: 14 },

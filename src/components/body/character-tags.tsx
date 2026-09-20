@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
   root: { marginTop: 10, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#2d3748' },
   label: { fontSize: 12, color: '#8892a4', marginBottom: 8 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { paddingVertical: 7, paddingHorizontal: 11, minHeight: 32, borderRadius: 999, borderWidth: 1, borderColor: '#2d3748', backgroundColor: '#0a0c12', justifyContent: 'center' },
+  chip: { paddingVertical: 7, paddingHorizontal: 11, minHeight: 32, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748', backgroundColor: '#0a0c12', justifyContent: 'center' },
   chipActive: { borderWidth: 1.5, borderColor: '#a5b4fc', backgroundColor: 'rgba(165,180,252,0.15)' },
   chipText: { fontSize: 12.5, color: '#8892a4' },
   chipTextActive: { color: '#a5b4fc', fontWeight: '600' },

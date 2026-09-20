@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   item: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#1e2533' },
   itemHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   itemDate: { fontSize: 14, fontWeight: '500', color: '#c8d0e0' },
-  pill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 20, backgroundColor: 'rgba(129,140,248,0.12)', borderWidth: 1, borderColor: 'rgba(129,140,248,0.25)' },
+  pill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 8, backgroundColor: 'rgba(129,140,248,0.12)', borderWidth: 1, borderColor: 'rgba(129,140,248,0.25)' },
   pillText: { fontSize: 10, fontWeight: '600', color: '#818cf8' },
   itemFocus: { fontSize: 12, color: '#6b7a99', marginBottom: 4 },
   itemNotes: { fontSize: 13, color: '#8892a4', lineHeight: 19 },

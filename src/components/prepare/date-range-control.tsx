@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 18, paddingHorizontal: 20, marginBottom: 16 },
   label: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 12 },
   pillRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 },
-  pill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#2d3748' },
+  pill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748' },
   pillActive: { borderWidth: 0, backgroundColor: '#4f46e5' },
   pillText: { fontSize: 13, fontWeight: '500', color: '#8892a4' },
   pillTextActive: { color: '#fff' },

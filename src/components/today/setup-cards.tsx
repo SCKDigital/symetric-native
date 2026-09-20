@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
   sheetToggleLabel: { fontSize: 15, color: '#e2e8f0', fontWeight: '500' },
   sheetHelper: { fontSize: 13, color: '#8892a4', lineHeight: 19, marginTop: 6 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pill: { borderWidth: 1, borderColor: '#1e2533', borderRadius: 999, paddingVertical: 8, paddingHorizontal: 13 },
+  pill: { borderWidth: 1, borderColor: '#1e2533', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 13 },
   pillActive: { borderColor: BODY_COLOR, backgroundColor: 'rgba(188,129,47,0.12)' },
   pillDisabled: { opacity: 0.35 },
   pillText: { fontSize: 13, color: '#8892a4' },

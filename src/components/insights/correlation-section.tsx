@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   heading: { fontSize: 15.5, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.2, lineHeight: 21 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {
-    fontSize: 12, borderRadius: 20, borderWidth: 1,
+    fontSize: 12, borderRadius: 8, borderWidth: 1,
     paddingHorizontal: 10, paddingVertical: 3, overflow: 'hidden', lineHeight: 16,
   },
   sub: { fontSize: 13, color: '#8892a4', lineHeight: 19 },

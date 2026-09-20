@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
   pickerDoneText: { color: '#818cf8', fontSize: 14, fontWeight: '600' },
   bubbleRow: { flexDirection: 'row', gap: 8 },
-  bubble: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, borderWidth: 1.5, borderColor: '#2d3748' },
+  bubble: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1.5, borderColor: '#2d3748' },
   bubbleActive: { borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.15)' },
   bubbleText: { fontSize: 13, color: '#8892a4' },
   bubbleTextActive: { color: '#818cf8', fontWeight: '600' },
