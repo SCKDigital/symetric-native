@@ -46,7 +46,7 @@
       [
         "expo-notifications",
         {
-          "color": "#818cf8",
+          "color": "#4FD1C5",
           "defaultChannel": "default",
           "mode": "production"
         }

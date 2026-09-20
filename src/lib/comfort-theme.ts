@@ -32,12 +32,13 @@ const NORMAL_ACCENT = BRAND.fill;
 const NORMAL_ACCENT_TEXT = BRAND.text;
 const NORMAL_ACCENT_BORDER = BRAND.border;
 
-// Same hues, dropped chroma and lightness. White on #3f3d6b clears 8:1, so the
-// CTA is still unmistakably a button — it just stops being the brightest thing
-// in the room.
-const QUIET_ACCENT = '#3f3d6b';
-const QUIET_ACCENT_TEXT = '#a5abc9';
-const QUIET_ACCENT_BORDER = '#252a44';
+// Same hue as the accent above, chroma and lightness dropped. White on
+// #2F5450 clears 8.4:1, so the CTA is still unmistakably a button — it just
+// stops being the brightest thing in the room. Derived from the teal when the
+// brand moved, so comfort mode did not stay quietly purple.
+const QUIET_ACCENT = '#2F5450';
+const QUIET_ACCENT_TEXT = '#9FC3BB';
+const QUIET_ACCENT_BORDER = '#1E3330';
 
 /** Chosen to be legible-but-not-disruptive: enough to matter, small enough that
  *  the check-in flow's existing boxes hold it without reflowing to nonsense.

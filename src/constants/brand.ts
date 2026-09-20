@@ -6,14 +6,22 @@
 // data — and the accent shares its hex with a domain, so a sweep was exactly
 // the wrong tool.
 //
-// ── The collision worth knowing about ──────────────────────────────────────
+// ── Why teal, and why these exact values ───────────────────────────────────
 //
-// `text` below is #818cf8, and so is DOMAIN_COLORS.mood in lib/domains.ts.
-// Identical, not similar. Every link and active label in the app is painted
-// the colour that also means Mood on every chart. That is why the literal in
-// domains.ts is deliberately NOT imported from here: the two are the same
-// value today by accident, and must be free to diverge. Do not "tidy" it by
-// pointing Mood at BRAND.text.
+// The accent used to be #818cf8, which is also DOMAIN_COLORS.mood — the same
+// hex, not a near miss. Every link and active label in the app was painted
+// the colour that means Mood on every chart. Mood keeps the purple; the app
+// moved.
+//
+// `fill` is #0F6E56 because that is already theme.colors.teal in the PDF
+// report, where it means "improved". Sharing the ink means the app and the
+// document it produces stop being two different brands.
+//
+// Distances were measured rather than eyeballed. The fill sits dE 42 from
+// the nearest data colour and the link text dE 27 from Energy, the closest
+// green; anything under 15 would be confusable at a glance. Contrast holds
+// in both directions: white on `fill` is 6.2:1 (the purple managed 6.3), and
+// `text` on the near-black background is 10.5:1 (the purple, 6.6).
 //
 // Data colours (DOMAIN_COLORS, BODY_COLOR) are a separate system and do not
 // belong in this file. If you are reaching for a colour to identify a
@@ -21,24 +29,24 @@
 
 export const BRAND = {
   /** Primary button fill, under a white label. */
-  fill: '#4f46e5',
+  fill: '#0F6E56',
   /** Gradient partner and secondary fills. */
-  fillAlt: '#6366f1',
+  fillAlt: '#15887A',
   /** Links, icons, active labels on the dark background. */
-  text: '#818cf8',
+  text: '#4FD1C5',
   /** Lighter accent text, for larger or lower-emphasis type. */
-  textSoft: '#a5b4fc',
+  textSoft: '#99E6DB',
   /** The settings-screen accent, a touch flatter than `text`. */
-  textFlat: '#7b83f0',
+  textFlat: '#3FB8A8',
   /** Accent card borders. */
-  border: '#3730a3',
+  border: '#1A5C4E',
   /** Accent card background — a near-black with the accent's hue in it. */
-  surface: '#12162b',
+  surface: '#0B1A1B',
   /** The sign-in button, which has always been its own shade. */
-  signIn: '#5d52e0',
+  signIn: '#0F7A60',
   /** The logo tile behind the mark. The mark's own gradient is built from the
    *  domain colours and is not a brand colour — see symetric-logo.tsx. */
-  tile: '#1E1B4B',
+  tile: '#0B2B2A',
 } as const;
 
 /**

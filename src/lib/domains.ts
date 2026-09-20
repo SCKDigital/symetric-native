@@ -1,5 +1,4 @@
 import { BODY_DOMAINS } from '@/lib/body/constants';
-import { BRAND } from '@/constants/brand';
 import { COMFORT_TOKENS } from '@/lib/comfort-theme';
 import { DomainType, Profile } from '@/lib/supabase';
 
@@ -69,11 +68,16 @@ export const DOMAIN_COLORS: Record<string, string> = {
   sleep: '#7B9EB8',
 };
 
-// Same value as BRAND.text, pointed at it so the two cannot drift apart by
-// accident. Note what this is used for below: it is the colour an UNKNOWN
-// factor falls back to, which is a data role, not a chrome one — so when the
-// brand colour moves, this should not follow it there.
-export const BRAND_COLOR: string = BRAND.text;
+/**
+ * What an unrecognised factor is drawn in.
+ *
+ * This used to be the brand colour, which meant an unknown factor inherited
+ * whatever the app's chrome happened to be — so moving the accent to teal
+ * would have silently recoloured data. It is a deliberate neutral now: a
+ * factor with no colour of its own should look like it has no colour of its
+ * own, not like it belongs to the newest thing on the palette.
+ */
+export const UNKNOWN_FACTOR_COLOR = '#8892a4';
 
 /** The body-domain accent (also reused as the app tint in theme.ts) and the
  *  neutral color used for mind-area labels/badges outside a check-in
@@ -84,7 +88,7 @@ export const MIND_AREA_COLOR = '#e2e8f0';
 /**
  * The one colour every domain takes in comfort mode.
  *
- * Not BRAND_COLOR, which is what the old simplified-colours toggle used. Comfort
+ * Not the brand colour, which is what the old simplified-colours toggle used. Comfort
  * mode drops the accents to COMFORT_TOKENS' quieter set, so painting every chip
  * and sparkline the full-strength brand indigo made the calm mode the loudest
  * one on some screens — thirteen bright chips where there had been a spread of
@@ -97,7 +101,7 @@ export function getDomainColor(domain: string, comfortMode = false): string {
   if (comfortMode) return COMFORT_DOMAIN_COLOR;
   const normalized = domain.toLowerCase().replace(/ /g, '_');
   if (normalized in BODY_DOMAINS) return BODY_COLOR;
-  return DOMAIN_COLORS[normalized] ?? BRAND_COLOR;
+  return DOMAIN_COLORS[normalized] ?? UNKNOWN_FACTOR_COLOR;
 }
 
 /**
