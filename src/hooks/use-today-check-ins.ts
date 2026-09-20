@@ -26,6 +26,12 @@ interface State {
   lastCompleted: CheckIn | null;
   /** Every check-in scheduled for today, in time order. */
   allCheckIns: CheckIn[];
+  /** Whether this account has ever completed a check-in of any kind —
+   *  scheduled or bonus, today or on any earlier day. completedCount cannot
+   *  answer that: it counts today's scheduled rows only, and a bonus check-in
+   *  is inserted with no scheduled_date (deliberately, so an extra log doesn't
+   *  inflate the day's "2 of 4"), so three bonus check-ins still left it at 0. */
+  hasEverCompletedCheckIn: boolean;
   /** From check_in_settings, not the profile — every clock time on Today is
    *  rendered through lib/time-format.ts with this. */
   timeFormat: TimeFormat;
@@ -50,6 +56,7 @@ const EMPTY: State = {
   afterNextScheduled: null,
   lastCompleted: null,
   allCheckIns: [],
+  hasEverCompletedCheckIn: false,
   timeFormat: '12hr',
   checkInSettings: null,
   schedulingError: null,
@@ -107,10 +114,13 @@ export function useTodayCheckIns() {
 
     const todayLocal = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
-    const [checkInsRes, settingsRes, baselinesRes] = await Promise.all([
+    const [checkInsRes, settingsRes, baselinesRes, everRes] = await Promise.all([
       supabase.from('check_ins').select('*').eq('user_id', user.id).eq('scheduled_date', todayLocal).order('scheduled_at', { ascending: true }),
       supabase.from('check_in_settings').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('baselines').select('*').eq('user_id', user.id).eq('is_current', true).order('set_at', { ascending: false }),
+      // Deliberately not scoped to today or to scheduled rows — see
+      // hasEverCompletedCheckIn. One row is enough; nothing reads its contents.
+      supabase.from('check_ins').select('id').eq('user_id', user.id).eq('status', 'completed').limit(1),
     ]);
 
     const activeDomains = resolveActiveDomains(settingsRes.data);
@@ -206,6 +216,10 @@ export function useTodayCheckIns() {
       afterNextScheduled,
       lastCompleted,
       allCheckIns: todaysCheckIns,
+      // A failed query reads as "has checked in before", which at worst hides
+      // a first-run prompt — the opposite default would put that prompt in
+      // front of a long-standing user every time the network hiccuped.
+      hasEverCompletedCheckIn: everRes.error ? true : (everRes.data?.length ?? 0) > 0,
       timeFormat: (settingsRes.data?.time_format as TimeFormat | undefined) ?? '12hr',
       checkInSettings: (settingsRes.data as CheckInSettings | null) ?? null,
       // Only worth showing when it actually left the day empty.

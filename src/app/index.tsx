@@ -57,7 +57,7 @@ function TodayHome() {
   const {
     loading, activeCheckIn, rescuableCheckIn, allDone, activeDomains, baselines,
     completedCount, totalCount, nextScheduled, afterNextScheduled, lastCompleted,
-    timeFormat, allCheckIns, checkInSettings, schedulingError, refresh,
+    timeFormat, allCheckIns, checkInSettings, schedulingError, hasEverCompletedCheckIn, refresh,
   } = useTodayCheckIns();
   const [editingCheckIn, setEditingCheckIn] = useState<CheckIn | null>(null);
   const [showMarkerModal, setShowMarkerModal] = useState(false);
@@ -382,7 +382,12 @@ function TodayHome() {
           <Text style={styles.windowClosed}>(Editing window closed)</Text>
         )}
 
-        {!setupCards.anyOutstanding && !setupCards.loading && completedCount === 0 && !activeCheckIn && (
+        {/* First-run only. "Log a bonus mind check-in" below does the same job
+            for everyone else, and this card was still claiming the first
+            check-in hadn't happened after three bonus ones — those carry no
+            scheduled_date, so completedCount never counted them. Gated on
+            "has never completed anything" instead of "none today". */}
+        {!setupCards.anyOutstanding && !setupCards.loading && !hasEverCompletedCheckIn && !activeCheckIn && (
           <Pressable onPress={() => setOpenBonus(true)} style={({ pressed }) => [styles.checkInNow, pressed && styles.pressed]}>
             <Text style={styles.checkInNowTitle}>Check in now</Text>
             <Text style={styles.checkInNowBody}>Your first scheduled check-in may be hours away. You don&apos;t have to wait for it.</Text>
