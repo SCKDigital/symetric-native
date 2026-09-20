@@ -106,6 +106,13 @@ export function buildReportDocument(params: {
   .sleep-label { width: 120pt; font-weight: bold; font-size: ${fontSize.small}pt; color: ${colors.heading}; flex-shrink: 0; }
   .sleep-value { font-size: ${fontSize.small}pt; color: ${colors.body}; flex: 1; }
   .sleep-note { font-style: italic; font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.4; margin-top: 2pt; }
+  /* Page 2 already runs long for a user tracking many domains (each sparkline
+     is ~105pt), so this block is kept whole rather than being split in half
+     across a page boundary: half a chart with no axis is worse than the chart
+     starting on the next page. */
+  .sleep-chart { margin: 6pt 0 2pt; page-break-inside: avoid; }
+  .sleep-chart-title { font-weight: bold; font-size: ${fontSize.small}pt; color: ${colors.heading}; margin: 0 0 2pt; }
+  .sleep-chart-caption { font-size: 7pt; color: ${colors.muted}; line-height: 1.35; margin: 1pt 0 0; }
 
   .spark-stack { position: relative; margin-bottom: 2pt; }
   .spark-cell { margin-bottom: 3pt; }

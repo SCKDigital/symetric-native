@@ -87,14 +87,18 @@ export function buildDomainSparklineSectionHtml(params: {
    *  Set; the Body Overview page passes `() => true` since every body domain
    *  is a severity scale — see LOWER_IS_BETTER's own comment in theme.ts. */
   isLowerBetterFn?: (domain: string) => boolean;
+  /** Heading for this block. Continuation pages pass a "(continued)" variant
+   *  so a reader can tell a second page of charts from a second set. */
+  label?: string;
 }): string {
   const {
     chartDomains, baselineMap, currentRollingMedians, chartHasEnoughData, chartMarkers, flaggedClusters, dates,
     lineColor = '#818cf8', isLowerBetterFn = (d: string) => LOWER_IS_BETTER.has(d),
+    label = 'Domain sparklines',
   } = params;
 
   if (!chartHasEnoughData) {
-    return `<div class="section-gap"><p class="section-label">Domain sparklines</p><p class="empty-muted">Fewer than 7 days of data - charts omitted.</p></div>`;
+    return `<div class="section-gap"><p class="section-label">${esc(label)}</p><p class="empty-muted">Fewer than 7 days of data - charts omitted.</p></div>`;
   }
 
   const markerNumberByIndex = computeMarkerDisplayNumbers(flaggedClusters, chartMarkers, dates);
@@ -129,13 +133,80 @@ export function buildDomainSparklineSectionHtml(params: {
   }).join('');
 
   return `<div class="section-gap">
-    <p class="section-label">Domain sparklines</p>
+    <p class="section-label">${esc(label)}</p>
     <div class="spark-stack" style="width:${SPARKLINE_WIDTH}pt;">
       ${rows}
       ${markerLines}
       ${markerNumbers}
     </div>
   </div>`;
+}
+
+// ── Sparkline pagination ────────────────────────────────────────────────────
+
+/**
+ * Sparkline rows per page of charts.
+ *
+ * Nothing bounded this before, on either the Mind or the Body overview page,
+ * and both pages carry several other sections as well. A row is about 83pt
+ * (a 9pt header, a 90px = 67.5pt chart, margins), against a usable body
+ * height of roughly 616pt once the page header and footer are taken off a
+ * US Letter page with this report's margins. Eight tracked domains is 664pt
+ * of charts on its own, so those pages silently ran onto a second physical
+ * sheet — which carries no header, no footer, and no page number, while the
+ * "Page 3 of 5" printed above it goes on claiming otherwise.
+ *
+ * Six rows is 498pt, plus a 17pt section label and a 14pt gap: 529pt, leaving
+ * headroom for the explainer box that follows the last page of charts. It is
+ * deliberately conservative — this layout is measured by a print engine that
+ * isn't available to test against here, so the cost of being wrong by a row
+ * should be white space, not a lost page number.
+ */
+export const SPARKLINES_PER_PAGE = 6;
+
+export interface SparklineLayout {
+  /** Renders on the parent page: the "fewer than 7 days" note, or nothing
+   *  once the charts have pages of their own. */
+  inline: string;
+  /** One page body per page of charts, in order. Empty when there are none. */
+  pages: string[];
+}
+
+/**
+ * Splits a set of sparklines between the page that introduces them and any
+ * dedicated chart pages after it, so no page is asked to hold more than it
+ * can print.
+ *
+ * `trailingHtml` (the "reading this page" explainer) follows the charts
+ * wherever they end up — on the last chart page, or inline when there are no
+ * charts to put on one.
+ */
+export function layOutSparklines(
+  params: Parameters<typeof buildDomainSparklineSectionHtml>[0] & { trailingHtml?: string },
+): SparklineLayout {
+  const { trailingHtml = '', ...sectionParams } = params;
+  const { chartDomains, chartHasEnoughData } = sectionParams;
+
+  // A user tracking nothing gets no charts and no chart pages — not an empty
+  // page with a heading on it.
+  if (chartDomains.length === 0) return { inline: '', pages: [] };
+
+  // Too little data is one short note, which belongs with the sections that
+  // introduce it rather than alone on a page of its own.
+  if (!chartHasEnoughData) {
+    return { inline: buildDomainSparklineSectionHtml(sectionParams) + trailingHtml, pages: [] };
+  }
+
+  const pages: string[] = [];
+  for (let i = 0; i < chartDomains.length; i += SPARKLINES_PER_PAGE) {
+    pages.push(buildDomainSparklineSectionHtml({
+      ...sectionParams,
+      chartDomains: chartDomains.slice(i, i + SPARKLINES_PER_PAGE),
+      label: i === 0 ? sectionParams.label : `${sectionParams.label ?? 'Domain sparklines'} (continued)`,
+    }));
+  }
+  pages[pages.length - 1] += trailingHtml;
+  return { inline: '', pages };
 }
 
 // ── EpisodeTimeline ──────────────────────────────────────────────────────────

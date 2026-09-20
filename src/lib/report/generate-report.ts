@@ -11,7 +11,7 @@ import { detectBodyEventImpacts } from '@/lib/detection/body-event-impact';
 import { detectBodyTimeOfDayPatterns, MorningEveningPair } from '@/lib/detection/body-time-of-day';
 import type { CircadianPattern } from '@/lib/circadian-detection';
 import { MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
-import { resolveActiveDomains } from '@/lib/domains';
+import { BODY_COLOR, resolveActiveDomains } from '@/lib/domains';
 import { median } from '@/lib/baseline-stats';
 import { calculateSortWeight } from '@/lib/priority-scoring';
 import { isBodyDomain } from '@/lib/pattern-findings';
@@ -22,7 +22,8 @@ import { buildBodyOverviewHtml } from '@/lib/report/page-body-overview-html';
 import { buildContextConnectionsHtml } from '@/lib/report/page-context-connections-html';
 import { buildDataQualityHtml } from '@/lib/report/page-data-quality-html';
 import { buildPage1BodyHtml } from '@/lib/report/page1-html';
-import { buildPage2Html } from '@/lib/report/page2-html';
+import { buildPage2Html, SPARKLINE_EXPLAINER_HTML } from '@/lib/report/page2-html';
+import { layOutSparklines } from '@/lib/report/page2-findings-html';
 import { computeBodySiteFrequency, computeBodySummaries, buildBodyEventOccurrences } from '@/lib/report/body-summary';
 import { buildReportDocument } from '@/lib/report/report-document';
 import { computeWeeklyCompletion } from '@/lib/report/weekly-completion';
@@ -94,11 +95,13 @@ function buildMorningEveningPairs(rows: Record<string, unknown>[], domains: Body
 /**
  * PDF report port (see project_rn_rewrite_scoping.md), mind-only. Chunk 4
  * adds the Context & Connections page (strongest day-of-week/time-of-day
- * bar charts, domain correlation table) — inserted as page 3, pushing
- * chunk 3's Data Quality & Methodology page back to page 4 (see the pages
- * array below; those two page builders were renamed by role rather than
- * position for exactly this reason, see page-data-quality-html.ts's
- * header comment). Domain connections/correlations are real now too
+ * bar charts, domain correlation table) — see the pages array below; page
+ * builders are named by role rather than position because that position
+ * keeps moving, see page-data-quality-html.ts's header comment. It moves
+ * again here: domain sparklines are no longer piled onto the overview pages
+ * but paginated onto chart pages of their own (layOutSparklines), so the
+ * document is Executive Summary, Mind Overview, Mind Charts, optionally Body
+ * Overview and Body Charts, then Context & Connections and Data Quality. Domain connections/correlations are real now too
  * (detection/compute-connection.ts's significance-testing math, ported
  * this chunk), feeding both this page's table and a fuller Page 1
  * "Patterns detected" ranking. Renders each page as an HTML fragment and
@@ -299,6 +302,15 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const sleepHours = (sleepLogs ?? []).map(s => s.hours_slept).filter((v): v is number => v != null);
   const sleepMedianHours = sleepHours.length > 0 ? median(sleepHours) : null;
 
+  // Per-night durations for the hours chart, laid out over the same date axis
+  // the sparklines use so the two line up and an unlogged night stays a gap
+  // rather than closing up and shortening the timeline.
+  const hoursByDate = new Map<string, number>();
+  for (const log of sleepLogs ?? []) {
+    if (log.hours_slept != null) hoursByDate.set(log.log_date, log.hours_slept);
+  }
+  const sleepHoursPoints = coords.dates.map(date => ({ date, hours: hoursByDate.get(date) ?? null }));
+
   // ── Body tracking (continued — bodySummary/bodyTrackedDomains/bodyDayScores/
   // bodyBaselineMap were computed early, above, for the intervention-impact
   // merge) ──────────────────────────────────────────────────────────────
@@ -329,12 +341,49 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
 
   const hasBodyContent = bodySummary.domains.length > 0 || bodySummary.events.length > 0;
 
-  // Page count/numbering shifts by one whenever Body Overview is present,
-  // mirroring the web app's SymetricReport.tsx hasBodyContent-aware
-  // methPageNum/totalPages computation. buildReportDocument derives
-  // totalPages from pages.length itself, so only methodologyPageNum (used
-  // by Page 1's "Methodology on page N" footnote) needs computing here.
-  const methodologyPageNum = hasBodyContent ? 5 : 4;
+  // ── Sparkline pagination ──────────────────────────────────────────────
+  // buildReportDocument derives totalPages from pages.length itself, so only
+  // methodologyPageNum (Page 1's "Methodology on page N" footnote) is worked
+  // out here — and it now has chart pages to count as well as the optional
+  // Body Overview page the web app's SymetricReport.tsx also allowed for.
+  // Charts get their own pages rather than being piled onto the overview
+  // pages, which had no cap on how many they would try to hold — see
+  // SPARKLINES_PER_PAGE. Computed here, before Page 1, because Page 1's
+  // "Methodology on page N" footnote has to count them.
+  const mindSparklines = layOutSparklines({
+    chartDomains: coords.chartDomains,
+    baselineMap,
+    currentRollingMedians: coords.currentRollingMedians,
+    chartHasEnoughData: coords.chartHasEnoughData,
+    chartMarkers: coords.chartMarkers,
+    flaggedClusters,
+    dates: coords.dates,
+    trailingHtml: SPARKLINE_EXPLAINER_HTML,
+  });
+
+  const bodySparklines = hasBodyContent
+    ? layOutSparklines({
+      chartDomains: bodyChartDomains,
+      baselineMap: bodyBaselineMap,
+      currentRollingMedians: bodyCurrentRollingMedians,
+      chartHasEnoughData: bodyChartHasEnoughData,
+      chartMarkers: coords.chartMarkers,
+      flaggedClusters: bodyFlaggedClusters,
+      dates: coords.dates,
+      lineColor: BODY_COLOR,
+      isLowerBetterFn: () => true,
+      trailingHtml: SPARKLINE_EXPLAINER_HTML,
+    })
+    : { inline: '', pages: [] };
+
+  // Order: Executive Summary, Mind Overview, its chart pages, then (when
+  // there is body content) Body Overview and its chart pages, then Context &
+  // Connections and Methodology. Was hardcoded as `hasBodyContent ? 5 : 4`,
+  // which silently stopped being true the moment a page could be added.
+  const methodologyPageNum =
+    2 + mindSparklines.pages.length
+    + (hasBodyContent ? 1 + bodySparklines.pages.length : 0)
+    + 2;
 
   const page1Body = buildPage1BodyHtml({
     userName,
@@ -367,11 +416,10 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   });
 
   const page2Body = buildPage2Html({
-    chartDomains: coords.chartDomains,
     baselineMap,
     currentRollingMedians: coords.currentRollingMedians,
-    chartHasEnoughData: coords.chartHasEnoughData,
     chartMarkers: coords.chartMarkers,
+    sparklinesInline: mindSparklines.inline,
     flaggedClusters,
     dates: coords.dates,
     interventionImpacts,
@@ -379,14 +427,12 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     patternEvolution,
     sleepConnections,
     sleepMedianHours,
+    sleepHoursPoints,
     lagRelationships,
   });
 
   const bodyOverviewBody = hasBodyContent ? buildBodyOverviewHtml({
-    bodyChartDomains,
-    bodyBaselineMap,
-    bodyCurrentRollingMedians,
-    bodyChartHasEnoughData,
+    sparklinesInline: bodySparklines.inline,
     bodyEventOccurrences,
     bodySiteFrequency,
     bodyFlaggedClusters,
@@ -415,7 +461,13 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     pages: [
       { sectionTitle: 'Executive Summary', bodyHtml: page1Body },
       { sectionTitle: 'Mind Overview', bodyHtml: page2Body },
+      // Charts follow the page that introduces them. Each one is its own
+      // page in this list, so "Page 3 of 7" keeps matching the sheet it is
+      // printed on — the thing that stopped being true when a page's content
+      // overflowed and the print engine added a sheet nobody had numbered.
+      ...mindSparklines.pages.map(bodyHtml => ({ sectionTitle: 'Mind Charts', bodyHtml })),
       ...(bodyOverviewBody != null ? [{ sectionTitle: 'Body Overview', bodyHtml: bodyOverviewBody }] : []),
+      ...bodySparklines.pages.map(bodyHtml => ({ sectionTitle: 'Body Charts', bodyHtml })),
       { sectionTitle: 'Context & Connections', bodyHtml: contextConnectionsBody },
       { sectionTitle: 'Data Quality & Methodology', bodyHtml: dataQualityBody },
     ],

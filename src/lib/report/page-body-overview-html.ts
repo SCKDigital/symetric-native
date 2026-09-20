@@ -1,17 +1,12 @@
 import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import type { PatternEvolution } from '@/lib/detection/pattern-evolution';
 import type { RareEvent } from '@/lib/detection/rare-events';
-import { BODY_COLOR } from '@/lib/domains';
-import { buildDomainSparklineSectionHtml, buildEpisodeTimelineHtml, buildRareEventsSectionHtml } from '@/lib/report/page2-findings-html';
-import type { ChartDomain, ChartMarker } from '@/lib/report/chart-coordinates';
+import { buildEpisodeTimelineHtml, buildRareEventsSectionHtml } from '@/lib/report/page2-findings-html';
+import type { ChartMarker } from '@/lib/report/chart-coordinates';
 import type { BodyEventOccurrence, BodySiteFrequency } from '@/lib/report/types';
 import type { DetectedCluster } from '@/lib/supabase';
 
 interface BodyOverviewData {
-  bodyChartDomains: ChartDomain[];
-  bodyBaselineMap: Record<string, number>;
-  bodyCurrentRollingMedians: Record<string, number>;
-  bodyChartHasEnoughData: boolean;
   bodyEventOccurrences: BodyEventOccurrence[];
   bodySiteFrequency: BodySiteFrequency[];
   bodyFlaggedClusters: DetectedCluster[];
@@ -20,12 +15,20 @@ interface BodyOverviewData {
   interventionImpacts: InterventionImpact[];
   bodyRareEvents: RareEvent[];
   bodyPatternEvolution: PatternEvolution[];
+  /** Whatever layOutSparklines left for this page — see page2-html's own
+   *  field of the same name. The body charts now get their own pages too:
+   *  this page was the busier of the two, carrying eight possible severity
+   *  charts plus an event table, a site list, a timeline and rare events. */
+  sparklinesInline: string;
 }
 
 // Capped the same way EpisodeTimeline/RareEventsSection are, for the same
-// overflow reason (see the web app's Page3BodyOverview.tsx's own KNOWN GAP
-// comment about this page being the busiest one and needing the same
-// dedicated overflow follow-up as Page 2 — not fixed here either).
+// overflow reason (the web app's Page3BodyOverview.tsx carries a KNOWN GAP
+// comment about this being the busiest page in the report). The unbounded
+// part of that gap — the sparklines, which grew with the number of tracked
+// domains and had no cap at all — is handled now: they are paginated onto
+// their own pages by layOutSparklines. These two caps stay, because a table
+// of every event ever logged is a different problem from a chart per domain.
 const BODY_EVENT_MAX_ENTRIES = 4;
 const SITE_MAX_ENTRIES = 5;
 
@@ -49,9 +52,8 @@ function fmtDay(d: string): string {
 // generate-report.ts's header comment for that deferral).
 export function buildBodyOverviewHtml(data: BodyOverviewData): string {
   const {
-    bodyChartDomains, bodyBaselineMap, bodyCurrentRollingMedians, bodyChartHasEnoughData,
     bodyEventOccurrences, bodySiteFrequency, bodyFlaggedClusters, chartMarkers, dates,
-    interventionImpacts, bodyRareEvents, bodyPatternEvolution,
+    interventionImpacts, bodyRareEvents, bodyPatternEvolution, sparklinesInline,
   } = data;
 
   const shownEvents = bodyEventOccurrences.slice(0, BODY_EVENT_MAX_ENTRIES);
@@ -89,17 +91,7 @@ export function buildBodyOverviewHtml(data: BodyOverviewData): string {
     `;
 
   return `
-    ${buildDomainSparklineSectionHtml({
-      chartDomains: bodyChartDomains,
-      baselineMap: bodyBaselineMap,
-      currentRollingMedians: bodyCurrentRollingMedians,
-      chartHasEnoughData: bodyChartHasEnoughData,
-      chartMarkers,
-      flaggedClusters: bodyFlaggedClusters,
-      dates,
-      lineColor: BODY_COLOR,
-      isLowerBetterFn: () => true,
-    })}
+    ${sparklinesInline}
 
     <div class="section-gap">
       <p class="section-label">Notable body events</p>
