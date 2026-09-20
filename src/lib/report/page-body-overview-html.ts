@@ -3,6 +3,9 @@ import type { PatternEvolution } from '@/lib/detection/pattern-evolution';
 import type { RareEvent } from '@/lib/detection/rare-events';
 import { buildEpisodeTimelineHtml, buildRareEventsSectionHtml } from '@/lib/report/page2-findings-html';
 import type { ChartMarker } from '@/lib/report/chart-coordinates';
+import { BODY_EVENTS } from '@/lib/body/constants';
+import { MARKER_TYPE_LABELS } from '@/lib/report/theme';
+import type { EventProximityResult } from '@/lib/detection/event-proximity';
 import type { BodyEventOccurrence, BodySiteFrequency } from '@/lib/report/types';
 import type { DetectedCluster } from '@/lib/supabase';
 
@@ -15,6 +18,11 @@ interface BodyOverviewData {
   interventionImpacts: InterventionImpact[];
   bodyRareEvents: RareEvent[];
   bodyPatternEvolution: PatternEvolution[];
+  /** Start of the report range, for marking sites that appeared part-way
+   *  through it rather than running all period. */
+  dateFrom: string;
+  /** Body events counted either side of each medication or therapy marker. */
+  eventProximity: EventProximityResult[];
   /** Whatever layOutSparklines left for this page — see page2-html's own
    *  field of the same name. The body charts now get their own pages too:
    *  this page was the busier of the two, carrying eight possible severity
@@ -29,8 +37,60 @@ interface BodyOverviewData {
 // domains and had no cap at all — is handled now: they are paginated onto
 // their own pages by layOutSparklines. These two caps stay, because a table
 // of every event ever logged is a different problem from a chart per domain.
-const BODY_EVENT_MAX_ENTRIES = 4;
-const SITE_MAX_ENTRIES = 5;
+const BODY_EVENT_MAX_ENTRIES = 2;
+const SITE_MAX_ENTRIES = 3;
+/** A site first seen more than this many days into the range is flagged as
+ *  having appeared during the period rather than run through it. */
+const NEW_SITE_AFTER_DAYS = 14;
+/** This page carries more sections than any other — an event table, a site
+ *  list, intervention proximity, a timeline and rare events — so it gets a
+ *  tighter rare-event cap than Mind Overview. Every list says what it is not
+ *  showing. */
+const BODY_RARE_MAX_ENTRIES = 2;
+/** Capped for the same page-budget reason as the event and site lists above —
+ *  the measured layout check puts this page closest to its sheet. */
+const PROXIMITY_MAX_ENTRIES = 2;
+
+function addDays(date: string, days: number): string {
+  const d = new Date(date + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Events counted either side of a medication or therapy change.
+ *
+ * The scored domains already get this treatment (intervention impact). The
+ * events never have, though they are logged against the same dates — and
+ * "has she been reacting to things since the new drug" is the question
+ * actually asked about a medication in this population.
+ */
+function buildEventProximityHtml(results: EventProximityResult[]): string {
+  if (results.length === 0) return '';
+  const rows = results.slice(0, PROXIMITY_MAX_ENTRIES).map(r => {
+    const eventLabel = BODY_EVENTS[r.eventType as keyof typeof BODY_EVENTS]?.label ?? r.eventType;
+    const markerLabel = r.markerLabel || (MARKER_TYPE_LABELS[r.markerType] ?? r.markerType);
+    return `<tr>
+      <td>${esc(eventLabel)}</td>
+      <td>${esc(markerLabel)}, ${esc(fmtDay(r.markerDate))}</td>
+      <td class="center">${r.before}</td>
+      <td class="center">${r.after}</td>
+      <td class="center">${r.change > 0 ? '+' : ''}${r.change}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="section-gap">
+    <p class="section-label">Events around a medication or therapy change</p>
+    <table class="domain-table">
+      <thead><tr>
+        <th>Event</th><th>Change</th>
+        <th class="center">21 days before</th><th class="center">21 days after</th><th class="center">Difference</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="empty-muted chart-note">Counts of logged events either side of the change, on the same 21-day window the domain comparison uses. Counts only - too few events to test, and nothing here establishes cause.</p>
+  </div>`;
+}
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -54,6 +114,7 @@ export function buildBodyOverviewHtml(data: BodyOverviewData): string {
   const {
     bodyEventOccurrences, bodySiteFrequency, bodyFlaggedClusters, chartMarkers, dates,
     interventionImpacts, bodyRareEvents, bodyPatternEvolution, sparklinesInline,
+    dateFrom, eventProximity,
   } = data;
 
   const shownEvents = bodyEventOccurrences.slice(0, BODY_EVENT_MAX_ENTRIES);
@@ -82,11 +143,19 @@ export function buildBodyOverviewHtml(data: BodyOverviewData): string {
   const siteListHtml = shownSites.length === 0
     ? `<p class="empty-muted">No sites logged in this period.</p>`
     : `
-      ${shownSites.map(site => `
+      ${shownSites.map(site => {
+        // A site first reported well into the period is a joint recruited
+        // during it, not one that has hurt throughout — the distinction a
+        // ranked day-count erases, and the one that matters for a
+        // hypermobility picture.
+        const appearedLate = site.firstSeen > addDays(dateFrom, NEW_SITE_AFTER_DAYS);
+        return `
         <div class="site-row">
-          <span class="site-label">${esc(site.label)}</span>
+          <span class="site-label">${esc(site.label)}${appearedLate ? ' <strong>new</strong>' : ''}</span>
+          <span class="site-dates">${esc(fmtDay(site.firstSeen))} to ${esc(fmtDay(site.lastSeen))}</span>
           <span class="site-count">${site.dayCount} day${site.dayCount !== 1 ? 's' : ''}</span>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
       ${olderSiteCount > 0 ? `<p class="overflow-note">${olderSiteCount} more region${olderSiteCount !== 1 ? 's' : ''} not shown.</p>` : ''}
     `;
 
@@ -105,11 +174,8 @@ export function buildBodyOverviewHtml(data: BodyOverviewData): string {
 
     ${buildEpisodeTimelineHtml({ clusters: bodyFlaggedClusters, chartMarkers, dates, interventionImpacts, showMarkerNumbers: true })}
 
-    ${buildRareEventsSectionHtml(bodyRareEvents, bodyPatternEvolution)}
+    ${buildEventProximityHtml(eventProximity)}
 
-    <div class="explainer-box">
-      <p class="explainer-title">Reading this page</p>
-      <p class="explainer-text">Domain averages and active patterns are summarised on page 1.</p>
-    </div>
+    ${buildRareEventsSectionHtml(bodyRareEvents, bodyPatternEvolution, BODY_RARE_MAX_ENTRIES)}
   `;
 }

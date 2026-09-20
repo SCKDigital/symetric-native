@@ -58,7 +58,17 @@ export function buildReportDocument(params: {
 <style>
   @page { size: letter; margin: ${theme.spacing.page.top}pt ${theme.spacing.page.right}pt ${theme.spacing.page.bottom}pt ${theme.spacing.page.left}pt; }
   * { box-sizing: border-box; }
-  body { font-family: Helvetica, Arial, sans-serif; font-size: ${fontSize.body}pt; color: ${colors.body}; margin: 0; }
+  /* Android has no Helvetica and no Arial: it falls back to Roboto, whose
+     metrics are not Helvetica's, so the same document paginated differently
+     on the two platforms — measured at five of eleven pages overflowing onto
+     unnumbered sheets while the headers went on claiming "Page 3 of 11".
+     Naming Roboto first makes Android's substitution explicit instead of
+     accidental, and every page budget below is now fitted to the WIDER of
+     the two renderings (see scripts/check-report-layout.mjs), so iOS, which
+     gets the narrower Helvetica, always has room to spare. Embedding a font
+     would be the other fix; it costs about a megabyte of base64 per report
+     for a document that is thrown away after printing. */
+  body { font-family: Roboto, "Noto Sans", Helvetica, Arial, sans-serif; font-size: ${fontSize.body}pt; color: ${colors.body}; margin: 0; }
   .page { page-break-after: always; }
   .page:last-child { page-break-after: auto; }
 
@@ -77,14 +87,14 @@ export function buildReportDocument(params: {
   .patient-name { font-weight: bold; font-size: ${fontSize.patientName}pt; color: ${colors.heading}; }
   .subtitle { font-size: ${fontSize.label}pt; color: ${colors.muted}; margin: 0 0 8pt; }
   .section-label { font-weight: bold; font-size: ${fontSize.sectionHeading}pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.7pt; padding-bottom: 3pt; margin: 0 0 3pt; border-bottom: 0.5pt solid ${colors.border}; }
-  .section-gap { margin-bottom: 14pt; }
+  .section-gap { margin-bottom: 11pt; }
   .empty-muted { font-style: italic; font-size: ${fontSize.small}pt; color: ${colors.muted}; margin: 0 0 6pt; }
   .overflow-note { font-style: italic; font-size: ${fontSize.small}pt; color: ${colors.muted}; margin: 1pt 0 4pt; }
-  .completion-line { display: flex; justify-content: space-between; padding-bottom: 6pt; margin-bottom: 8pt; border-bottom: 0.5pt solid ${colors.border}; font-size: ${fontSize.small}pt; color: ${colors.muted}; }
+  .completion-line { display: flex; justify-content: space-between; padding-bottom: 4pt; margin-bottom: 6pt; border-bottom: 0.5pt solid ${colors.border}; font-size: ${fontSize.small}pt; color: ${colors.muted}; }
 
   .domain-table { width: 100%; border-collapse: collapse; }
   .domain-table th { text-align: left; font-weight: bold; font-size: 7pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; border-bottom: 1pt solid ${colors.heading}; padding-bottom: 2pt; }
-  .domain-table td { font-size: ${fontSize.small}pt; padding: 2pt 4pt 2pt 0; border-bottom: 0.5pt solid ${colors.border}; }
+  .domain-table td { font-size: ${fontSize.small}pt; padding: 1.5pt 4pt 1.5pt 0; border-bottom: 0.5pt solid ${colors.border}; }
   .domain-table tr.stable td { background: #FAFAFA; }
   .center { text-align: center; }
 
@@ -92,13 +102,13 @@ export function buildReportDocument(params: {
   .confidence-key .dot { display: inline-block; width: 7pt; height: 7pt; border-radius: 1.5pt; margin-right: 4pt; }
   .pattern-card { display: flex; margin-bottom: 4pt; border-radius: 2pt; overflow: hidden; }
   .pattern-card-border { width: 3pt; flex-shrink: 0; }
-  .pattern-card-body { flex: 1; padding: 4pt 8pt; border: 0.5pt solid ${colors.border}; border-left: none; }
+  .pattern-card-body { flex: 1; padding: 3pt 8pt; border: 0.5pt solid ${colors.border}; border-left: none; }
   .pattern-card-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 6pt; margin-bottom: 2pt; }
   .pattern-card-title { font-weight: bold; font-size: ${fontSize.label}pt; color: ${colors.heading}; }
   .pattern-card-tier { font-weight: bold; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.4pt; flex-shrink: 0; }
   .pattern-card-stat { font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.35; }
 
-  .discuss-item { display: flex; align-items: flex-start; gap: 8pt; margin-bottom: 3pt; }
+  .discuss-item { display: flex; align-items: flex-start; gap: 8pt; margin-bottom: 2pt; }
   .discuss-bullet { display: inline-flex; align-items: center; justify-content: center; width: 16pt; height: 16pt; border-radius: 8pt; background: ${colors.heading}; color: #fff; font-weight: bold; font-size: 7pt; flex-shrink: 0; }
   .discuss-text { flex: 1; font-size: ${fontSize.body}pt; color: ${colors.heading}; line-height: 1.4; }
 
@@ -114,11 +124,33 @@ export function buildReportDocument(params: {
   .sleep-chart-title { font-weight: bold; font-size: ${fontSize.small}pt; color: ${colors.heading}; margin: 0 0 2pt; }
   .sleep-chart-caption { font-size: 7pt; color: ${colors.muted}; line-height: 1.35; margin: 1pt 0 0; }
 
+  .group-block { border: 0.5pt solid ${colors.border}; border-left: 3pt solid ${colors.heading}; padding: 6pt 10pt; margin-bottom: 8pt; page-break-inside: avoid; }
+  .group-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3pt; }
+  .group-title { font-weight: bold; font-size: ${fontSize.label}pt; color: ${colors.heading}; }
+  .group-grade { font-weight: bold; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.4pt; color: ${colors.muted}; }
+  .group-members { font-size: ${fontSize.small}pt; color: ${colors.heading}; line-height: 1.4; margin: 0 0 3pt; }
+  .group-claim { font-size: ${fontSize.small}pt; color: ${colors.body}; margin: 0 0 2pt; }
+  .group-evidence { font-size: 7pt; color: ${colors.muted}; margin: 0 0 4pt; }
+  .group-standalone-label { font-weight: bold; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.5pt; color: ${colors.muted}; margin: 8pt 0 3pt; }
+  .group-standalone { display: flex; justify-content: space-between; gap: 8pt; font-size: ${fontSize.small}pt; padding: 1.5pt 0; border-bottom: 0.5pt solid ${colors.border}; }
+  .standalone-text { color: ${colors.body}; }
+  .standalone-meta { color: ${colors.muted}; flex-shrink: 0; }
+
+  .note-row { display: flex; gap: 8pt; font-size: ${fontSize.small}pt; padding: 2pt 0; border-bottom: 0.5pt solid ${colors.border}; }
+  .note-date { width: 48pt; color: ${colors.muted}; flex-shrink: 0; }
+  .note-text { flex: 1; color: ${colors.body}; line-height: 1.4; }
+
+  .character-row { display: flex; gap: 8pt; font-size: ${fontSize.small}pt; padding: 1.5pt 0; border-bottom: 0.5pt solid ${colors.border}; }
+  .character-date { width: 44pt; color: ${colors.muted}; flex-shrink: 0; }
+  .character-symptom { width: 130pt; color: ${colors.heading}; flex-shrink: 0; }
+  .character-tags { flex: 1; color: ${colors.body}; }
+
   .spark-stack { position: relative; margin-bottom: 2pt; }
   .spark-cell { margin-bottom: 3pt; }
   .spark-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2pt; font-size: ${fontSize.label}pt; }
   .spark-meta { font-size: 7pt; color: ${colors.muted}; }
   .spark-no-data { width: 100%; height: 18pt; background: #F9FAFB; display: flex; align-items: center; justify-content: center; font-style: italic; font-size: 7pt; color: ${colors.muted}; }
+  .spark-axis { display: flex; justify-content: space-between; font-size: 6.5pt; color: ${colors.muted}; margin-top: 10pt; }
   .marker-line { position: absolute; top: 0; bottom: 0; width: 0.75pt; background: ${colors.teal}; opacity: 0.5; }
   .marker-number { position: absolute; bottom: -8pt; width: 11pt; margin-left: -5.5pt; text-align: center; font-weight: bold; font-size: 6.5pt; color: ${colors.teal}; }
 
@@ -145,7 +177,8 @@ export function buildReportDocument(params: {
   .event-col-detail-h { flex: 1; font-weight: bold; font-size: 7pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; }
 
   .site-row { display: flex; justify-content: space-between; padding: 3pt 0; border-bottom: 0.5pt solid ${colors.border}; }
-  .site-label { font-size: ${fontSize.small}pt; color: ${colors.body}; }
+  .site-label { font-size: ${fontSize.small}pt; color: ${colors.body}; flex: 1; }
+  .site-dates { font-size: 7pt; color: ${colors.muted}; margin-right: 10pt; }
   .site-count { font-weight: bold; font-size: ${fontSize.small}pt; color: ${colors.body}; }
 
   .explainer-box { border-left: 2pt solid ${colors.border}; padding: 6pt 0 6pt 8pt; margin-top: 8pt; }

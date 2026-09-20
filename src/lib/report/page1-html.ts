@@ -97,8 +97,7 @@ export function buildPage1BodyHtml(data: Page1Data): string {
   const { colors } = theme;
   const {
     userName, dateFrom, dateTo, completedCheckIns, totalScheduled,
-    trackedDomains, baselineMap, currentRollingMedians, questions, methodologyPageNum,
-    bodyTrackedDomains, bodyBaselineMap, bodyCurrentRollingMedians,
+    questions, methodologyPageNum,
   } = data;
 
   const pct = totalScheduled > 0 ? Math.round((completedCheckIns / totalScheduled) * 100) : 0;
@@ -120,10 +119,8 @@ export function buildPage1BodyHtml(data: Page1Data): string {
       if (!domainToFindingKind[d]) domainToFindingKind[d] = f.kind;
     }
   }
-  const domainTableHtml = buildDomainTableHtml(trackedDomains, baselineMap, currentRollingMedians, domainToFindingKind, colors);
-  const bodyDomainTableHtml = bodyTrackedDomains.length > 0
-    ? buildDomainTableHtml(bodyTrackedDomains, bodyBaselineMap, bodyCurrentRollingMedians, domainToFindingKind, colors)
-    : null;
+
+
 
   const confidenceKeyHtml = topFindings.length === 0 ? '' : `
     <div class="confidence-key">
@@ -170,17 +167,6 @@ export function buildPage1BodyHtml(data: Page1Data): string {
     </div>
 
     <div class="section-gap">
-      <p class="section-label">Mind domain summary</p>
-      ${domainTableHtml}
-    </div>
-
-    ${bodyDomainTableHtml != null ? `
-    <div class="section-gap">
-      <p class="section-label">Body domain summary</p>
-      ${bodyDomainTableHtml}
-    </div>` : ''}
-
-    <div class="section-gap">
       <p class="section-label">Patterns detected this period</p>
       ${confidenceKeyHtml}
       ${patternCardsHtml}
@@ -188,5 +174,51 @@ export function buildPage1BodyHtml(data: Page1Data): string {
     </div>
 
     ${questionsHtml}
+  `;
+}
+
+/**
+ * Every tracked domain against its own baseline, as its own page.
+ *
+ * These two tables used to sit on the executive summary. Seventeen rows of
+ * them, for someone tracking mind and body, on the page that is supposed to
+ * answer "what should we talk about today" — and the measured layout check
+ * put that page at 109% of a sheet under the wider of the two platform
+ * fonts, printing onto an unnumbered twelfth page. Moving them here fits
+ * both tables comfortably AND restores every row: the alternative was
+ * dropping the domains closest to baseline from the summary, which is data a
+ * clinician might well want to see is unremarkable.
+ */
+export function buildDomainSummaryHtml(data: Page1Data): string {
+  const {
+    trackedDomains, baselineMap, currentRollingMedians,
+    bodyTrackedDomains, bodyBaselineMap, bodyCurrentRollingMedians,
+  } = data;
+  const { colors } = theme;
+
+  const allFindings = buildUnifiedFindings(data);
+  const domainToFindingKind: Record<string, string> = {};
+  for (const f of allFindings) {
+    for (const d of f.domains) {
+      if (!domainToFindingKind[d]) domainToFindingKind[d] = f.kind;
+    }
+  }
+
+  return `
+    <div class="section-gap">
+      <p class="section-label">Mind domain summary</p>
+      ${buildDomainTableHtml(trackedDomains, baselineMap, currentRollingMedians, domainToFindingKind, colors)}
+    </div>
+
+    ${bodyTrackedDomains.length > 0 ? `
+    <div class="section-gap">
+      <p class="section-label">Body domain summary</p>
+      ${buildDomainTableHtml(bodyTrackedDomains, bodyBaselineMap, bodyCurrentRollingMedians, domainToFindingKind, colors)}
+    </div>` : ''}
+
+    <div class="explainer-box">
+      <p class="explainer-title">Reading these tables</p>
+      <p class="explainer-text">Each domain is compared against this patient's own rolling baseline, never a population norm. A domain sitting at its baseline is typical for them, which is not the same as being unremarkable in absolute terms.</p>
+    </div>
   `;
 }

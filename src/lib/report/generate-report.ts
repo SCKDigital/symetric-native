@@ -10,23 +10,32 @@ import { detectBodyEventFrequency } from '@/lib/detection/body-event-frequency';
 import { detectBodyEventImpacts } from '@/lib/detection/body-event-impact';
 import { detectBodyTimeOfDayPatterns, MorningEveningPair } from '@/lib/detection/body-time-of-day';
 import type { CircadianPattern } from '@/lib/circadian-detection';
-import { MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
+import { BODY_DOMAINS, MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
 import { BODY_COLOR, resolveActiveDomains } from '@/lib/domains';
 import { median } from '@/lib/baseline-stats';
 import { calculateSortWeight } from '@/lib/priority-scoring';
 import { isBodyDomain } from '@/lib/pattern-findings';
 import { fetchQuestionsForAppointment } from '@/lib/api/questions';
 import { fetchPatternReviewsForAppointment } from '@/lib/api/pattern-reviews';
-import { buildBodyChartDomains, buildChartCoordinates, computeDomainConnections, computeSleepConnections } from '@/lib/report/chart-coordinates';
+import { buildBodyChartDomains, buildChartCoordinates, computeDomainConnections, computeSleepConnections, type ChartDomain } from '@/lib/report/chart-coordinates';
 import { buildBodyOverviewHtml } from '@/lib/report/page-body-overview-html';
 import { buildContextConnectionsHtml } from '@/lib/report/page-context-connections-html';
-import { buildDataQualityHtml } from '@/lib/report/page-data-quality-html';
-import { buildPage1BodyHtml } from '@/lib/report/page1-html';
+import { buildDataQualityHtml, buildMethodologyHtml } from '@/lib/report/page-data-quality-html';
+import { buildDomainSummaryHtml, buildPage1BodyHtml } from '@/lib/report/page1-html';
 import { buildPage2Html, SPARKLINE_EXPLAINER_HTML } from '@/lib/report/page2-html';
+import { buildSleepPageHtml } from '@/lib/report/page-sleep-html';
+import { buildCharacterEntries, buildCharacterSectionHtml } from '@/lib/report/symptom-character';
+import { buildPeriodNotes, buildPeriodNotesHtml } from '@/lib/report/period-notes';
+import { buildCheckedNotFoundHtml, computeCheckedNotFound } from '@/lib/report/checked-not-found';
+import { detectCycleProximity } from '@/lib/detection/cycle-proximity';
+import { detectEventProximity } from '@/lib/detection/event-proximity';
+import { groupConnections, type ConnectionRow, type CorrelationGrouping } from '@/lib/correlation-groups';
+import { fetchLatestSleepConnections } from '@/lib/queries/sleep-connections';
 import { layOutSparklines } from '@/lib/report/page2-findings-html';
 import { computeBodySiteFrequency, computeBodySummaries, buildBodyEventOccurrences } from '@/lib/report/body-summary';
 import { buildReportDocument } from '@/lib/report/report-document';
 import { computeWeeklyCompletion } from '@/lib/report/weekly-completion';
+import { summariseMissedByTimeOfDay, summariseOneTap } from '@/lib/report/how-collected';
 import { supabase } from '@/lib/supabase';
 import type { BodyDomainType, DetectedCluster, PrepareQuestion } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
@@ -265,7 +274,19 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // every mind-side detector call above — not a separate 90-day lookback,
   // matching the web app's own generateReport.ts comment on this exact
   // choice.
-  const bodySummary = computeBodySummaries(bodyCheckInsRaw ?? [], bodyEventsRaw ?? []);
+  const rawBodySummary = computeBodySummaries(bodyCheckInsRaw ?? [], bodyEventsRaw ?? []);
+
+  // Deprecated domains are dropped from the report entirely. `pain` was split
+  // into pain_mechanical and pain_widespread on PAIN_SPLIT_BOUNDARY_DATE, and
+  // BODY_DOMAIN_ORDER deliberately still carries it so History and detection
+  // can read pre-split rows — but a report whose range straddles that date
+  // was charting the retired series alongside both of its replacements, three
+  // pain rows deep, and giving the dead one a "now" value and a deviation dot
+  // a month after it stopped being written to.
+  const bodySummary = {
+    ...rawBodySummary,
+    domains: rawBodySummary.domains.filter(d => !BODY_DOMAINS[d.domain as BodyDomainType]?.deprecated),
+  };
   const bodyTrackedDomains = bodySummary.domains.map(d => d.domain) as BodyDomainType[];
   const bodyDayScores = buildBodyDayScores(bodyCheckInsRaw ?? [], bodyTrackedDomains);
 
@@ -285,6 +306,10 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const mergedDayScores = mergeDays(dayScores, bodyDayScores);
   const combinedDomains = [...activeDomains, ...bodyTrackedDomains];
   const interventionImpacts = detectInterventionImpacts(markers, mergedDayScores, combinedDomains);
+
+  // The report is generated on the patient's own device, so the device zone
+  // is the zone its check-ins were scheduled in — no profile read needed.
+  const reportTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const completedCheckIns = (checkIns ?? []).length; // already filtered to status='completed'
   const totalScheduled = (allCheckIns ?? []).length;
@@ -310,6 +335,25 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     if (log.hours_slept != null) hoursByDate.set(log.log_date, log.hours_slept);
   }
   const sleepHoursPoints = coords.dates.map(date => ({ date, hours: hoursByDate.get(date) ?? null }));
+
+  // The detector's own good-vs-poor-sleep comparison, persisted weekly. Much
+  // stronger than the mean split this file computes for itself — it carries
+  // sample sizes — so it is preferred when a window overlapping this range
+  // exists. Failure is not fatal: the fallback is already computed above.
+  const persistedConnections = await fetchLatestSleepConnections(userId, dateFrom).catch(() => []);
+
+  // The weekly detector's own connections — mind AND body, which the
+  // in-report pass cannot produce because it only sees mind check-ins. Read
+  // exactly as Insights reads them (window_end within range, strongest
+  // first) and grouped with the same function, so the two never disagree.
+  const { data: connectionRows } = await supabase
+    .from('domain_connections').select('*')
+    .eq('user_id', userId)
+    .gte('window_end', dateFrom)
+    .order('strength', { ascending: false });
+  const connectionGrouping: CorrelationGrouping | null = connectionRows && connectionRows.length > 0
+    ? groupConnections(connectionRows as ConnectionRow[])
+    : null;
 
   // ── Body tracking (continued — bodySummary/bodyTrackedDomains/bodyDayScores/
   // bodyBaselineMap were computed early, above, for the intervention-impact
@@ -340,6 +384,10 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const bodySiteFrequency = computeBodySiteFrequency(bodyPainSites, bodyEventsRaw as any ?? []);
 
   const hasBodyContent = bodySummary.domains.length > 0 || bodySummary.events.length > 0;
+
+  const characterSectionHtml = hasBodyContent
+    ? buildCharacterSectionHtml(buildCharacterEntries(bodyCheckInsRaw ?? []))
+    : '';
 
   // ── Sparkline pagination ──────────────────────────────────────────────
   // buildReportDocument derives totalPages from pages.length itself, so only
@@ -381,11 +429,16 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // Connections and Methodology. Was hardcoded as `hasBodyContent ? 5 : 4`,
   // which silently stopped being true the moment a page could be added.
   const methodologyPageNum =
-    2 + mindSparklines.pages.length
+    3 // Executive Summary, Domain Summary, Mind Overview
+    + mindSparklines.pages.length
+    + 1 // Sleep
     + (hasBodyContent ? 1 + bodySparklines.pages.length : 0)
-    + 2;
+    + (characterSectionHtml ? 1 : 0)
+    + 1 // Context & Connections
+    + 1 // Data Quality
+    + 1; // Methodology, which the footnote points at
 
-  const page1Body = buildPage1BodyHtml({
+  const page1Input = {
     userName,
     dateFrom,
     dateTo,
@@ -413,11 +466,34 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     bodyTimeOfDayPatterns,
     bodyEventFrequencyPatterns,
     bodyEventImpacts,
-  });
+  };
+
+  const page1Body = buildPage1BodyHtml(page1Input);
+
+  // Days this report already draws attention to, so a note written on one of
+  // them is shown before the rest — a note beside a flagged episode is the
+  // explanation a clinician is looking for; a note on an ordinary Tuesday is
+  // context.
+  const notableDates = new Set<string>();
+  for (const c of [...flaggedClusters, ...bodyFlaggedClusters]) {
+    notableDates.add(c.start_date);
+    if (c.end_date) notableDates.add(c.end_date);
+  }
+  for (const m of markers) notableDates.add(m.marker_date);
+  // RareEvent carries occurrence_dates, plural — a rare event is a set of
+  // days, not one. Reading a `.date` off it silently added nothing.
+  for (const r of [...rareEvents, ...bodyRareEvents]) {
+    for (const date of r.occurrence_dates ?? []) notableDates.add(date);
+  }
+
+  const periodNotesHtml = buildPeriodNotesHtml(buildPeriodNotes({
+    checkIns: (checkIns ?? []) as never,
+    bodyCheckIns: (bodyCheckInsRaw ?? []) as Record<string, unknown>[],
+    notableDates,
+  }));
 
   const page2Body = buildPage2Html({
-    baselineMap,
-    currentRollingMedians: coords.currentRollingMedians,
+    notesHtml: periodNotesHtml,
     chartMarkers: coords.chartMarkers,
     sparklinesInline: mindSparklines.inline,
     flaggedClusters,
@@ -425,13 +501,44 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     interventionImpacts,
     rareEvents,
     patternEvolution,
-    sleepConnections,
-    sleepMedianHours,
-    sleepHoursPoints,
+  });
+
+  // Sleep gets its own page: quality and duration are different measurements
+  // on different scales, and both were previously reduced to one number each
+  // at the top of a page about something else. Quality has never been charted
+  // at all — see page-sleep-html.ts.
+  const sleepQualityPoints = coords.dates.map(date => ({ date, value: coords.dailyMeans[date]?.['sleep'] ?? null }));
+  const sleepQualityDomain: ChartDomain | null = sleepQualityPoints.some(p => p.value != null)
+    ? {
+      domain: 'sleep',
+      points: sleepQualityPoints,
+      baseline: baselineMap['sleep'] ?? 3,
+      dashPattern: '',
+      observedMin: 1,
+      observedMax: 5,
+    }
+    : null;
+
+  const sleepPageBody = buildSleepPageHtml({
+    qualityDomain: sleepQualityDomain,
+    dates: coords.dates,
+    baselineMap,
+    currentRollingMedians: coords.currentRollingMedians,
+    chartMarkers: coords.chartMarkers,
+    flaggedClusters,
+    hoursPoints: sleepHoursPoints,
+    medianHours: sleepMedianHours,
+    persistedConnections,
+    fallbackConnections: sleepConnections,
     lagRelationships,
   });
 
   const bodyOverviewBody = hasBodyContent ? buildBodyOverviewHtml({
+    dateFrom,
+    eventProximity: detectEventProximity(
+      (bodyEventsRaw ?? []) as unknown as { event_date: string; event_type: string }[],
+      markers,
+    ),
     sparklinesInline: bodySparklines.inline,
     bodyEventOccurrences,
     bodySiteFrequency,
@@ -443,15 +550,35 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     bodyPatternEvolution,
   }) : null;
 
+  // Cycle day 1 markers drive this; includeCycle has already removed them
+  // from `markers` when the patient excluded cycle data from the report.
+  const cycleDayOneDates = markers.filter(m => m.marker_type === 'cycle_phase').map(m => m.marker_date);
+  const mindDayScoresForCycle = dayScores.map(d => ({ date: d.date, scores: d.scores as Record<string, number | undefined> }));
+  const bodyDayScoresForCycle = bodyDayScores.map(d => ({ date: d.date, scores: d.scores as Record<string, number | undefined> }));
+  const cycleProximity = [
+    ...detectCycleProximity(mindDayScoresForCycle, activeDomains, cycleDayOneDates),
+    ...detectCycleProximity(bodyDayScoresForCycle, bodyTrackedDomains, cycleDayOneDates),
+  ].sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+
+  // Stated negatives, so the positives above have a denominator.
+  const foundPairKeys = new Set(domainConnections.map(c => `${c.domainA}|${c.domainB}`));
+  const checkedNotFoundHtml = buildCheckedNotFoundHtml(
+    computeCheckedNotFound(coords.dates, coords.dailyMeans, coords.trackedDomains, foundPairKeys),
+  );
+
   const contextConnectionsBody = buildContextConnectionsHtml({
+    cycleProximity,
+    checkedNotFoundHtml,
+    grouping: connectionGrouping,
     dayOfWeekPatterns,
     circadianPatterns: (includeMind ? (circadianPatterns ?? []) : []) as CircadianPattern[],
     domainConnections,
   });
 
   const dataQualityBody = buildDataQualityHtml({
-    dateFrom,
-    dateTo,
+    // How the record was made, alongside how much of it there is.
+    oneTap: summariseOneTap(allCheckIns ?? []),
+    missed: summariseMissedByTimeOfDay(allCheckIns ?? [], reportTimezone),
     weeklyCompletion,
     completedCheckIns,
     totalScheduled,
@@ -460,16 +587,23 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   const html = buildReportDocument({
     pages: [
       { sectionTitle: 'Executive Summary', bodyHtml: page1Body },
+      { sectionTitle: 'Domain Summary', bodyHtml: buildDomainSummaryHtml(page1Input) },
       { sectionTitle: 'Mind Overview', bodyHtml: page2Body },
       // Charts follow the page that introduces them. Each one is its own
       // page in this list, so "Page 3 of 7" keeps matching the sheet it is
       // printed on — the thing that stopped being true when a page's content
       // overflowed and the print engine added a sheet nobody had numbered.
       ...mindSparklines.pages.map(bodyHtml => ({ sectionTitle: 'Mind Charts', bodyHtml })),
+      { sectionTitle: 'Sleep', bodyHtml: sleepPageBody },
       ...(bodyOverviewBody != null ? [{ sectionTitle: 'Body Overview', bodyHtml: bodyOverviewBody }] : []),
       ...bodySparklines.pages.map(bodyHtml => ({ sectionTitle: 'Body Charts', bodyHtml })),
+      // A page of its own: measured at 114% of a sheet when it trailed the
+      // last chart page, and it is a list that grows with how much the
+      // patient describes.
+      ...(characterSectionHtml ? [{ sectionTitle: 'Symptom Character', bodyHtml: characterSectionHtml }] : []),
       { sectionTitle: 'Context & Connections', bodyHtml: contextConnectionsBody },
-      { sectionTitle: 'Data Quality & Methodology', bodyHtml: dataQualityBody },
+      { sectionTitle: 'Data Quality', bodyHtml: dataQualityBody },
+      { sectionTitle: 'Methodology', bodyHtml: buildMethodologyHtml(dateFrom, dateTo) },
     ],
     generationDate,
     dateFrom,
