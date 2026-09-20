@@ -11,12 +11,17 @@ import { theme } from '@/lib/report/theme';
 // with a 7.2-hour median, one steady and one alternating 4 and 11, produced
 // an identical report line.
 //
-// Same inline-<svg>-into-HTML approach as sparkline-svg.ts (see its header for
-// why nothing is rasterised here), and the same reference-line convention as
-// the domain sparklines: the line drawn is this person's own median, never a
-// population "recommended" band. A normative 7-9 hour stripe would contradict
-// the report's own explainer — "not 'fine' in an absolute sense" — and would
-// be the only population claim in the document.
+// Same inline-<svg>-into-HTML approach as sparkline-svg.ts — see its header
+// for why nothing is rasterised here.
+//
+// No reference line of any kind. A population "recommended" 7-9 hour band was
+// never an option: it would be the only normative claim in a document whose
+// own explainer says a typical score is not the same as a fine one. A median
+// line was drawn instead, and that is gone too — a median is the summary this
+// chart exists to replace, and drawing it over the nights invites reading the
+// bars as deviations from a target rather than as the nights they are. The
+// median still sets the top of the axis so a run of long nights cannot be
+// clipped; it is simply not shown.
 
 // Matched to the domain sparklines rather than to CONTENT_WIDTH. Both are
 // emitted as a bare `width="590"` on the <svg>, which a print stylesheet reads
@@ -26,7 +31,7 @@ import { theme } from '@/lib/report/theme';
 const W = SPARKLINE_WIDTH;
 const H = 104;
 const PAD_L = 22;
-const PAD_R = 34; // room for the median label at the right-hand end
+const PAD_R = 4; // was 34, to clear the median label that is no longer drawn
 const PAD_T = 8;
 const PAD_B = 16;
 const PLOT_W = W - PAD_L - PAD_R;
@@ -85,10 +90,6 @@ export function renderHoursSleptSvg(points: HoursSleptPoint[], medianHours: numb
     `<text x="${PAD_L - 3}" y="${(yOf(h) + 2).toFixed(1)}" text-anchor="end" fill="${theme.colors.muted}" font-size="6">${h % 1 === 0 ? h : h.toFixed(1)}</text>`
   ).join('');
 
-  const medianY = yOf(medianHours);
-  const medianLine = `<line x1="${PAD_L}" y1="${medianY.toFixed(1)}" x2="${(PAD_L + PLOT_W).toFixed(1)}" y2="${medianY.toFixed(1)}" stroke="${theme.colors.heading}" stroke-width="0.8" stroke-dasharray="4,3" />
-    <text x="${(PAD_L + PLOT_W + 3).toFixed(1)}" y="${(medianY + 2).toFixed(1)}" fill="${theme.colors.heading}" font-size="6">med ${medianHours.toFixed(1)}h</text>`;
-
   // First and last night only. Every column is one night, in order, and the
   // sparklines directly below share this date range, so denser labelling would
   // repeat what that section already establishes.
@@ -102,7 +103,6 @@ export function renderHoursSleptSvg(points: HoursSleptPoint[], medianHours: numb
     ${gridlines}
     ${axis}
     ${bars}
-    ${medianLine}
     ${yLabels}
     ${xLabels}
   </svg>`;
