@@ -13,6 +13,7 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
 import { useAppLock } from '@/hooks/use-app-lock';
+import { usePushTokenSync } from '@/hooks/use-push-token-sync';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -63,8 +64,9 @@ export default function RootLayout() {
 // while already running (the 'url' event), and handing it to Supabase via
 // trySetSessionFromUrl.
 function AuthGate() {
-  const { session, profile, loading, user } = useAuth();
+  const { session, profile, loading, user, refreshProfile } = useAuth();
   const { locked, unlock } = useAppLock(user?.id, profile?.app_lock_enabled ?? false);
+  usePushTokenSync(user?.id, profile?.push_enabled ?? false, refreshProfile);
 
   useEffect(() => {
     Linking.getInitialURL().then(url => {

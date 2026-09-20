@@ -28,7 +28,7 @@ import {
 } from '@/lib/body/constants';
 import { useComfort } from '@/hooks/use-comfort';
 import { resolveActiveDomains } from '@/lib/domains';
-import { subscribeToPushNotifications, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
+import { subscribeToPushNotifications, syncPushToken, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
 import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
 import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
@@ -55,6 +55,48 @@ import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 
 type SheetType = 'activeWindow' | 'frequency' | 'bodyTracking' | 'dnd' | 'timeFormat'
   | 'export' | 'deleteRange' | 'deleteAll' | 'resetBaseline' | null;
+
+/**
+ * Turns a failed send-test-notification call into something that says what
+ * went wrong. It used to read "Failed to send. Try toggling notifications off
+ * and on." for every possible cause — a device that was never registered, a
+ * token the push service has retired, missing FCM/APNs credentials on the
+ * server, and a plain network drop all produced the same sentence, and only
+ * one of them was fixable by toggling anything.
+ *
+ * supabase-js reports a non-2xx response as a FunctionsHttpError whose
+ * `context` is the raw Response, so the function's own error code is only
+ * reachable by reading that body.
+ */
+async function describeTestFailure(error: unknown): Promise<string> {
+  let code = '';
+  const context = (error as { context?: unknown })?.context;
+  if (context instanceof Response) {
+    try {
+      const body = await context.json();
+      code = String(body?.error ?? '');
+    } catch {
+      // Non-JSON body (a gateway error page, say) — fall through to the
+      // generic message below rather than showing HTML to the user.
+    }
+  }
+
+  if (code === 'no_subscription') {
+    return 'This device isn’t registered for notifications. Turn Push notifications off, then on again.';
+  }
+  if (code === 'DeviceNotRegistered' || code === 'subscription_expired') {
+    return 'This device’s registration has expired. Turn Push notifications off, then on again.';
+  }
+  if (code === 'InvalidCredentials' || code === 'MismatchSenderId') {
+    // Nothing the user can do — the app's own push credentials are wrong.
+    return `Notifications aren’t set up correctly for this build (${code}). This needs fixing in the app, not on your device.`;
+  }
+  if (code === 'MessageRateExceeded') {
+    return 'Too many test notifications just now. Wait a minute and try again.';
+  }
+  if (code) return `Failed to send: ${code}`;
+  return 'Failed to send. Check your connection and try again.';
+}
 
 function DomainPills({ activeDomains, onToggle }: { activeDomains: DomainType[]; onToggle: (d: DomainType) => void }) {
   return (
@@ -307,9 +349,14 @@ export default function SettingsScreen() {
     if (!user || testingPush) return;
     setTestingPush(true);
     setTestPushResult(null);
+    // Register this device's token first. A test that fails only because the
+    // stored token is stale is the single most common way this reports a
+    // problem the user cannot act on, and re-registering is what "toggle it
+    // off and on" was really doing.
+    await syncPushToken(user.id);
     const { error } = await supabase.functions.invoke('send-test-notification');
     setTestPushResult(error
-      ? { ok: false, message: 'Failed to send. Try toggling notifications off and on.' }
+      ? { ok: false, message: await describeTestFailure(error) }
       : { ok: true, message: 'Notification sent - check your device.' });
     setTestingPush(false);
   };
