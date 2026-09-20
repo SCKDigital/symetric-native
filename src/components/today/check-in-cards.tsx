@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useComfort } from '@/hooks/use-comfort';
@@ -133,7 +134,7 @@ function makeStyles(t: ComfortTokens) {
     pressed: { opacity: 0.85 },
 
     hero: {
-      backgroundColor: '#12162b', borderWidth: 1, borderColor: t.accentBorder, borderRadius: 24,
+      backgroundColor: BRAND.surface, borderWidth: 1, borderColor: t.accentBorder, borderRadius: 24,
       paddingTop: 32, paddingHorizontal: 28, paddingBottom: 28, gap: 28,
     },
     eyebrow: { fontSize: t.fs(12), color: t.accentText, letterSpacing: 1.4, fontWeight: '700', marginBottom: 12 },
@@ -150,7 +151,7 @@ function makeStyles(t: ComfortTokens) {
     },
 
     pendingCard: {
-      backgroundColor: '#12162b', borderWidth: 1, borderColor: t.accentBorder, borderRadius: 24,
+      backgroundColor: BRAND.surface, borderWidth: 1, borderColor: t.accentBorder, borderRadius: 24,
       paddingVertical: 24, paddingHorizontal: 28, marginBottom: 16,
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16,
     },

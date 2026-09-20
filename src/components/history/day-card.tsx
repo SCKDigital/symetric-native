@@ -11,6 +11,7 @@ import type { BodyColumnMode } from '@/lib/history/day-card-helpers';
 import { summariseDay, type BodyReadingPair, type DaySummaryCheckIn } from '@/lib/summarise-day';
 import { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite, CheckIn, Profile, SleepLog } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
+import { BRAND } from '@/constants/brand';
 
 /** Same-day am/pm pairs for the body-direction clause — only domains logged
  *  at both times of day count (see BodyReadingPair). */
@@ -53,7 +54,7 @@ const MARKER_ICON: Partial<Record<InterventionMarker['marker_type'], typeof Pill
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   return (
-    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}>
+    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={BRAND.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}>
       <Path d="M6 9l6 6 6-6" />
     </Svg>
   );
@@ -207,6 +208,6 @@ const styles = StyleSheet.create({
   chipLabel: { fontSize: 11, color: '#8892a4' },
   bodySectionSpaced: { marginTop: 20 },
   expandButton: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12, paddingVertical: 4 },
-  expandButtonText: { fontSize: 13, color: '#818cf8' },
+  expandButtonText: { fontSize: 13, color: BRAND.text },
   expandedSection: { borderTopWidth: 1, borderTopColor: '#1e2533', padding: 20, paddingTop: 16 },
 });

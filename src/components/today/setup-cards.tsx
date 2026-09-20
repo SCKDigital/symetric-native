@@ -24,6 +24,7 @@ import { supabase, type BodyDomainType, type DomainType } from '@/lib/supabase';
 import { todayDateString } from '@/lib/date-utils';
 import { TimeField } from '@/components/today/time-field';
 import type { TimeFormat } from '@/lib/time-format';
+import { BRAND } from '@/constants/brand';
 
 /**
  * First-run setup, as cards on Today rather than a wizard in front of it.
@@ -68,7 +69,7 @@ function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, 
   secondaryLabel?: string;
   tone?: 'indigo' | 'body';
 }) {
-  const accent = tone === 'body' ? BODY_COLOR : '#818cf8';
+  const accent = tone === 'body' ? BODY_COLOR : BRAND.text;
   return (
     <View style={[styles.card, { borderLeftColor: accent }]}>
       <Text style={styles.cardTitle}>{title}</Text>
@@ -553,7 +554,7 @@ const styles = StyleSheet.create({
   pillDisabled: { opacity: 0.35 },
   pillText: { fontSize: 13, color: '#8892a4' },
   pillTextActive: { color: '#e2c08a' },
-  sheetSave: { marginTop: 28, backgroundColor: '#4f46e5', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  sheetSave: { marginTop: 28, backgroundColor: BRAND.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   sheetSaveText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   sheetCancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
 });

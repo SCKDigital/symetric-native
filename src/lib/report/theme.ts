@@ -34,6 +34,15 @@ export const theme = {
     amberBg: '#FAEEDA',
     gray: '#5F5E5A',
     markerAmber: '#0F6E56',
+    /** The mind sparkline's ink. A print colour, chosen for white paper, and
+     *  deliberately NOT the app's accent token: the screen accent is picked
+     *  for legibility on near-black and can be invisible here. Body lines use
+     *  BODY_COLOR, which is likewise a print-safe bronze.
+     *
+     *  Its current value is the one it has always had, carried over unchanged.
+     *  Worth revisiting on its own merits: #818cf8 manages only 3.0:1 against
+     *  white, which is thin for a line a clinician is asked to read. */
+    mindLine: '#818cf8',
   },
   spacing: {
     // US Letter: 612 x 792 pt; 0.75in margins = 54pt

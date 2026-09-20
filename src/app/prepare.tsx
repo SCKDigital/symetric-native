@@ -20,6 +20,7 @@ import { defaultRangeForPreset, loadSavedRange, saveRange, type PrepareRange } f
 import { fetchMarkers } from '@/lib/queries/markers';
 import type { Appointment, DetectedCluster } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
+import { BRAND } from '@/constants/brand';
 
 
 // Chunk 6 of the Prepare tab port — every sub-component is now wired,
@@ -132,7 +133,7 @@ export default function PrepareScreen() {
           </>
         ) : (
           <View style={styles.emptyCard}>
-            <Svg width={32} height={32} viewBox="0 0 16 16" fill="none" stroke="#7b83f0"
+            <Svg width={32} height={32} viewBox="0 0 16 16" fill="none" stroke={BRAND.textFlat}
               strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={styles.emptyIcon}>
               <Rect x={2} y={3} width={12} height={11} rx={1.5} />
               <Line x1={2} y1={7} x2={14} y2={7} />

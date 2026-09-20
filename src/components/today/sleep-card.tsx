@@ -1,3 +1,4 @@
+import { BRAND, brandTint } from '@/constants/brand';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -207,7 +208,7 @@ export default function SleepCard({ onLogged }: Props) {
         <Text style={styles.ctaLabel}>{copy.card.sectionLabel.toUpperCase()}</Text>
         <Text style={styles.ctaText}>{copy.card.cta}</Text>
       </View>
-      <ChevronRightIcon size={16} color="#818cf8" />
+      <ChevronRightIcon size={16} color={BRAND.text} />
     </Pressable>
   );
 }
@@ -231,16 +232,16 @@ function makeStyles(t: ComfortTokens) {
   loggedHours: { fontSize: t.fs(15), color: '#6b7688' },
   dots: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  dotOn: { backgroundColor: '#818cf8' },
+  dotOn: { backgroundColor: BRAND.text },
   dotOff: { backgroundColor: '#2d3748' },
   tick: { fontSize: t.fs(14), color: '#2d3748' },
 
   editButton: {
-    marginTop: 8, backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1,
-    borderColor: 'rgba(99,102,241,0.15)', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
+    marginTop: 8, backgroundColor: brandTint(BRAND.fillAlt, 0.06), borderWidth: 1,
+    borderColor: brandTint(BRAND.fillAlt, 0.15), borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editButtonText: { fontSize: t.fs(13), color: '#818cf8' },
+  editButtonText: { fontSize: t.fs(13), color: BRAND.text },
   editButtonMeta: { fontSize: t.fs(11), color: '#4a5568' },
 
   expanded: {
@@ -267,7 +268,7 @@ function makeStyles(t: ComfortTokens) {
     paddingVertical: 14, paddingHorizontal: 18, marginBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  ctaLabel: { fontSize: t.fs(11), color: '#6366f1', letterSpacing: 0.9, fontWeight: '700', marginBottom: 3 },
+  ctaLabel: { fontSize: t.fs(11), color: BRAND.fillAlt, letterSpacing: 0.9, fontWeight: '700', marginBottom: 3 },
   ctaText: { fontSize: t.fs(15), color: '#cbd5e0', fontWeight: '500' },
   });
 }

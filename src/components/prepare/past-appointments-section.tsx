@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fetchAllAppointments } from '@/lib/api/appointments';
 import { parseDateString } from '@/lib/date-utils';
 import type { Appointment } from '@/lib/supabase';
+import { BRAND, brandTint } from '@/constants/brand';
 
 function categoryLabel(categories: Appointment['focus_categories']): string {
   const hasMind = categories.includes('mind');
@@ -91,15 +92,15 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   label: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9 },
-  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: 'rgba(129,140,248,0.15)', borderRadius: 20 },
-  countText: { fontSize: 11, fontWeight: '600', color: '#818cf8' },
+  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: brandTint(BRAND.text, 0.15), borderRadius: 20 },
+  countText: { fontSize: 11, fontWeight: '600', color: BRAND.text },
   chevron: { fontSize: 10, color: '#6b7a99' },
   list: { marginTop: 14, gap: 14 },
   item: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#1e2533' },
   itemHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   itemDate: { fontSize: 14, fontWeight: '500', color: '#c8d0e0' },
-  pill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 8, backgroundColor: 'rgba(129,140,248,0.12)', borderWidth: 1, borderColor: 'rgba(129,140,248,0.25)' },
-  pillText: { fontSize: 10, fontWeight: '600', color: '#818cf8' },
+  pill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 8, backgroundColor: brandTint(BRAND.text, 0.12), borderWidth: 1, borderColor: brandTint(BRAND.text, 0.25) },
+  pillText: { fontSize: 10, fontWeight: '600', color: BRAND.text },
   itemFocus: { fontSize: 12, color: '#6b7a99', marginBottom: 4 },
   itemNotes: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
 });

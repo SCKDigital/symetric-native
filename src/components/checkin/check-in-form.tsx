@@ -1,3 +1,4 @@
+import { BRAND, brandTint } from '@/constants/brand';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -111,7 +112,7 @@ export default function CheckInForm({
       <View style={styles.confirmationRoot}>
         <View style={styles.confirmationIcon}>
           <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
-            <Path d="M3 8l3.5 3.5L13 5" stroke={comfortActive ? COMFORT_TOKENS.accentText : '#818cf8'} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            <Path d="M3 8l3.5 3.5L13 5" stroke={comfortActive ? COMFORT_TOKENS.accentText : BRAND.text} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
           </Svg>
         </View>
         <Text style={styles.confirmationLogged}>Logged</Text>
@@ -206,9 +207,9 @@ function makeStyles(t: ComfortTokens) {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(99,102,241,0.15)',
+    backgroundColor: brandTint(BRAND.fillAlt, 0.15),
     borderWidth: 1,
-    borderColor: 'rgba(99,102,241,0.3)',
+    borderColor: brandTint(BRAND.fillAlt, 0.3),
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,

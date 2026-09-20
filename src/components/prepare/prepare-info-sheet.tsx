@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
@@ -5,7 +6,7 @@ import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 // path data, same 16-unit viewBox, same 1.6 stroke.
 function Frame({ children }: { children: React.ReactNode }) {
   return (
-    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="#7b83f0"
+    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke={BRAND.textFlat}
       strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
       {children}
     </Svg>

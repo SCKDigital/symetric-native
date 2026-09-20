@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingBackButton, OnboardingCheckbox, OnboardingPrimaryButton } from '@/components/onboarding/onboarding-controls';
+import { BRAND } from '@/constants/brand';
 
 interface MindConsentStepProps {
   mindNotHealthServiceAck: boolean;
@@ -67,7 +68,7 @@ const styles = StyleSheet.create({
   subheading: { fontSize: 15, color: '#94a3b8', lineHeight: 24, marginBottom: 28 },
   checkboxGroup: { gap: 12, marginBottom: 28 },
   legal: { fontSize: 12, color: '#4a5568', lineHeight: 18, marginBottom: 28 },
-  legalLink: { color: '#818cf8', textDecorationLine: 'underline' },
+  legalLink: { color: BRAND.text, textDecorationLine: 'underline' },
   buttonRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   primaryButtonFlex: { flex: 1 },
 });

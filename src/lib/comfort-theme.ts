@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 /**
  * The visual half of comfort mode: quieter accents and larger type.
  *
@@ -27,9 +28,9 @@ export interface ComfortTokens {
   fs: (size: number) => number;
 }
 
-const NORMAL_ACCENT = '#4f46e5';
-const NORMAL_ACCENT_TEXT = '#818cf8';
-const NORMAL_ACCENT_BORDER = '#3730a3';
+const NORMAL_ACCENT = BRAND.fill;
+const NORMAL_ACCENT_TEXT = BRAND.text;
+const NORMAL_ACCENT_BORDER = BRAND.border;
 
 // Same hues, dropped chroma and lightness. White on #3f3d6b clears 8:1, so the
 // CTA is still unmistakably a button — it just stops being the brightest thing

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SymetricLogo } from '@/components/symetric-logo';
 import { useAuth } from '@/contexts/auth-context';
+import { BRAND } from '@/constants/brand';
 
 // Ported from the web app's src/components/auth/AuthScreen.tsx. Same three
 // states (landing / email / sent), same copy, same staggered landing-screen
@@ -145,7 +146,7 @@ export function AuthScreen() {
                     </View>
                   ) : (
                     <LinearGradient
-                      colors={['#4f46e5', '#6366f1']}
+                      colors={[BRAND.fill, BRAND.fillAlt]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.submitButton}>
@@ -193,7 +194,7 @@ const styles = StyleSheet.create({
   wordmark: { fontSize: 24, fontWeight: '600', color: '#ffffff', letterSpacing: -0.5 },
   tagline: { fontSize: 16, color: '#6b6882', maxWidth: 210, textAlign: 'center' },
   buttonGroup: { maxWidth: 340, width: '100%', gap: 12 },
-  continueButton: { paddingVertical: 18, backgroundColor: '#5d52e0', borderRadius: 8, alignItems: 'center' },
+  continueButton: { paddingVertical: 18, backgroundColor: BRAND.signIn, borderRadius: 8, alignItems: 'center' },
   continueButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   pressed: { opacity: 0.88 },
   disclaimer: { fontSize: 11, color: '#38364a', textAlign: 'center' },

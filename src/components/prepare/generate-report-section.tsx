@@ -6,6 +6,7 @@ import { parseDateString } from '@/lib/date-utils';
 import { generateReport } from '@/lib/report/generate-report';
 import { supabase } from '@/lib/supabase';
 import type { DetectedCluster } from '@/lib/supabase';
+import { BRAND } from '@/constants/brand';
 
 function fmtDate(d: string): string {
   return parseDateString(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -130,7 +131,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
       <Pressable onPress={handleGenerate} disabled={disabled} style={[styles.generateButton, disabled && styles.generateButtonDisabled]}>
         {generating ? (
           <View style={styles.generatingRow}>
-            <ActivityIndicator size="small" color="#818cf8" />
+            <ActivityIndicator size="small" color={BRAND.text} />
             <Text style={styles.generateButtonText}>Generating…</Text>
           </View>
         ) : (
@@ -172,14 +173,14 @@ const styles = StyleSheet.create({
     width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#2d3748',
     alignItems: 'center', justifyContent: 'center',
   },
-  checkboxOn: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  checkboxOn: { backgroundColor: BRAND.fill, borderColor: BRAND.fill },
   checkboxTick: { fontSize: 13, color: '#fff', fontWeight: '700' },
   includeLabel: { fontSize: 15, color: '#e2e8f0', flex: 1 },
   patternCount: { fontSize: 13, color: '#6b7a99', marginBottom: 16 },
   statusText: { fontSize: 13, color: '#6b7a99', marginBottom: 12 },
   errorText: { fontSize: 13, color: '#f87171', marginBottom: 12 },
-  successText: { fontSize: 13, color: '#818cf8', marginBottom: 12 },
-  generateButton: { width: '100%', padding: 13, backgroundColor: '#4f46e5', borderRadius: 10, alignItems: 'center' },
+  successText: { fontSize: 13, color: BRAND.text, marginBottom: 12 },
+  generateButton: { width: '100%', padding: 13, backgroundColor: BRAND.fill, borderRadius: 10, alignItems: 'center' },
   generateButtonDisabled: { backgroundColor: '#2d3748' },
   generateButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   generatingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

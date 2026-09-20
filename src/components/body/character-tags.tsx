@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { BRAND, brandTint } from '@/constants/brand';
 
 interface Props {
   options: string[];
@@ -40,7 +41,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, color: '#8892a4', marginBottom: 8 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { paddingVertical: 7, paddingHorizontal: 11, minHeight: 32, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748', backgroundColor: '#0a0c12', justifyContent: 'center' },
-  chipActive: { borderWidth: 1.5, borderColor: '#a5b4fc', backgroundColor: 'rgba(165,180,252,0.15)' },
+  chipActive: { borderWidth: 1.5, borderColor: BRAND.textSoft, backgroundColor: brandTint(BRAND.textSoft, 0.15) },
   chipText: { fontSize: 12.5, color: '#8892a4' },
-  chipTextActive: { color: '#a5b4fc', fontWeight: '600' },
+  chipTextActive: { color: BRAND.textSoft, fontWeight: '600' },
 });

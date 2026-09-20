@@ -6,6 +6,7 @@ import { ChevronRight, SheetButton, SheetCancel, SheetShell } from '@/components
 import { localTimeToUTC, timeOfDayInTZ } from '@/lib/scheduler';
 import type { CheckIn, CheckInSettings } from '@/lib/supabase';
 import { formatTime, formatWindowTime, type TimeFormat } from '@/lib/time-format';
+import { BRAND } from '@/constants/brand';
 
 // Ports of the web app's RescheduleListSheet and RescheduleTimePickerSheet
 // from today/TodayCards.tsx. Today's next-check-in block has always shown a
@@ -184,15 +185,15 @@ const styles = StyleSheet.create({
   listTime: { fontSize: 15, fontWeight: '500', color: '#c8d0e0' },
   listTimeDisabled: { color: '#4a5568' },
   listRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  listStatus: { fontSize: 13, color: '#818cf8' },
+  listStatus: { fontSize: 13, color: BRAND.text },
 
   backRow: { paddingBottom: 14 },
-  backText: { fontSize: 13, color: '#818cf8' },
+  backText: { fontSize: 13, color: BRAND.text },
   timeInput: {
     backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#2d3748', borderRadius: 10,
     paddingVertical: 14, paddingHorizontal: 16, marginBottom: 16,
   },
   timeInputText: { fontSize: 20, fontWeight: '600', color: '#e2e8f0' },
-  done: { fontSize: 14, color: '#818cf8', textAlign: 'center', paddingVertical: 8 },
+  done: { fontSize: 14, color: BRAND.text, textAlign: 'center', paddingVertical: 8 },
   error: { fontSize: 12, color: '#f87171', marginBottom: 12 },
 });

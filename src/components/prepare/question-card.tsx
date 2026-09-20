@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Path, Polygon, Polyline } from 'react-native-svg';
@@ -156,7 +157,7 @@ export default function QuestionCard({ question, onChange, onDelete, onTogglePri
       {!editing && (
         <View style={styles.bottomRow}>
           <Pressable onPress={handleTogglePriority} disabled={toggling} style={styles.priorityButton}>
-            <StarIcon filled={question.is_priority} color={question.is_priority ? '#818cf8' : '#4a5568'} />
+            <StarIcon filled={question.is_priority} color={question.is_priority ? BRAND.text : '#4a5568'} />
             <Text style={[styles.priorityText, question.is_priority && styles.priorityTextActive]}>
               {question.is_priority ? 'Priority' : 'Make priority'}
             </Text>
@@ -191,12 +192,12 @@ const styles = StyleSheet.create({
   checkmark: { color: '#9ca3af', fontSize: 10, fontWeight: '700' },
   textWrap: { flex: 1, minWidth: 0 },
   questionText: { fontSize: 14, color: '#c8d0e0', lineHeight: 20 },
-  editInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#3730a3', borderRadius: 8, padding: 8, paddingHorizontal: 10, color: '#e2e8f0', fontSize: 14, minHeight: 44, textAlignVertical: 'top' },
+  editInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: BRAND.border, borderRadius: 8, padding: 8, paddingHorizontal: 10, color: '#e2e8f0', fontSize: 14, minHeight: 44, textAlignVertical: 'top' },
   autoGenText: { fontSize: 11, color: '#4a5568', marginTop: 4 },
   actions: { flexDirection: 'row', gap: 6 },
   iconButton: { padding: 2 },
   editActions: { flexDirection: 'row', gap: 8, marginTop: 8, paddingLeft: 28 },
-  saveButton: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: '#4f46e5', borderRadius: 7 },
+  saveButton: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: BRAND.fill, borderRadius: 7 },
   saveButtonDisabled: { backgroundColor: '#2d3748' },
   saveButtonText: { fontSize: 13, fontWeight: '500', color: '#fff' },
   saveButtonTextDisabled: { color: '#6b7a99' },
@@ -204,6 +205,6 @@ const styles = StyleSheet.create({
   bottomRow: { paddingLeft: 28, marginTop: 6, flexDirection: 'row', gap: 12, alignItems: 'center' },
   priorityButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   priorityText: { fontSize: 12, color: '#4a5568' },
-  priorityTextActive: { color: '#818cf8' },
+  priorityTextActive: { color: BRAND.text },
   deleteText: { fontSize: 12, color: '#f87171', fontWeight: '600' },
 });

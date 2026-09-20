@@ -1,4 +1,5 @@
 import { BODY_DOMAINS } from '@/lib/body/constants';
+import { BRAND } from '@/constants/brand';
 import { COMFORT_TOKENS } from '@/lib/comfort-theme';
 import { DomainType, Profile } from '@/lib/supabase';
 
@@ -68,7 +69,11 @@ export const DOMAIN_COLORS: Record<string, string> = {
   sleep: '#7B9EB8',
 };
 
-export const BRAND_COLOR = '#818CF8';
+// Same value as BRAND.text, pointed at it so the two cannot drift apart by
+// accident. Note what this is used for below: it is the colour an UNKNOWN
+// factor falls back to, which is a data role, not a chrome one — so when the
+// brand colour moves, this should not follow it there.
+export const BRAND_COLOR: string = BRAND.text;
 
 /** The body-domain accent (also reused as the app tint in theme.ts) and the
  *  neutral color used for mind-area labels/badges outside a check-in

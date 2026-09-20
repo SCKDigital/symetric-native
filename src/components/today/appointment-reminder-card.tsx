@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { parseDateString } from '@/lib/date-utils';
 import type { Appointment } from '@/lib/supabase';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // Port of the web app's AppointmentReminderCard.tsx. Native's Today screen
 // never had this — an appointment set on the web simply didn't show on the
@@ -49,18 +50,18 @@ export default function AppointmentReminderCard({ appointment }: { appointment: 
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(79,70,229,0.07)',
+    backgroundColor: brandTint(BRAND.fill, 0.07),
     borderWidth: 1,
-    borderColor: 'rgba(79,70,229,0.2)',
+    borderColor: brandTint(BRAND.fill, 0.2),
     borderLeftWidth: 3,
-    borderLeftColor: '#818cf8',
+    borderLeftColor: BRAND.text,
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
     marginBottom: 16,
   },
   pressed: { opacity: 0.7 },
-  days: { fontSize: 13, fontWeight: '600', color: '#818cf8', marginBottom: 3 },
+  days: { fontSize: 13, fontWeight: '600', color: BRAND.text, marginBottom: 3 },
   date: { fontSize: 14, color: '#c8d0e0', marginBottom: 6 },
-  link: { fontSize: 12, color: '#6366f1' },
+  link: { fontSize: 12, color: BRAND.fillAlt },
 });

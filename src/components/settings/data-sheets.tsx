@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { File, Paths } from 'expo-file-system';
 import { useEffect, useState } from 'react';
@@ -336,7 +337,7 @@ const styles = StyleSheet.create({
   error: { fontSize: 12, color: '#f87171', marginBottom: 12, lineHeight: 18 },
   hint: { fontSize: 12, color: '#8b90a4', lineHeight: 18, marginBottom: 12 },
   fieldLabel: { fontSize: 11, color: '#4a5568', letterSpacing: 0.6, marginBottom: 6 },
-  done: { fontSize: 14, color: '#818cf8', textAlign: 'center', paddingVertical: 8 },
+  done: { fontSize: 14, color: BRAND.text, textAlign: 'center', paddingVertical: 8 },
 
   segmented: {
     flexDirection: 'row', backgroundColor: '#0f1117', borderWidth: 1, borderColor: '#252b3b',

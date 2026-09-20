@@ -43,6 +43,7 @@ import { selectStandoutFindings } from '@/lib/standout-ranking';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
 import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
+import { BRAND } from '@/constants/brand';
 
 type RangeDays = 7 | 14 | 30 | 60 | 90;
 const RANGE_OPTIONS: RangeDays[] = [7, 14, 30, 60, 90];
@@ -941,7 +942,7 @@ const styles = StyleSheet.create({
   rangeOptionTextActive: { color: '#e2e8f0', fontWeight: '600' },
   areaRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 14, padding: 14, paddingHorizontal: 16 },
   areaRowMuted: { opacity: 0.7 },
-  areaDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#818cf8', flexShrink: 0 },
+  areaDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: BRAND.text, flexShrink: 0 },
   areaRowText: { flex: 1 },
   areaRowLabel: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   areaRowSubtitle: { fontSize: 12, color: '#8892a4' },

@@ -33,6 +33,7 @@ import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
 import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // Rebuilt against the web app's SettingsScreen.tsx. This screen previously
 // carried four of its controls (markers, body tracking, app lock, push) in a
@@ -741,11 +742,11 @@ const styles = StyleSheet.create({
 
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
   pill: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 8, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
-  pillActive: { backgroundColor: 'rgba(123,131,240,0.15)', borderColor: 'rgba(123,131,240,0.4)' },
+  pillActive: { backgroundColor: brandTint(BRAND.textFlat, 0.15), borderColor: brandTint(BRAND.textFlat, 0.4) },
   pillDisabled: { opacity: 0.35 },
   pillActiveBody: { backgroundColor: 'rgba(188,129,47,0.15)', borderColor: 'rgba(188,129,47,0.4)' },
   pillText: { fontSize: 12, fontWeight: '500', color: '#555c72' },
-  pillTextActive: { color: '#a5b4fc' },
+  pillTextActive: { color: BRAND.textSoft },
   pillTextActiveBody: { color: '#BC812F' },
 
   inlineWrap: { paddingHorizontal: 16, paddingBottom: 14 },

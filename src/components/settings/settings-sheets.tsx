@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // The scheduling and preference sheets, ported from the web app's
 // ActiveWindowSheet.tsx, FrequencySheet.tsx and sheets/SettingsSheets.tsx.
@@ -248,7 +249,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11, paddingHorizontal: 14,
   },
   timeInputText: { fontSize: 15, color: '#e2e8f0' },
-  timeDone: { fontSize: 14, color: '#818cf8', textAlign: 'center', paddingVertical: 8 },
+  timeDone: { fontSize: 14, color: BRAND.text, textAlign: 'center', paddingVertical: 8 },
 
   segmented: {
     flexDirection: 'row', backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533',
@@ -265,9 +266,9 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#252b3b', borderRadius: 10,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  optionActive: { backgroundColor: 'rgba(123,131,240,0.12)', borderColor: 'rgba(123,131,240,0.3)' },
+  optionActive: { backgroundColor: brandTint(BRAND.textFlat, 0.12), borderColor: brandTint(BRAND.textFlat, 0.3) },
   optionLabel: { fontSize: 15, color: '#e2e4ec' },
-  optionLabelActive: { color: '#7b83f0' },
+  optionLabelActive: { color: BRAND.textFlat },
   optionSub: { fontSize: 13, color: '#555c72' },
 
   scaleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },

@@ -4,6 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { useAuth } from '@/contexts/auth-context';
 import { comfortActiveForProfile } from '@/lib/domains';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // Ports of the web SettingsScreen.tsx's own layout primitives — the grouped
 // card, its labelled sections, and the icon + label + subtitle + accessory row
@@ -42,7 +43,7 @@ export function Toggle({ value, onValueChange, disabled }: {
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
-      trackColor={{ true: '#6366f1', false: '#252b3b' }}
+      trackColor={{ true: BRAND.fillAlt, false: '#252b3b' }}
       thumbColor="#ffffff"
     />
   );
@@ -55,7 +56,7 @@ export function InlineMessage({ type, children }: { type: 'error' | 'info'; chil
 type IconColor = 'indigo' | 'danger' | 'slate';
 
 const ICON_BG: Record<IconColor, string> = {
-  indigo: 'rgba(123,131,240,0.15)',
+  indigo: brandTint(BRAND.textFlat, 0.15),
   danger: 'rgba(176,80,80,0.12)',
   slate: 'rgba(139,144,164,0.12)',
 };
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 16, fontWeight: '600', color: '#e2e4ec', marginBottom: 6 },
   sheetDescription: { fontSize: 13, color: '#8b90a4', lineHeight: 20, marginBottom: 20 },
 
-  sheetButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4f46e5', alignItems: 'center' },
+  sheetButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: BRAND.fill, alignItems: 'center' },
   sheetButtonDanger: { backgroundColor: '#7f1d1d' },
   sheetButtonDisabled: { backgroundColor: '#1e2533' },
   sheetButtonText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },

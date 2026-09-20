@@ -1,10 +1,11 @@
 import Svg, { Circle, Line, Path, Polyline, Rect } from 'react-native-svg';
+import { BRAND } from '@/constants/brand';
 
 // Direct ports of the web app's settingsIcons.tsx — same 16-unit viewBox,
 // same path data, same 1.6 stroke. Row icons are indigo, the destructive one
 // is the danger red.
 
-const STROKE = '#7b83f0';
+const STROKE = BRAND.textFlat;
 const COMMON = { strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' };
 
 function Frame({ stroke = STROKE, children }: { stroke?: string; children: React.ReactNode }) {

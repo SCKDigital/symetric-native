@@ -6,6 +6,7 @@ import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import { parseDateString } from '@/lib/date-utils';
 import { interventionImpactFindings } from '@/lib/pattern-findings';
 import type { InterventionMarker } from '@/types/marker';
+import { BRAND } from '@/constants/brand';
 
 // Ported from the web app's components/insights/MedicationAreaDetail.tsx —
 // before/after effects of medication & therapy markers. No new detection
@@ -77,7 +78,7 @@ const styles = StyleSheet.create({
   list: { gap: 10 },
   impactCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 12, padding: 14, paddingHorizontal: 16 },
   impactHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  impactLabel: { fontSize: 12, color: '#a5b4fc', fontWeight: '600' },
+  impactLabel: { fontSize: 12, color: BRAND.textSoft, fontWeight: '600' },
   impactDate: { fontSize: 11, color: '#4a5568' },
   impactSentence: { fontSize: 13, color: '#c8d0e0', marginBottom: 4, lineHeight: 19 },
   impactEvidence: { fontSize: 11, color: '#4a5568' },

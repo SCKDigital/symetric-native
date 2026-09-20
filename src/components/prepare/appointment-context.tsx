@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth-context';
 import type { Appointment, AppointmentFocusCategory } from '@/lib/supabase';
 
 import AppointmentModal from './appointment-modal';
+import { BRAND } from '@/constants/brand';
 
 function fmtDate(d: string): string {
   return parseDateString(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -127,15 +128,15 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
   emptyTitle: { fontSize: 15, fontWeight: '600', color: '#c8d0e0', marginBottom: 6 },
   emptyBody: { fontSize: 13, color: '#6b7a99', lineHeight: 19, marginBottom: 16 },
-  setButton: { width: '100%', padding: 12, backgroundColor: '#4f46e5', borderRadius: 10, alignItems: 'center' },
+  setButton: { width: '100%', padding: 12, backgroundColor: BRAND.fill, borderRadius: 10, alignItems: 'center' },
   setButtonText: { fontSize: 14, fontWeight: '600', color: '#fff' },
   sectionLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   date: { fontSize: 16, fontWeight: '500', color: '#e2e8f0', marginBottom: 4 },
   daysLabel: { fontSize: 13, color: '#8892a4' },
-  daysLabelToday: { color: '#818cf8', fontWeight: '600' },
+  daysLabelToday: { color: BRAND.text, fontWeight: '600' },
   daysLabelPast: { color: '#f87171' },
-  editText: { color: '#818cf8', fontSize: 13, fontWeight: '500' },
+  editText: { color: BRAND.text, fontSize: 13, fontWeight: '500' },
   focusBlock: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#1e2533' },
   focusLabel: { fontSize: 11, color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, fontWeight: '600' },
   focusText: { fontSize: 13, color: '#8892a4' },

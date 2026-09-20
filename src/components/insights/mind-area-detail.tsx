@@ -21,6 +21,7 @@ import { formatShortDate } from '@/lib/date-utils';
 import { getDomainColorFromProfile } from '@/lib/domains';
 import { aggregateVolatilityGroups, VolatilityGroup } from '@/lib/volatility-aggregation';
 import type { CheckIn, ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // Ported from the web app's components/insights/MindAreaDetail.tsx —
 // chunk 2 of the 3-chunk MindAreaDetail port (chunk 1: ClusterCard +
@@ -287,8 +288,8 @@ const styles = StyleSheet.create({
   subBlock: { gap: 8, marginTop: 4 },
   subLabel: { fontSize: 12, fontWeight: '600', color: '#8892a4', letterSpacing: 0.3 },
   domainGroupLabel: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
-  showMoreText: { fontSize: 13, color: '#6366f1', paddingVertical: 4 },
-  volCard: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)', borderLeftWidth: 4, borderRadius: 14, padding: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  showMoreText: { fontSize: 13, color: BRAND.fillAlt, paddingVertical: 4 },
+  volCard: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.2), borderLeftWidth: 4, borderRadius: 14, padding: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   volCardText: { gap: 3 },
   volCardDomain: { fontSize: 12, letterSpacing: 0.4, fontWeight: '600' },
   volCardSummary: { fontSize: 13, color: '#8892a4', lineHeight: 19 },

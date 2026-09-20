@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text } from 'react-native';
 
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
+import { BRAND } from '@/constants/brand';
 
 /**
  * A tappable HH:MM field backed by the platform time picker.
@@ -67,6 +68,6 @@ const styles = StyleSheet.create({
     borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, marginTop: 6,
   },
   text: { fontSize: 15, color: '#e2e8f0' },
-  done: { fontSize: 14, color: '#818cf8', textAlign: 'center', paddingVertical: 10 },
+  done: { fontSize: 14, color: BRAND.text, textAlign: 'center', paddingVertical: 10 },
   pressed: { opacity: 0.7 },
 });

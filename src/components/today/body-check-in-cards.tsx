@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { useComfort } from '@/hooks/use-comfort';
 import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // Ports of the web app's BodyCheckInCard.tsx and MorningBodyCheckInCard.tsx —
 // the Today entry points into the body check-in forms. Native already had both
@@ -163,19 +164,19 @@ function makeStyles(t: ComfortTokens) {
   pressed: { opacity: 0.85 },
 
   card: {
-    marginTop: 16, marginBottom: 16, backgroundColor: '#12162b',
-    borderWidth: 1, borderColor: '#3730a3', borderRadius: 24,
+    marginTop: 16, marginBottom: 16, backgroundColor: BRAND.surface,
+    borderWidth: 1, borderColor: BRAND.border, borderRadius: 24,
     paddingTop: 32, paddingHorizontal: 28, paddingBottom: 28, gap: 24,
   },
   cardDone: { opacity: 0.55 },
   cardPending: { opacity: 0.45 },
-  eyebrow: { fontSize: t.fs(12), color: '#818cf8', letterSpacing: 1.4, fontWeight: '700', marginBottom: 12 },
+  eyebrow: { fontSize: t.fs(12), color: BRAND.text, letterSpacing: 1.4, fontWeight: '700', marginBottom: 12 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   status: { fontSize: t.fs(22), color: '#e2e8f0', fontWeight: '600', letterSpacing: -0.4 },
-  cta: { paddingVertical: 18, borderRadius: 14, backgroundColor: '#4f46e5', alignItems: 'center' },
-  ctaSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#3730a3' },
+  cta: { paddingVertical: 18, borderRadius: 14, backgroundColor: BRAND.fill, alignItems: 'center' },
+  ctaSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: BRAND.border },
   ctaText: { fontSize: t.fs(17), fontWeight: '700', color: '#ffffff' },
-  ctaTextSecondary: { color: '#a5b4fc' },
+  ctaTextSecondary: { color: BRAND.textSoft },
 
   morningCard: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#263045', borderRadius: 16,
@@ -187,9 +188,9 @@ function makeStyles(t: ComfortTokens) {
   morningActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   morningButton: {
     paddingVertical: 9, paddingHorizontal: 18, borderRadius: 10,
-    backgroundColor: 'rgba(99,102,241,0.15)',
+    backgroundColor: brandTint(BRAND.fillAlt, 0.15),
   },
-  morningButtonText: { fontSize: t.fs(13), fontWeight: '600', color: '#a5b4fc' },
+  morningButtonText: { fontSize: t.fs(13), fontWeight: '600', color: BRAND.textSoft },
   morningDismiss: { fontSize: t.fs(13), color: '#64748b' },
   });
 }

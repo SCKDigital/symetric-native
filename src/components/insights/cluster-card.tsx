@@ -6,6 +6,7 @@ import { formatShortDate, parseDateString } from '@/lib/date-utils';
 import { DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
 import type { CheckIn, ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
 import { FACTOR_LABELS, factorLabel } from '@/lib/pattern-findings';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // Ported from the web app's components/ClusterCard.tsx. Mechanic swap: the
 // web version hand-rolls a 500ms touch-hold timer (onTouchStart/End/Move)
@@ -167,7 +168,7 @@ export function ClusterCard({
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <Text style={[styles.heading, { color: domainColor }]}>{headingLabel}</Text>
-          {cluster.flagged_for_report && <FlagIcon color="#6366f1" filled />}
+          {cluster.flagged_for_report && <FlagIcon color={BRAND.fillAlt} filled />}
         </View>
         <View style={styles.viewPatternRow}>
           <Text style={styles.viewPatternText}>View pattern</Text>
@@ -309,7 +310,7 @@ export function ClusterCard({
             </Pressable>
             <Pressable onPress={onToggleFlag} style={styles.actionButton}>
               <View style={styles.flagButtonRow}>
-                <FlagIcon color={cluster.flagged_for_report ? '#818cf8' : '#6b7a99'} filled={!!cluster.flagged_for_report} />
+                <FlagIcon color={cluster.flagged_for_report ? BRAND.text : '#6b7a99'} filled={!!cluster.flagged_for_report} />
                 <Text style={[styles.actionButtonText, cluster.flagged_for_report && styles.actionButtonTextActive]}>
                   {cluster.flagged_for_report ? 'Flagged for report' : 'Flag for report'}
                 </Text>
@@ -323,7 +324,7 @@ export function ClusterCard({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)', borderLeftWidth: 4, borderRadius: 14, padding: 16, paddingHorizontal: 18 },
+  card: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.2), borderLeftWidth: 4, borderRadius: 14, padding: 16, paddingHorizontal: 18 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heading: { fontSize: 12, letterSpacing: 0.4, fontWeight: '600' },
@@ -333,9 +334,9 @@ const styles = StyleSheet.create({
   summaryMuted: { color: '#6b7a99', fontSize: 13 },
   ongoingPill: { alignSelf: 'flex-start', marginTop: 6, paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)', borderRadius: 8 },
   ongoingText: { fontSize: 11, color: '#f59e0b', fontWeight: '500' },
-  expanded: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(99,102,241,0.15)', gap: 0 },
+  expanded: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: brandTint(BRAND.fillAlt, 0.15), gap: 0 },
   expandedDescription: { fontSize: 14, color: '#c8d0e0', lineHeight: 21, marginBottom: 14 },
-  primaryStatsBox: { backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.15)', borderRadius: 10, padding: 12, paddingHorizontal: 14, marginBottom: 12 },
+  primaryStatsBox: { backgroundColor: brandTint(BRAND.fillAlt, 0.06), borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.15), borderRadius: 10, padding: 12, paddingHorizontal: 14, marginBottom: 12 },
   primaryStatsLabel: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: 8 },
   intradayRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
   intradayTime: { fontSize: 13, color: '#8892a4' },
@@ -362,7 +363,7 @@ const styles = StyleSheet.create({
   contextTagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   contextTag: { backgroundColor: 'rgba(148,163,184,0.1)', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   contextTagText: { fontSize: 11, color: '#94a3b8' },
-  sleepBox: { backgroundColor: 'rgba(99,102,241,0.04)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.1)', borderRadius: 10, padding: 10, paddingHorizontal: 14, marginBottom: 12 },
+  sleepBox: { backgroundColor: brandTint(BRAND.fillAlt, 0.04), borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.1), borderRadius: 10, padding: 10, paddingHorizontal: 14, marginBottom: 12 },
   sleepLabel: { fontSize: 12, color: '#8892a4', fontWeight: '600', marginBottom: 6 },
   sleepText: { fontSize: 13, color: '#c8d0e0' },
   sleepValue: { color: '#e2e8f0', fontWeight: '700' },
@@ -372,7 +373,7 @@ const styles = StyleSheet.create({
   dataQualityWarning: { color: '#92701e' },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 20, paddingTop: 6 },
   actionButton: { padding: 0 },
-  actionButtonText: { fontSize: 13, color: '#818cf8' },
-  actionButtonTextActive: { color: '#818cf8' },
+  actionButtonText: { fontSize: 13, color: BRAND.text },
+  actionButtonTextActive: { color: BRAND.text },
   flagButtonRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
 });

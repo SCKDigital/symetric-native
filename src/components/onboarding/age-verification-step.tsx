@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingCheckbox, OnboardingPrimaryButton } from '@/components/onboarding/onboarding-controls';
 import { calculateAge, dateToString, parseDateString } from '@/lib/date-utils';
+import { BRAND } from '@/constants/brand';
 
 interface AgeVerificationStepProps {
   dateOfBirth: string;
@@ -91,7 +92,7 @@ const styles = StyleSheet.create({
   dateInputPlaceholder: { fontSize: 15, color: '#4a5568' },
   pickerWrap: { marginBottom: 16, backgroundColor: '#141820', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: '#818cf8', fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
   errorText: { fontSize: 13, color: '#f87171', marginBottom: 16, lineHeight: 19 },
   checkboxSpacing: { marginBottom: 28 },
 });

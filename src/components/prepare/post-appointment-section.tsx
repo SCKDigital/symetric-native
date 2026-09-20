@@ -6,6 +6,7 @@ import { fetchQuestionsForAppointment } from '@/lib/api/questions';
 import { trackAppointmentCompleted, trackPostAppointmentOutcomeCaptured } from '@/lib/analytics';
 import { todayDateString } from '@/lib/date-utils';
 import type { Appointment, PrepareQuestion } from '@/lib/supabase';
+import { BRAND, brandTint } from '@/constants/brand';
 
 interface Props {
   appointment: Appointment;
@@ -143,16 +144,16 @@ const styles = StyleSheet.create({
   archiveLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
   archiveLabelSpaced: { marginTop: 12 },
   archiveRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#1e2533' },
-  archiveCheck: { color: '#818cf8', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  archiveCheck: { color: BRAND.text, fontSize: 12, fontWeight: '700', marginTop: 2 },
   archiveEmptyBox: { width: 12, height: 12, borderRadius: 2, borderWidth: 1.5, borderColor: '#2d3748', marginTop: 3 },
   archiveTextDone: { flex: 1, fontSize: 13, color: '#8892a4', lineHeight: 19 },
   archiveTextPending: { flex: 1, fontSize: 13, color: '#4a5568', lineHeight: 19 },
-  markDoneButton: { paddingVertical: 12, paddingHorizontal: 20, backgroundColor: 'rgba(79,70,229,0.1)', borderWidth: 1, borderColor: 'rgba(79,70,229,0.3)', borderRadius: 10, alignSelf: 'flex-start' },
-  markDoneText: { fontSize: 14, fontWeight: '500', color: '#818cf8' },
+  markDoneButton: { paddingVertical: 12, paddingHorizontal: 20, backgroundColor: brandTint(BRAND.fill, 0.1), borderWidth: 1, borderColor: brandTint(BRAND.fill, 0.3), borderRadius: 10, alignSelf: 'flex-start' },
+  markDoneText: { fontSize: 14, fontWeight: '500', color: BRAND.text },
   confirmRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   confirmText: { flex: 1, fontSize: 13, color: '#8892a4', lineHeight: 18 },
   confirmCancel: { fontSize: 13, color: '#4a5568', padding: 8 },
-  doneButton: { paddingVertical: 10, paddingHorizontal: 18, backgroundColor: '#4f46e5', borderRadius: 8 },
+  doneButton: { paddingVertical: 10, paddingHorizontal: 18, backgroundColor: BRAND.fill, borderRadius: 8 },
   doneButtonDisabled: { backgroundColor: '#2d3748' },
   doneButtonText: { fontSize: 14, fontWeight: '600', color: '#fff' },
   doneButtonTextDisabled: { color: '#6b7a99' },

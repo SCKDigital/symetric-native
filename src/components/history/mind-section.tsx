@@ -4,6 +4,7 @@ import Sparkline from '@/components/history/sparkline';
 import { ensureUTC } from '@/lib/date-utils';
 import { ALL_DOMAINS, DOMAIN_NAMES, getDomainColorFromProfile } from '@/lib/domains';
 import { CheckIn, DomainType, Profile } from '@/lib/supabase';
+import { BRAND } from '@/constants/brand';
 
 interface MindSectionProps {
   completedCheckIns: CheckIn[];
@@ -52,7 +53,7 @@ export default function MindSection({ completedCheckIns, profile }: MindSectionP
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 },
-  headerLabel: { fontSize: 11, color: '#818cf8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9 },
+  headerLabel: { fontSize: 11, color: BRAND.text, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9 },
   headerTime: { fontSize: 11, color: '#4a5568' },
   rows: { gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },

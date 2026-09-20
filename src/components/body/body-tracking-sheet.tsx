@@ -4,12 +4,13 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View 
 
 import { BODY_DOMAIN_ORDER, BODY_DOMAINS } from '@/lib/body/constants';
 import type { BodyDomainType } from '@/lib/supabase';
+import { BRAND } from '@/constants/brand';
 
 // Settings chrome uses the app's default indigo, not the body-tracking
 // amber accent — that accent is reserved for the capture screens
 // themselves (BodyCheckIn, BodyMap, History) so it reads as a distinct
 // experience there. Matches the web app's own CHROME_COLOR convention.
-const CHROME_COLOR = '#7b83f0';
+const CHROME_COLOR = BRAND.textFlat;
 
 function timeStringToDate(t: string): Date {
   const [h, m] = t.split(':').map(Number);
@@ -208,9 +209,9 @@ const styles = StyleSheet.create({
   morningTimeBlock: { marginBottom: 20 },
   pickerWrap: { marginBottom: 20, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: '#818cf8', fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
   errorText: { fontSize: 12, color: '#f87171', marginBottom: 16 },
-  saveButton: { padding: 14, borderRadius: 12, backgroundColor: '#4f46e5', alignItems: 'center' },
+  saveButton: { padding: 14, borderRadius: 12, backgroundColor: BRAND.fill, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#1e2533' },
   saveButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   saveButtonTextDisabled: { color: '#4a5568' },

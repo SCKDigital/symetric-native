@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -320,7 +321,7 @@ const styles = StyleSheet.create({
   triggerDisabled: { opacity: 0.5 },
   triggerText: { fontSize: 14, color: '#b8c4d8' },
   triggerMeta: { fontSize: 12, color: '#9aabb8' },
-  triggerSaved: { fontSize: 12, color: '#818cf8' },
+  triggerSaved: { fontSize: 12, color: BRAND.text },
   triggerPlus: { fontSize: 18, color: '#64748b', lineHeight: 20 },
 
   editRow: {
@@ -328,12 +329,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 16, marginTop: -4, marginBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editRowText: { fontSize: 14, color: '#818cf8' },
+  editRowText: { fontSize: 14, color: BRAND.text },
   editRowMeta: { fontSize: 12, color: '#6b7690' },
 
   sheet: { flex: 1, backgroundColor: '#0a0c12' },
   sheetContent: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 60, gap: 8 },
-  sheetLabel: { fontSize: 11, color: '#818cf8', fontWeight: '600', letterSpacing: 0.9 },
+  sheetLabel: { fontSize: 11, color: BRAND.text, fontWeight: '600', letterSpacing: 0.9 },
   sheetHeading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0', marginBottom: 12 },
   notes: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 12,
@@ -343,7 +344,7 @@ const styles = StyleSheet.create({
   error: { fontSize: 13, color: '#f87171', marginTop: 10 },
   cooldownNotice: { fontSize: 13, color: '#9aabb8', marginTop: 16, lineHeight: 19 },
   submit: {
-    marginTop: 20, backgroundColor: '#4f46e5', borderRadius: 12,
+    marginTop: 20, backgroundColor: BRAND.fill, borderRadius: 12,
     paddingVertical: 14, alignItems: 'center',
   },
   submitDisabled: { backgroundColor: '#1e2533' },

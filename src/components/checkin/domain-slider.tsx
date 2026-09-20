@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import { StyleSheet, Text, View } from 'react-native';
@@ -82,7 +83,7 @@ export default function DomainSlider({
         <View style={styles.trackBg} pointerEvents="none">
           {touched ? (
             <LinearGradient
-              colors={active ? [COMFORT_TOKENS.accent, COMFORT_TOKENS.accentText] : ['#4f46e5', '#818cf8']}
+              colors={active ? [COMFORT_TOKENS.accent, COMFORT_TOKENS.accentText] : [BRAND.fill, BRAND.text]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={[styles.trackFill, { width: `${fillPercent}%` }]}
@@ -106,7 +107,7 @@ export default function DomainSlider({
           tapToSeek
           minimumTrackTintColor="transparent"
           maximumTrackTintColor="transparent"
-          thumbTintColor={active ? COMFORT_TOKENS.accentText : '#818cf8'}
+          thumbTintColor={active ? COMFORT_TOKENS.accentText : BRAND.text}
         />
       </View>
 
@@ -145,7 +146,7 @@ function makeStyles(t: ComfortTokens) {
   // those into 'End Of Day Exhaustion'.
   label: { fontSize: t.fs(14), color: '#cbd5e0', fontWeight: '400' },
   hint: { fontSize: t.fs(12), color: '#6b7690', marginTop: 2, lineHeight: t.fs(17) },
-  value: { fontSize: t.fs(13), color: '#6366f1', fontFamily: 'DM Mono', fontWeight: '500' },
+  value: { fontSize: t.fs(13), color: BRAND.fillAlt, fontFamily: 'DM Mono', fontWeight: '500' },
   valueUntouched: { fontSize: t.fs(11.5), color: '#6b7690', fontStyle: 'italic' },
   trackWrap: { justifyContent: 'center', paddingVertical: 8, height: 40 },
   trackBg: { position: 'absolute', left: 0, right: 0, height: TRACK_HEIGHT, borderRadius: 2, backgroundColor: '#2d3748', overflow: 'hidden' },

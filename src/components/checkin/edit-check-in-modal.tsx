@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -106,7 +107,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   sheet: { flex: 1, backgroundColor: '#0a0c12' },
   content: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 60, gap: 8 },
-  label: { fontSize: 11, color: '#818cf8', fontWeight: '600', letterSpacing: 0.9 },
+  label: { fontSize: 11, color: BRAND.text, fontWeight: '600', letterSpacing: 0.9 },
   heading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0', marginBottom: 12 },
   notes: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 12,
@@ -114,7 +115,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   error: { fontSize: 13, color: '#f87171', marginTop: 10 },
-  submit: { marginTop: 20, backgroundColor: '#4f46e5', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  submit: { marginTop: 20, backgroundColor: BRAND.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   submitText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
   cancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
 });

@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { createQuestion, fetchQuestionsForAppointment, reorderQuestions, updateQuestion } from '@/lib/api/questions';
 import { trackQuestionAdded, trackQuestionReordered } from '@/lib/analytics';
 import type { PrepareQuestion } from '@/lib/supabase';
+import { BRAND } from '@/constants/brand';
 
 interface Props {
   appointmentId: string;
@@ -190,13 +191,13 @@ const styles = StyleSheet.create({
   skeleton: { paddingVertical: 8 },
   skeletonLine: { height: 14, backgroundColor: '#1e2533', borderRadius: 4, marginBottom: 10, opacity: 0.6 },
   emptyText: { fontSize: 14, fontWeight: '500', color: '#8892a4', paddingVertical: 12 },
-  groupLabelPriority: { fontSize: 11, fontWeight: '600', color: '#818cf8', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 8 },
+  groupLabelPriority: { fontSize: 11, fontWeight: '600', color: BRAND.text, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 8 },
   groupLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 12 },
   addBlock: { marginTop: 12 },
-  addText: { fontSize: 13, fontWeight: '500', color: '#818cf8' },
+  addText: { fontSize: 13, fontWeight: '500', color: BRAND.text },
   addInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#2d3748', borderRadius: 8, padding: 10, paddingHorizontal: 12, color: '#e2e8f0', fontSize: 14, minHeight: 52, textAlignVertical: 'top' },
   addActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  addButton: { paddingVertical: 7, paddingHorizontal: 16, backgroundColor: '#4f46e5', borderRadius: 7 },
+  addButton: { paddingVertical: 7, paddingHorizontal: 16, backgroundColor: BRAND.fill, borderRadius: 7 },
   addButtonDisabled: { backgroundColor: '#2d3748' },
   addButtonText: { fontSize: 13, fontWeight: '500', color: '#fff' },
   addButtonTextDisabled: { color: '#6b7a99' },

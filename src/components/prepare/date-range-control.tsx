@@ -5,6 +5,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { addDays, dateToString, parseDateString, todayDateString } from '@/lib/date-utils';
 import { defaultRangeForPreset, weeksBetween, type PrepareRange } from '@/lib/prepare-range';
 import type { InterventionMarker } from '@/types/marker';
+import { BRAND } from '@/constants/brand';
 
 function fmtLabel(d: string): string {
   return parseDateString(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -127,7 +128,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 12 },
   pillRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 },
   pill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748' },
-  pillActive: { borderWidth: 0, backgroundColor: '#4f46e5' },
+  pillActive: { borderWidth: 0, backgroundColor: BRAND.fill },
   pillText: { fontSize: 13, fontWeight: '500', color: '#8892a4' },
   pillTextActive: { color: '#fff' },
   customRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginBottom: 8, flexWrap: 'wrap' },
@@ -138,6 +139,6 @@ const styles = StyleSheet.create({
   customDash: { color: '#4a5568', marginBottom: 8 },
   pickerWrap: { marginBottom: 10, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: '#818cf8', fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
   summary: { fontSize: 12, color: '#4a5568' },
 });

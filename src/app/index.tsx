@@ -29,6 +29,7 @@ import { timeOfDayInTZ } from '@/lib/scheduler';
 import { formatTime, formatWindowTime } from '@/lib/time-format';
 import { supabase, type Appointment, type CheckIn } from '@/lib/supabase';
 import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
+import { BRAND, brandTint } from '@/constants/brand';
 
 function formatDate(): string {
   return new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
@@ -476,10 +477,10 @@ function makeStyles(t: ComfortTokens) {
   headerTrailing: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   addEvent: {
-    borderWidth: 1, borderColor: 'rgba(165,180,252,0.25)', borderRadius: 8,
+    borderWidth: 1, borderColor: brandTint(BRAND.textSoft, 0.25), borderRadius: 8,
     paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center', marginBottom: 20,
   },
-  addEventText: { fontSize: t.fs(13), fontWeight: '500', color: '#a5b4fc' },
+  addEventText: { fontSize: t.fs(13), fontWeight: '500', color: BRAND.textSoft },
   error: { fontSize: t.fs(13), color: '#f87171', marginBottom: 12 },
 
   statusBlock: { paddingTop: 12, marginBottom: 24 },
@@ -491,19 +492,19 @@ function makeStyles(t: ComfortTokens) {
   statusBody: { fontSize: t.fs(15), color: '#b0b8c8', lineHeight: 22 },
 
   editButton: {
-    backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.15)',
+    backgroundColor: brandTint(BRAND.fillAlt, 0.06), borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.15),
     borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editButtonText: { fontSize: t.fs(13), color: '#818cf8' },
+  editButtonText: { fontSize: t.fs(13), color: BRAND.text },
   editButtonMeta: { fontSize: t.fs(11), color: '#4a5568' },
   windowClosed: { fontSize: t.fs(12), color: '#4a5568', marginBottom: 16 },
 
   checkInNow: {
-    backgroundColor: 'rgba(79,70,229,0.10)', borderWidth: 1, borderColor: 'rgba(79,70,229,0.28)',
+    backgroundColor: brandTint(BRAND.fill, 0.10), borderWidth: 1, borderColor: brandTint(BRAND.fill, 0.28),
     borderRadius: 12, padding: 16, marginBottom: 16, gap: 6,
   },
-  checkInNowTitle: { fontSize: t.fs(15), fontWeight: '600', color: '#a5b4fc' },
+  checkInNowTitle: { fontSize: t.fs(15), fontWeight: '600', color: BRAND.textSoft },
   checkInNowBody: { fontSize: t.fs(13), color: '#8892a4', lineHeight: 19 },
   });
 }

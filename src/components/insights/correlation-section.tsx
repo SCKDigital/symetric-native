@@ -10,6 +10,7 @@ import {
 } from '@/lib/correlation-groups';
 import { getDomainColorFromProfile } from '@/lib/domains';
 import { CONFIDENCE_COPY, factorLabel } from '@/lib/pattern-findings';
+import { BRAND } from '@/constants/brand';
 
 // "What goes with what" — the same-day correlations, stated as blocks rather
 // than as one card per edge.
@@ -126,7 +127,7 @@ const styles = StyleSheet.create({
   intro: { fontSize: 12, color: '#4a5568', marginBottom: 4, lineHeight: 18 },
   card: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533',
-    borderLeftWidth: 5, borderLeftColor: '#818cf8', borderRadius: 12,
+    borderLeftWidth: 5, borderLeftColor: BRAND.text, borderRadius: 12,
     padding: 16, paddingHorizontal: 18, gap: 8, marginBottom: 8,
   },
   heading: { fontSize: 15.5, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.2, lineHeight: 21 },
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
   sub: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
   evidence: { fontSize: 12, color: '#4a5568' },
   toggle: { paddingTop: 2 },
-  toggleText: { fontSize: 12, color: '#818cf8' },
+  toggleText: { fontSize: 12, color: BRAND.text },
   pressed: { opacity: 0.7 },
   detail: { marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#1e2533', gap: 8 },
   detailRow: { gap: 2 },
@@ -146,7 +147,7 @@ const styles = StyleSheet.create({
   detailMeta: { fontSize: 11, color: '#6b7a99' },
   pairCard: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533',
-    borderLeftWidth: 4, borderLeftColor: '#818cf8', borderRadius: 12,
+    borderLeftWidth: 4, borderLeftColor: BRAND.text, borderRadius: 12,
     padding: 14, paddingHorizontal: 16, gap: 6, marginBottom: 8,
   },
   pairSentence: { fontSize: 14, color: '#e2e8f0', lineHeight: 21 },

@@ -5,6 +5,7 @@ import Svg, { Circle, G, Line, Path, Polygon, Polyline } from 'react-native-svg'
 import { BODY_MAP_REGIONS, type BodySiteOption } from '@/lib/body/constants';
 import { BODY_COLOR } from '@/lib/domains';
 import type { BodyAspect, BodySide } from '@/lib/supabase';
+import { BRAND, brandTint } from '@/constants/brand';
 
 export interface PainSite {
   region: string;
@@ -422,9 +423,9 @@ const styles = StyleSheet.create({
   aspectTabText: { fontSize: 12.5, color: '#8892a4' },
   aspectTabTextActive: { color: BODY_COLOR, fontWeight: '600' },
   modeTab: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748' },
-  modeTabActive: { borderColor: '#a5b4fc', backgroundColor: 'rgba(165,180,252,0.15)' },
+  modeTabActive: { borderColor: BRAND.textSoft, backgroundColor: brandTint(BRAND.textSoft, 0.15) },
   modeTabText: { fontSize: 12, color: '#8892a4' },
-  modeTabTextActive: { color: '#a5b4fc', fontWeight: '600' },
+  modeTabTextActive: { color: BRAND.textSoft, fontWeight: '600' },
   svg: { alignSelf: 'center', maxWidth: 260 },
   sideLabelRow: { flexDirection: 'row', justifyContent: 'space-between', maxWidth: 260, alignSelf: 'center', width: '100%', marginTop: 6, paddingHorizontal: 4 },
   sideLabelText: { fontSize: 10, color: '#4a5568', letterSpacing: 0.6 },

@@ -4,6 +4,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
 import type { Comfort, ComfortDuration } from '@/hooks/use-comfort';
 import { formatTime, type TimeFormat } from '@/lib/time-format';
+import { BRAND } from '@/constants/brand';
 
 // Comfort mode's entry point lives on Today, not only in Settings, because the
 // thing it answers is episodic. Being overstimulated happens at 4pm on a
@@ -146,7 +147,7 @@ const styles = StyleSheet.create({
 
   banner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-    backgroundColor: '#12162b', borderWidth: 1, borderColor: '#252a44', borderRadius: 16,
+    backgroundColor: BRAND.surface, borderWidth: 1, borderColor: '#252a44', borderRadius: 16,
     paddingVertical: 14, paddingHorizontal: 18, marginBottom: 16,
   },
   bannerText: { flex: 1 },

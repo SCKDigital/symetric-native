@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated } from 'react-native';
 import Svg, { Defs, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import { BRAND } from '@/constants/brand';
 
 const AnimatedG = Animated.createAnimatedComponent(G);
 
@@ -70,7 +71,7 @@ export function SymetricLogo({ size = 120, animate = false, pulse = false }: Sym
           <Stop offset="100%" stopColor="#FBBF24" />
         </LinearGradient>
       </Defs>
-      <Rect width="1024" height="1024" rx="225.28" fill="#1E1B4B" />
+      <Rect width="1024" height="1024" rx="225.28" fill={BRAND.tile} />
       <AnimatedG transform="translate(300.65,225.28) scale(2.60655)" opacity={markOpacity}>
         <Path d={MARK_PATH} fill="url(#symetricMarkGradient)" />
       </AnimatedG>

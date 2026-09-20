@@ -93,7 +93,7 @@ export function buildDomainSparklineSectionHtml(params: {
 }): string {
   const {
     chartDomains, baselineMap, currentRollingMedians, chartHasEnoughData, chartMarkers, flaggedClusters, dates,
-    lineColor = '#818cf8', isLowerBetterFn = (d: string) => LOWER_IS_BETTER.has(d),
+    lineColor = theme.colors.mindLine, isLowerBetterFn = (d: string) => LOWER_IS_BETTER.has(d),
     label = 'Domain sparklines',
   } = params;
 

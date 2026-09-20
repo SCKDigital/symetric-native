@@ -1,4 +1,5 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BRAND } from '@/constants/brand';
 
 interface Props {
   isOpen: boolean;
@@ -33,6 +34,6 @@ const styles = StyleSheet.create({
   handle: { width: 36, height: 4, backgroundColor: '#2d3748', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   title: { fontSize: 20, fontWeight: '600', color: '#e2e8f0', marginBottom: 10, letterSpacing: -0.3 },
   body: { fontSize: 15, color: '#8892a4', lineHeight: 24, marginBottom: 24 },
-  button: { width: '100%', padding: 14, backgroundColor: '#6366f1', borderRadius: 12, alignItems: 'center' },
+  button: { width: '100%', padding: 14, backgroundColor: BRAND.fillAlt, borderRadius: 12, alignItems: 'center' },
   buttonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
 });

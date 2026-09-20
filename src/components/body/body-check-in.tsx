@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/brand';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -491,7 +492,7 @@ const styles = StyleSheet.create({
   eventsList: { gap: 4 },
   eventRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, minHeight: 44 },
   eventCheckbox: { width: 18, height: 18, borderRadius: 5, marginTop: 1, borderWidth: 1.5, borderColor: '#4a5568' },
-  eventCheckboxChecked: { borderWidth: 0, backgroundColor: '#a5b4fc' },
+  eventCheckboxChecked: { borderWidth: 0, backgroundColor: BRAND.textSoft },
   eventText: { flex: 1 },
   eventLabel: { fontSize: 14, color: '#cbd5e0' },
   eventLabelTicked: { color: '#e2e8f0' },

@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // Shared across all three consent steps — the web app defines an identical
 // Checkbox component three times (one per step file); consolidated here
@@ -70,7 +71,7 @@ export function OnboardingPrimaryButton({
           {loading ? <ActivityIndicator color="#4a5568" /> : <Text style={styles.primaryButtonTextDisabled}>{label}</Text>}
         </View>
       ) : (
-        <LinearGradient colors={['#4f46e5', '#6366f1']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primaryButton}>
+        <LinearGradient colors={[BRAND.fill, BRAND.fillAlt]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primaryButton}>
           <Text style={styles.primaryButtonText}>{loading ? (loadingLabel ?? label) : label}</Text>
         </LinearGradient>
       )}
@@ -95,7 +96,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
   },
-  checkboxRowChecked: { borderColor: 'rgba(99,102,241,0.5)', backgroundColor: 'rgba(99,102,241,0.1)' },
+  checkboxRowChecked: { borderColor: brandTint(BRAND.fillAlt, 0.5), backgroundColor: brandTint(BRAND.fillAlt, 0.1) },
   checkboxRowUnchecked: { borderColor: '#1e2533', backgroundColor: '#141820' },
   checkboxBox: {
     width: 20,
@@ -107,13 +108,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 1,
   },
-  checkboxBoxChecked: { borderColor: '#818cf8', backgroundColor: '#4f46e5' },
+  checkboxBoxChecked: { borderColor: BRAND.text, backgroundColor: BRAND.fill },
   checkboxLabel: { flex: 1, fontSize: 14, color: '#cbd5e1', lineHeight: 21 },
   checkboxContent: { flex: 1 },
 
   yesNoRow: { flexDirection: 'row', gap: 10 },
   yesNoButton: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
-  yesNoButtonActive: { borderColor: 'rgba(99,102,241,0.5)', backgroundColor: 'rgba(99,102,241,0.1)' },
+  yesNoButtonActive: { borderColor: brandTint(BRAND.fillAlt, 0.5), backgroundColor: brandTint(BRAND.fillAlt, 0.1) },
   yesNoButtonInactive: { borderColor: '#1e2533', backgroundColor: '#141820' },
   yesNoLabel: { fontSize: 14, fontWeight: '500', color: '#6b7a99' },
   yesNoLabelActive: { color: '#e2e8f0' },

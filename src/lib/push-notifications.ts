@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
+import { BRAND } from '@/constants/brand';
 
 // Ported from the web app's src/hooks/usePushNotifications.ts — but this is
 // a mechanic swap, not a line-for-line port. Web subscribes to the browser's
@@ -61,7 +62,7 @@ export async function ensureAndroidNotificationChannel(): Promise<void> {
     name: 'Check-in reminders',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#818cf8',
+    lightColor: BRAND.text,
   });
 }
 

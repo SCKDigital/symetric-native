@@ -9,9 +9,10 @@ import { trackPatternMarkedForDiscussion, trackPatternNoteAdded } from '@/lib/an
 import { BODY_COLOR, DOMAIN_COLORS, MIND_AREA_COLOR } from '@/lib/domains';
 import { CONFIDENCE_COPY, GRADE_ORDER, type Area, type Grade, type PatternFinding } from '@/lib/pattern-findings';
 import type { PatternSource, PreparePatternReview } from '@/lib/supabase';
+import { BRAND, brandTint } from '@/constants/brand';
 
 const AREA_LABEL: Record<Area, string> = { mind: 'Mind', body: 'Body', sleep: 'Sleep', medication: 'Medication' };
-const AREA_COLOR: Record<Area, string> = { mind: MIND_AREA_COLOR, body: BODY_COLOR, sleep: DOMAIN_COLORS.sleep, medication: '#a5b4fc' };
+const AREA_COLOR: Record<Area, string> = { mind: MIND_AREA_COLOR, body: BODY_COLOR, sleep: DOMAIN_COLORS.sleep, medication: BRAND.textSoft };
 
 function reviewKey(patternId: string, patternSource: PatternSource) {
   return `${patternSource}:${patternId}`;
@@ -345,16 +346,16 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: 'rgba(129,140,248,0.15)', borderRadius: 20 },
-  countText: { fontSize: 11, fontWeight: '600', color: '#818cf8' },
+  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: brandTint(BRAND.text, 0.15), borderRadius: 20 },
+  countText: { fontSize: 11, fontWeight: '600', color: BRAND.text },
   countSummary: { fontSize: 12, color: '#6b7a99' },
   hint: { fontSize: 12, color: '#4a5568', marginBottom: 12 },
   toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8, flexWrap: 'wrap' },
   filterRow: { flexDirection: 'row', gap: 4 },
   filterPill: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20, borderWidth: 1, borderColor: '#1e2533' },
-  filterPillActive: { borderWidth: 0, backgroundColor: 'rgba(79,70,229,0.15)' },
+  filterPillActive: { borderWidth: 0, backgroundColor: brandTint(BRAND.fill, 0.15) },
   filterPillText: { fontSize: 12, color: '#4a5568' },
-  filterPillTextActive: { color: '#818cf8', fontWeight: '600' },
+  filterPillTextActive: { color: BRAND.text, fontWeight: '600' },
   markAllText: { fontSize: 12, color: '#4a5568' },
   errorBanner: { marginBottom: 12, padding: 10, paddingHorizontal: 12, backgroundColor: 'rgba(248,113,113,0.08)', borderWidth: 1, borderColor: 'rgba(248,113,113,0.2)', borderRadius: 8 },
   errorText: { fontSize: 13, color: '#f87171' },
@@ -384,11 +385,11 @@ const styles = StyleSheet.create({
   areaPill: { paddingVertical: 2, paddingHorizontal: 7, borderRadius: 20 },
   areaPillText: { fontSize: 11, fontWeight: '500' },
   noteToggle: { fontSize: 12, color: '#4a5568' },
-  noteToggleActive: { color: '#818cf8' },
+  noteToggleActive: { color: BRAND.text },
   noteBlock: { marginTop: 8 },
   noteInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#2d3748', borderRadius: 8, padding: 10, paddingHorizontal: 12, color: '#c8d0e0', fontSize: 13, minHeight: 44, textAlignVertical: 'top' },
   noteStatus: { fontSize: 11, color: '#4a5568', marginTop: 4, height: 14 },
-  noteStatusSaving: { color: '#818cf8' },
+  noteStatusSaving: { color: BRAND.text },
   showEarlyButton: { paddingTop: 12 },
-  showEarlyText: { fontSize: 13, color: '#6366f1' },
+  showEarlyText: { fontSize: 13, color: BRAND.fillAlt },
 });

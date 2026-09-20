@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, 
 import { dateToString, parseDateString } from '@/lib/date-utils';
 import { markerColors, markerTypeLabels, MarkerType } from '@/lib/marker-colors';
 import type { CreateMarkerInput, InterventionMarker, MedicationAction } from '@/types/marker';
+import { BRAND, brandTint } from '@/constants/brand';
 
 const MAX_LABEL_LENGTH = 100;
 
@@ -357,22 +358,22 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, color: '#f87171', marginTop: 4 },
   quickDateRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
   quickDatePill: { flex: 1, paddingVertical: 7, paddingHorizontal: 4, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748', backgroundColor: '#0a0c12', alignItems: 'center' },
-  quickDatePillActive: { borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.15)' },
+  quickDatePillActive: { borderColor: BRAND.fillAlt, backgroundColor: brandTint(BRAND.fillAlt, 0.15) },
   quickDateText: { fontSize: 12, color: '#8892a4' },
-  quickDateTextActive: { color: '#818cf8' },
+  quickDateTextActive: { color: BRAND.text },
   dateInput: { padding: 11, paddingHorizontal: 14, backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10 },
   dateInputError: { borderColor: '#f87171' },
   dateInputText: { fontSize: 15, color: '#e2e8f0' },
   pickerWrap: { marginTop: 10, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: '#818cf8', fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
   textInput: { padding: 11, paddingHorizontal: 14, backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10, color: '#e2e8f0', fontSize: 15 },
   charCount: { fontSize: 12, color: '#4a5568', marginTop: 4, textAlign: 'right' },
   charCountWarn: { color: '#f87171' },
   actionRow: { flexDirection: 'row', gap: 10 },
   cancelButton: { flex: 1, padding: 13, borderRadius: 12, borderWidth: 1, borderColor: '#2d3748', alignItems: 'center' },
   cancelButtonText: { fontSize: 15, color: '#8892a4' },
-  saveButton: { flex: 1, padding: 13, borderRadius: 12, backgroundColor: '#6366f1', alignItems: 'center' },
+  saveButton: { flex: 1, padding: 13, borderRadius: 12, backgroundColor: BRAND.fillAlt, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#2d3748' },
   saveButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   saveButtonTextDisabled: { color: '#4a5568' },

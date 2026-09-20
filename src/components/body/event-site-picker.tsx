@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { trackBodySitePickerUsed } from '@/lib/analytics';
 import { EVENT_SITE_LISTS } from '@/lib/body/constants';
 import type { BodyEventType, BodySide } from '@/lib/supabase';
+import { BRAND, brandTint } from '@/constants/brand';
 
 export interface EventSite {
   region: string;
@@ -104,13 +105,13 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, color: '#8892a4', marginBottom: 8 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   chip: { paddingVertical: 7, paddingHorizontal: 11, minHeight: 32, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748', backgroundColor: '#0a0c12', justifyContent: 'center' },
-  chipActive: { borderWidth: 1.5, borderColor: '#a5b4fc', backgroundColor: 'rgba(165,180,252,0.15)' },
+  chipActive: { borderWidth: 1.5, borderColor: BRAND.textSoft, backgroundColor: brandTint(BRAND.textSoft, 0.15) },
   chipText: { fontSize: 12.5, color: '#8892a4' },
-  chipTextActive: { color: '#a5b4fc', fontWeight: '600' },
+  chipTextActive: { color: BRAND.textSoft, fontWeight: '600' },
   sideRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
-  sideButton: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: '#a5b4fc', backgroundColor: 'rgba(165,180,252,0.1)', alignItems: 'center' },
-  sideButtonText: { fontSize: 13, fontWeight: '600', color: '#a5b4fc' },
-  tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingLeft: 11, paddingRight: 6, borderRadius: 8, backgroundColor: 'rgba(165,180,252,0.15)' },
-  tagText: { fontSize: 12, fontWeight: '500', color: '#a5b4fc' },
-  tagRemove: { fontSize: 11, color: '#a5b4fc', padding: 2 },
+  sideButton: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: BRAND.textSoft, backgroundColor: brandTint(BRAND.textSoft, 0.1), alignItems: 'center' },
+  sideButtonText: { fontSize: 13, fontWeight: '600', color: BRAND.textSoft },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingLeft: 11, paddingRight: 6, borderRadius: 8, backgroundColor: brandTint(BRAND.textSoft, 0.15) },
+  tagText: { fontSize: 12, fontWeight: '500', color: BRAND.textSoft },
+  tagRemove: { fontSize: 11, color: BRAND.textSoft, padding: 2 },
 });
