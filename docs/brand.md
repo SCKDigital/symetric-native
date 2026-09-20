@@ -10,6 +10,17 @@ are what they are, and which rules will quietly break the product if ignored.
 If you change a value in the code, change it here. If the two disagree,
 the code is right and this file is stale.
 
+**A PDF of this guide**, with swatches, variant washes and the contrast
+figures, is at `docs/symetric-brand-guide.pdf` — the version to send someone
+who is not going to read a repo. It is generated, not maintained by hand:
+
+```
+node scripts/make-brand-guide.mjs
+```
+
+Regenerate it after any change to `brand.ts`, `domains.ts`, `comfort-theme.ts`
+or `report/theme.ts`, or it will start telling people the wrong hex.
+
 ---
 
 ## The one rule
