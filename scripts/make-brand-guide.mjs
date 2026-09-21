@@ -2,7 +2,7 @@
 //
 // Every colour, the mark geometry, the gradient and the version are read out
 // of the source files rather than retyped, so the guide cannot quietly drift
-// from the app. Regenerate it after any change to brand.ts, domains.ts,
+// from the app. Regenerate it after any change to accents.ts, domains.ts,
 // comfort-theme.ts or report/theme.ts:
 //
 //   node scripts/make-brand-guide.mjs
@@ -22,7 +22,7 @@ const CHROME_CANDIDATES = [
 ];
 
 const read = p => readFileSync(join(ROOT, p), 'utf8');
-const brandSrc = read('src/constants/brand.ts');
+const accentsSrc = read('src/constants/accents.ts');
 const domainSrc = read('src/lib/domains.ts');
 const comfortSrc = read('src/lib/comfort-theme.ts');
 const reportSrc = read('src/lib/report/theme.ts');
@@ -30,17 +30,42 @@ const logoSrc = read('src/components/symetric-logo.tsx');
 const version = JSON.parse(read('app.json')).expo.version;
 
 // ── Values, pulled from source ─────────────────────────────────────────────
-const BRAND = Object.fromEntries(
-  [...brandSrc.matchAll(/(\w+): '(#[0-9A-Fa-f]{6})'/g)].map(m => [m[1], m[2]]));
+// Every accent, each with its nested quiet block pulled out separately —
+// the two share key names (fill, onFill, text), so a flat scan would have
+// the quiet values overwrite the loud ones.
+function parseAccents(src) {
+  const body = src.slice(src.indexOf('export const ACCENTS'));
+  const out = {};
+  for (const m of body.matchAll(/^  (\w+): \{([\s\S]*?)^  \},$/gm)) {
+    const [, name, block] = m;
+    const head = block.slice(0, block.indexOf('quiet: {'));
+    const tokens = {};
+    for (const t of head.matchAll(/(\w+): '(#[0-9A-Fa-f]{6})'/g)) tokens[t[1]] = t[2];
+    const q = block.match(/quiet: \{([^}]*)\}/);
+    tokens.quiet = {};
+    if (q) for (const t of q[1].matchAll(/(\w+): '(#[0-9A-Fa-f]{6})'/g)) tokens.quiet[t[1]] = t[2];
+    out[name] = tokens;
+  }
+  return out;
+}
+const ACCENTS = parseAccents(accentsSrc);
+const DEFAULT_ACCENT = accentsSrc.match(/DEFAULT_ACCENT: AccentName = '(\w+)'/)[1];
+const ACCENT_LABELS = Object.fromEntries(
+  [...accentsSrc.matchAll(/^  (\w+): '([A-Z][a-z]+)',$/gm)].map(m => [m[1], m[2]]));
+const ACCENT_NOTES = Object.fromEntries(
+  [...accentsSrc.matchAll(/^  (\w+): '([A-Z][^']*\.)',$/gm)]
+    .map(m => [m[1], m[2]]).filter(([, v]) => v.includes(' ')));
+/** The default accent. Everything unqualified in this guide is this one. */
+const BRAND = ACCENTS[DEFAULT_ACCENT];
 const DOMAINS = Object.fromEntries(
   [...domainSrc.matchAll(/^  (\w+): '(#[0-9A-Fa-f]{6})',/gm)].map(m => [m[1], m[2]]));
 const BODY_COLOR = domainSrc.match(/BODY_COLOR = '(#[0-9A-Fa-f]{6})'/)[1];
 const UNKNOWN = domainSrc.match(/UNKNOWN_FACTOR_COLOR = '(#[0-9A-Fa-f]{6})'/)[1];
-const COMFORT = {
-  fill: comfortSrc.match(/QUIET_ACCENT = '(#[0-9A-Fa-f]{6})'/)[1],
-  text: comfortSrc.match(/QUIET_ACCENT_TEXT = '(#[0-9A-Fa-f]{6})'/)[1],
-  border: comfortSrc.match(/QUIET_ACCENT_BORDER = '(#[0-9A-Fa-f]{6})'/)[1],
-};
+// Comfort mode is now per accent; these live in accents.ts beside the loud
+// ones rather than as three consts in comfort-theme.ts. The scale factor is
+// still the only thing comfort-theme owns outright.
+const COMFORT = BRAND.quiet;
+const COMFORT_SCALE = comfortSrc.match(/COMFORT_SCALE = ([\d.]+)/)[1];
 const REPORT = Object.fromEntries(
   [...reportSrc.matchAll(/^    (\w+): '(#[0-9A-Fa-f]{6})',/gm)].map(m => [m[1], m[2]]));
 const MARK_PATH = logoSrc.match(/const MARK_PATH =\s*'([^']+)'/)[1];
@@ -80,7 +105,10 @@ const markSvg = (size, scale, tile, radius) => `
 /** A swatch, with the numbers that decide whether it may be used. */
 function swatch(name, hex, note, opts = {}) {
   const onDark = contrast(hex, APP_BG);
-  const whiteOn = contrast('#ffffff', hex);
+  // The label that actually sits on this colour, which is near-black under
+  // porcelain and white under the other two. Hard-coding white here would
+  // have printed 1.3:1 beside the default primary button and called it fine.
+  const labelOn = contrast(opts.label ?? BRAND.onFill, hex);
   const near = opts.compare === false ? null : nearestDomain(hex);
   return `<div class="sw">
     <div class="chip" style="background:${hex}"></div>
@@ -90,7 +118,7 @@ function swatch(name, hex, note, opts = {}) {
       <div class="swnote">${note}</div>
       <div class="swnum">
         <span>on #0a0c12 <b>${onDark.toFixed(1)}:1</b></span>
-        <span>white on it <b>${whiteOn.toFixed(1)}:1</b></span>
+        <span>label on it <b>${labelOn.toFixed(1)}:1</b></span>
         ${near ? `<span>nearest data <b>ΔE ${near.d.toFixed(0)}</b></span>` : ''}
       </div>
     </div>
@@ -119,6 +147,17 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   body { margin:0; font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
          color:#1F2937; font-size:9.5pt; line-height:1.5; }
   .page { page-break-after: always; }
+  .acc { border:0.5pt solid #D1D0C8; border-radius:4pt; padding:8pt 10pt; margin-bottom:7pt; }
+  .acchead { display:flex; align-items:baseline; gap:6pt; margin-bottom:6pt; }
+  .accname { font-size:11pt; font-weight:700; }
+  .accdef { font-size:7.5pt; letter-spacing:0.6pt; text-transform:uppercase; color:#6B7280; }
+  .accrow { display:flex; align-items:center; gap:7pt; background:#0a0c12; padding:7pt 9pt; border-radius:3pt; }
+  .accbtn { padding:5pt 11pt; border-radius:8pt; font-size:8.5pt; font-weight:700; }
+  .accbtn.quiet { font-weight:600; }
+  .acclink { font-size:8.5pt; }
+  .accpill { padding:3pt 8pt; border-radius:8pt; border:0.5pt solid; font-size:8pt; }
+  .accnums { display:flex; gap:12pt; flex-wrap:wrap; margin-top:5pt; font-size:7.5pt; color:#6B7280; }
+  .accnums b { color:#1F2937; font-weight:600; }
   .page:last-child { page-break-after: auto; }
   h1 { font-size:30pt; margin:0 0 4pt; letter-spacing:-0.8pt; }
   h2 { font-size:13pt; margin:0 0 3pt; letter-spacing:-0.2pt; }
@@ -221,26 +260,36 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     <thead><tr><th>Context</th><th>Tile</th><th>Glyph fills</th></tr></thead>
     <tbody>
       <tr><td>In-app lockup</td><td class="mono">${BRAND.tile}</td><td>41%</td></tr>
-      <tr><td>Launcher icon</td><td class="mono">${BRAND.fill}</td><td>58%</td></tr>
+      <tr><td>Launcher icon</td><td class="mono">${BRAND.tile}</td><td>58%</td></tr>
       <tr><td>Android adaptive foreground</td><td>transparent</td><td>50%, inside the safe zone</td></tr>
       <tr><td>Splash</td><td>transparent</td><td>88%</td></tr>
     </tbody>
   </table>
-  <p class="small muted" style="margin-top:7pt">Two tiles on purpose: in-app the mark
-  sits on a near-black screen, where a near-black tile is right. A home screen is
-  not that — an almost-black icon disappears on a dark wallpaper. Every icon is
-  generated from the component by <span class="mono">scripts/make-icons.mjs</span>.
-  Regenerate, never redraw.</p>
+  <p class="small muted" style="margin-top:7pt">One tile, on both. The launcher used
+  the accent's <span class="mono">fill</span> until 1.5.0, on the reasoning that an
+  almost-black icon disappears on a dark wallpaper. Measuring it killed the rule:
+  the mark is seven light, saturated colours, so what it needs is a dark ground.
+  The worst gradient stop manages
+  <b>${Math.min(...STOPS.map(x => contrast(x[2], BRAND.fill))).toFixed(1)}:1</b> on
+  the porcelain fill against
+  <b>${Math.min(...STOPS.map(x => contrast(x[2], BRAND.tile))).toFixed(1)}:1</b> on the tile.</p>
+  <p class="small muted">Every icon is generated from the component by
+  <span class="mono">scripts/make-icons.mjs</span>. Regenerate, never redraw.</p>
   <div class="foot"><span>Symetric brand guide</span><span>${version}</span></div>
 </div>
 
 <!-- Brand colour -->
 <div class="page">
-  <h3>Brand colour</h3>
-  <p>Teal, and specifically <span class="mono">${BRAND.fill}</span> — the same ink the
-  PDF report already uses to mean "improved", so the app and the document it
-  produces are one brand rather than two.</p>
-  ${swatch('fill', BRAND.fill, 'Primary button, under a white label.')}
+  <h3>Brand colour — ${ACCENT_LABELS[DEFAULT_ACCENT]}</h3>
+  <p>A warm off-white, <span class="mono">${BRAND.fill}</span>, under a near-black
+  label. It is the default because it is the only accent that cannot collide with
+  a data colour under any circumstance: it has no hue to collide with.</p>
+  <p class="small muted">Two others ship with it and are the user&rsquo;s to pick in
+  Settings — see the next page. Everything unqualified in this guide is
+  ${ACCENT_LABELS[DEFAULT_ACCENT].toLowerCase()}, because that is what the launcher
+  icon, the splash and the notification tint are baked with.</p>
+  ${swatch('fill', BRAND.fill, 'Primary button.')}
+  ${swatch('onFill', BRAND.onFill, 'The label on fill, fillAlt and signIn. Never hard-code it.', { compare: false, label: BRAND.fill })}
   ${tintRow(BRAND.fill)}
   ${swatch('text', BRAND.text, 'Links, icons, active labels.')}
   ${tintRow(BRAND.text)}
@@ -279,6 +328,58 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   <div class="foot"><span>Symetric brand guide</span><span>${version}</span></div>
 </div>
 
+<!-- The accent choice -->
+<div class="page">
+  <h3>The accent is the user&rsquo;s</h3>
+  <p>Three options, set in Settings and stored on the profile so they follow
+  the person between devices. Porcelain is the default.</p>
+  <p class="small muted">The reasoning is the same one that produced comfort mode.
+  This app is used daily, often for years, often by someone who feels bad. What
+  colour the chrome is carries no information at all, so handing that one piece
+  back costs nothing. What is <i>not</i> negotiable is the data palette: every
+  chart makes its argument in colour, so those stay fixed whichever accent is on.</p>
+
+  ${Object.keys(ACCENTS).map(n => {
+    const a = ACCENTS[n];
+    return `<div class="acc">
+      <div class="acchead">
+        <span class="accname">${ACCENT_LABELS[n] ?? n}</span>
+        ${n === DEFAULT_ACCENT ? '<span class="accdef">default</span>' : ''}
+      </div>
+      <div class="accrow">
+        <span class="accbtn" style="background:${a.fill};color:${a.onFill}">Check in now</span>
+        <span class="acclink" style="color:${a.text}">Reschedule</span>
+        <span class="accpill" style="background:${a.text}26;border-color:${a.text}66;color:${a.text}">Concentration</span>
+        <span class="accbtn quiet" style="background:${a.quiet.fill};color:${a.quiet.onFill};border:1px solid ${a.quiet.border}">comfort</span>
+      </div>
+      <div class="accnums">
+        <span>fill <b>${a.fill}</b></span>
+        <span>label <b>${contrast(a.onFill, a.fill).toFixed(1)}:1</b></span>
+        <span>text <b>${a.text}</b> at <b>${contrast(a.text, APP_BG).toFixed(1)}:1</b></span>
+        <span>nearest data <b>&Delta;E ${nearestDomain(a.text).d.toFixed(0)}</b></span>
+      </div>
+    </div>`;
+  }).join('')}
+
+  <h3>What a new accent has to clear</h3>
+  <p class="small"><span class="mono">scripts/check-accents.mjs</span> parses the real
+  palette and fails on any of these, so the list is enforced rather than aspirational:</p>
+  <ul class="small">
+    <li>Accent text reads <b>4.5:1</b> on <span class="mono">#0a0c12</span> (3:1 for
+        <span class="mono">textSoft</span>, which is only used large).</li>
+    <li>Each fill&rsquo;s paired label reads <b>4.5:1</b> on it. This is why every accent
+        carries its own <span class="mono">onFill</span>: white on porcelain is 1.3:1.</li>
+    <li>Nothing lands within <b>&Delta;E 15</b> of a domain colour.</li>
+    <li>No accent text lands within <b>&Delta;E 15</b> of body text
+        <span class="mono">#e2e8f0</span>, or a link stops looking like a link. This is
+        the check that moved porcelain&rsquo;s text off the obvious off-white
+        <span class="mono">#D6CFC2</span>, which measured &Delta;E 14.6.</li>
+    <li>The three fills sit at least <b>&Delta;E 25</b> apart, or the setting does
+        nothing visible.</li>
+  </ul>
+  <div class="foot"><span>Symetric brand guide</span><span>${version}</span></div>
+</div>
+
 <!-- Data colour -->
 <div class="page">
   <h3>Data colour — mind domains</h3>
@@ -307,8 +408,12 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   ΔE ${nearestDomain(BRAND.text).d.toFixed(0)} from ${nearestDomain(BRAND.text).n.replace(/_/g, ' ')}.</p>
 
   <h3>Comfort mode</h3>
-  <p class="small">A muted version of the same hue, for users who find the normal
-  accent too loud. Derived from the brand — if the brand moves, these move with it.</p>
+  <p class="small">A muted version of whichever accent is on, for users who find the
+  normal one too loud, plus a ${COMFORT_SCALE}&times; type scale. Each accent carries
+  its own quiet set rather than having one computed by formula: pulling chroma back
+  by a fixed ratio works for a saturated teal and falls apart for porcelain, which
+  is already near-white and gets quieter by going <i>down</i> in lightness.</p>
+  <p class="small muted">Shown here for ${ACCENT_LABELS[DEFAULT_ACCENT].toLowerCase()}.</p>
   <div class="grid2">
     ${dataSwatch('comfort fill', COMFORT.fill)}
     ${dataSwatch('comfort text', COMFORT.text)}
@@ -336,14 +441,20 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   <h3>Shape</h3>
   <table>
     <tbody>
-      <tr><td style="width:60pt"><b>8pt</b></td><td>Chips, pills, tabs, filter controls, buttons</td></tr>
-      <tr><td><b>12pt</b></td><td>Standard cards and inputs</td></tr>
-      <tr><td><b>16–24pt</b></td><td>Hero cards and modals</td></tr>
+      <tr><td style="width:60pt"><b>8pt</b></td><td>Chips, pills, tabs, filter controls, buttons <span class="muted">— specified</span></td></tr>
+      <tr><td><b>10–16pt</b></td><td>Cards and inputs <span class="muted">— in practice; see below</span></td></tr>
+      <tr><td><b>20–24pt</b></td><td>Hero cards and modals</td></tr>
       <tr><td><b>Circles</b></td><td>Stay circles: PIN keypad, comfort button, icon badges</td></tr>
     </tbody>
   </table>
   <p class="small muted" style="margin-top:6pt">Controls were capsule-shaped until 1.4.0.
-  Eight reads as a control rather than a tag, and echoes the cards behind it.</p>
+  Eight reads as a control rather than a tag, and echoes the cards behind it. That
+  is the one radius this guide actually specifies.</p>
+  <p class="small muted"><b>The card radii are not yet a scale.</b> The codebase uses
+  10 in 44 places, 12 in 43, 16 in 22 and 14 in 15, plus a long tail — the values
+  arrived with the components that were ported, not from a decision. Documented
+  here as what is true rather than as a three-step scale that nothing follows.
+  Normalising them is an open job, not a rule anyone is currently breaking.</p>
 
   <h3>Typography</h3>
   <p><b>There is no brand typeface, and this is a known gap.</b> The app uses each

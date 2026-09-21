@@ -1,11 +1,12 @@
 # Symetric brand guide
 
-Last updated 20 September 2026, for app version 1.4.0.
+Last updated 21 September 2026, for app version 1.5.0.
 
 **The code is the source of truth, not this file.** Colours live in
-`src/constants/brand.ts` (the app's own colour) and `src/lib/domains.ts` (the
-colours that identify measurements). This document exists to say *why* they
-are what they are, and which rules will quietly break the product if ignored.
+`src/constants/accents.ts` (the three accents the user picks between) and
+`src/lib/domains.ts` (the colours that identify measurements). This document
+exists to say *why* they are what they are, and which rules will quietly break
+the product if ignored.
 
 If you change a value in the code, change it here. If the two disagree,
 the code is right and this file is stale.
@@ -18,7 +19,7 @@ who is not going to read a repo. It is generated, not maintained by hand:
 node scripts/make-brand-guide.mjs
 ```
 
-Regenerate it after any change to `brand.ts`, `domains.ts`, `comfort-theme.ts`
+Regenerate it after any change to `accents.ts`, `domains.ts`, `comfort-theme.ts`
 or `report/theme.ts`, or it will start telling people the wrong hex.
 
 ---
@@ -41,10 +42,71 @@ app was painted the colour that means Mood on every chart.
 Practically:
 
 - Reaching for a colour to identify a **measurement**? `src/lib/domains.ts`.
-- Reaching for a colour for a **control, link, or surface**? `src/constants/brand.ts`.
+- Reaching for a colour for a **control, link, or surface**? `useAccent()`.
 - An unrecognised factor gets `UNKNOWN_FACTOR_COLOR`, a deliberate neutral. It
-  must never fall back to the brand colour, or moving the brand silently
-  recolours data.
+  must never fall back to the accent, or moving the brand silently recolours
+  data.
+
+---
+
+## The accent is the user's
+
+Since v1.5.0 there are three accents and the person picks one in Settings. The
+choice lives on `profiles.accent` so it follows them between devices.
+
+| | Fill | Label on it | Accent text |
+|---|---|---|---|
+| **Porcelain** (default) | `#E7E2D9` | `#0A0C12` | `#C8B79A` |
+| Teal | `#0F6E56` | `#FFFFFF` | `#4FD1C5` |
+| Plum | `#7A1A82` | `#FFFFFF` | `#DDA0E8` |
+
+The reasoning is the one that produced comfort mode. This app is used daily,
+often for years, often by someone who feels bad. What colour the chrome is
+carries no information at all, so handing that one piece back costs nothing.
+What is *not* negotiable is the data palette — see the one rule above.
+
+**Porcelain is the default because it is the only option that cannot collide
+with a data colour under any circumstance: it has no hue to collide with.** A
+near-white button is unambiguously chrome.
+
+### Every accent is a family, not a hex
+
+An accent has to be legible in two opposite directions — as coloured text on a
+near-black background, and underneath a label when it fills a button — and no
+single value does both. So each carries its own **`onFill`**. Porcelain takes a
+near-black label where the other two take white; swapping one hex would have
+produced white-on-porcelain at 1.3:1, which is invisible.
+
+Anywhere a label sits on an accent fill it reads `onFill`. Hard-coding
+`'#ffffff'` was true in 24 places before this existed.
+
+### What a new accent has to clear
+
+`scripts/check-accents.mjs` parses the real palette out of the source and fails
+on any of these, so the list is enforced rather than aspirational:
+
+- Accent text reads **4.5:1** on `#0a0c12` (3:1 for `textSoft`, only used large).
+- Each fill's paired label reads **4.5:1** on it.
+- Nothing lands within **ΔE 15** of a domain colour.
+- No accent text lands within **ΔE 15** of body text `#e2e8f0`, or a link stops
+  looking like a link.
+- The three fills sit at least **ΔE 25** apart, or the setting does nothing
+  visible.
+
+That fourth check is why porcelain's text is `#C8B79A` and not the obvious
+off-white `#D6CFC2` from the original option sheet: the off-white measured
+ΔE 14.6 from body text, so every link in the app would have read as prose.
+
+### Two things the choice cannot reach
+
+The launcher icon, the splash and the Android notification tint are baked into
+`app.json` and the PNGs at build time, so they wear the **default** accent
+whatever the user picks. `BRAND` in `src/constants/brand.ts` exists for exactly
+those cases, plus code that runs outside the React tree. If you are writing a
+component you want `useAccent()`.
+
+Android also fixes a notification channel's properties when it is created and
+ignores later changes, so the channel's LED colour is the default's too.
 
 ---
 
@@ -64,15 +126,26 @@ from the mark. **Regenerate rather than redraw.**
 
 | Context | Tile | Glyph fills |
 |---|---|---|
-| In-app lockup | `BRAND.tile` `#0B2B2A` | 41% of the tile |
-| Launcher icon | `BRAND.fill` `#0F6E56` | 58% of the tile |
+| In-app lockup | the accent's `tile` | 41% of the tile |
+| Launcher icon | `#2A251C` (the default's `tile`) | 58% of the tile |
 | Android adaptive foreground | transparent | 50%, inside the safe zone |
 | Splash | transparent | 88% |
 
-The two tile colours are deliberate. In-app, the mark sits on a near-black
-screen and a near-black tile is correct. A home screen is not that: an
-almost-black icon disappears against a dark wallpaper, so the launcher tile
-uses the brand teal instead.
+**One tile, on both, since v1.5.0.** The launcher used the accent's `fill`
+until then, on the reasoning that an almost-black icon disappears against a
+dark wallpaper. Measuring it killed that rule. The mark is seven light,
+saturated colours, so what it needs is a dark ground:
+
+| Tile | Worst gradient stop | Best |
+|---|---|---|
+| Porcelain `fill` `#E7E2D9` | 1.29:1 | 2.11:1 |
+| Teal `fill` `#0F6E56` (what shipped in 1.4) | 2.28:1 | 3.72:1 |
+| Porcelain `tile` `#2A251C` | 5.34:1 | 8.71:1 |
+
+The trade is separation from a dark wallpaper — 1.4:1 against pure black, where
+the teal managed 3.4:1. Worth taking: both platforms mask and shade the icon
+themselves, a pure-black wallpaper is the worst case rather than the common
+one, and an icon you cannot read is worse than one that sits quietly.
 
 **Never ship the Expo placeholder.** Versions up to 1.3.0 shipped with
 `expo-symbol 2.svg` and a `grid.png` on Expo's default blue — a template icon,
@@ -84,44 +157,51 @@ reset.
 
 ## Colour: the app
 
-Teal. It is the same ink as `theme.colors.teal` in the PDF report, where it
-already means "improved" — so the app and the document it produces are one
-brand rather than two.
+The default accent's tokens. The other two carry the same roles — see
+`src/constants/accents.ts` for all three.
 
-| Token | Value | Use |
+| Token | Porcelain | Use |
 |---|---|---|
-| `BRAND.fill` | `#0F6E56` | Primary button, under a white label |
-| `BRAND.fillAlt` | `#15887A` | Gradient partner, secondary fills |
-| `BRAND.text` | `#4FD1C5` | Links, icons, active labels |
-| `BRAND.textSoft` | `#99E6DB` | Larger or lower-emphasis accent text |
-| `BRAND.textFlat` | `#3FB8A8` | Settings accents, a touch flatter |
-| `BRAND.border` | `#1A5C4E` | Accent card borders |
-| `BRAND.surface` | `#0B1A1B` | Accent card backgrounds |
-| `BRAND.signIn` | `#0F7A60` | The sign-in button, historically its own shade |
-| `BRAND.tile` | `#0B2B2A` | The in-app logo tile |
+| `fill` | `#E7E2D9` | Primary button |
+| `onFill` | `#0A0C12` | The label on `fill`, `fillAlt` and `signIn` |
+| `fillAlt` | `#CFC7B6` | Gradient partner, secondary fills |
+| `text` | `#C8B79A` | Links, icons, active labels |
+| `textSoft` | `#DACEB8` | Larger or lower-emphasis accent text |
+| `textFlat` | `#B5A386` | Settings accents, a touch flatter |
+| `border` | `#3A3229` | Accent card borders |
+| `surface` | `#14120E` | Accent card backgrounds |
+| `signIn` | `#EFEBE3` | The sign-in button, historically its own shade |
+| `tile` | `#2A251C` | The logo tile |
 
-Translucent washes go through `brandTint(BRAND.x, alpha)`. Do not hand-write
-`rgba(...)`: 43 of those were the reason the last colour change could not be
+Translucent washes go through `brandTint(token, alpha)`. Do not hand-write
+`rgba(...)`: 43 of those were the reason the 1.4.0 colour change could not be
 done with search and replace, because raw channel numbers have no textual link
 to the colour they are a tint of.
 
 Background is `#0a0c12`. Body text `#e2e8f0`.
 
+`fillAlt` was doing two incompatible jobs until 1.5.0 — solid button fill *and*
+accent text — and failed one of them: white on teal's `#15887A` was 4.34:1,
+under AA for a 14px button label. It is a fill now, darkened to `#13806F`, and
+the five places using it as text moved to `textFlat`.
+
 ### Comfort mode
 
-A muted version of the same hue, in `src/lib/comfort-theme.ts`, for users who
-find the normal accent too loud. Derived from the brand — if the brand moves,
-these move with it, or comfort mode is quietly still wearing last year's
-colour.
+A muted version of whichever accent is on, plus a 1.15× type scale, for users
+who find the normal accent too loud. Each accent carries its own `quiet` block
+rather than having one computed by formula: pulling chroma back by a fixed
+ratio works for a saturated teal and falls apart for porcelain, which is
+already near-white and gets quieter by going *down* in lightness.
 
-`#2F5450` fill · `#9FC3BB` text · `#1E3330` border.
+Porcelain's: `#BDB4A5` fill · `#A99C86` text · `#2E2921` border.
 
 ---
 
 ## Colour: the data
 
 From `src/lib/domains.ts`. These identify measurements and are not brand
-colours. They change only if the meaning changes.
+colours. They change only if the meaning changes, and they do **not** move when
+the accent does.
 
 | Domain | | Domain | |
 |---|---|---|---|
@@ -135,10 +215,9 @@ Every **body** domain shares one colour, `BODY_COLOR` `#BC812F`, because body
 domains are read as a group against mind. `UNKNOWN_FACTOR_COLOR` `#8892a4` is
 the neutral for anything unrecognised.
 
-**Adding a domain colour:** check it against the brand tokens *and* every
+**Adding a domain colour:** check it against all three accents *and* every
 existing domain using perceptual distance, not hue. Anything under ΔE 15 is
-confusable at a glance. For reference, the current teal sits ΔE 42 from the
-nearest data colour.
+confusable at a glance.
 
 ---
 
@@ -146,10 +225,16 @@ nearest data colour.
 
 The PDF report has its own palette in `src/lib/report/theme.ts` and does not
 use the app's tokens. **A screen colour chosen for a near-black background can
-be invisible on white** — the brand's `#4FD1C5` manages 1.9:1 there.
+be invisible on white** — porcelain's `#C8B79A` manages 2.0:1 there, and teal's
+`#4FD1C5` 1.9:1.
 
 Ink `#1F2937` · muted `#6B7280` · rules `#D1D0C8` · teal (improved) `#0F6E56` ·
 coral (concerning) `#A32D2D` · amber (watch) `#854F0B`.
+
+The report's palette is fixed and does **not** follow the accent. A clinical
+document that changes colour because the patient liked a different button is
+not a document anyone should trust, and the report's teal/coral/amber carry
+meaning — improved, concerning, watch — that an accent would collide with.
 
 Known gap: `theme.colors.mindLine` is 3.0:1 on white, thin for a line a
 clinician reads. Documented in the file; not yet changed.
@@ -158,13 +243,20 @@ clinician reads. Documented in the file; not yet changed.
 
 ## Shape
 
-- **8pt** — chips, pills, tabs, filter controls, buttons
-- **12pt** — standard cards and inputs
-- **16–24pt** — hero cards and modals
+- **8pt** — chips, pills, tabs, filter controls, buttons. *This is the one
+  radius the guide actually specifies.*
+- **10–16pt** — cards and inputs, in practice
+- **20–24pt** — hero cards and modals
 - Circles stay circles: the PIN keypad, the comfort button, icon badges
 
 Controls were capsule-shaped until v1.4.0. Eight reads as a control rather
 than a tag, and echoes the cards behind it.
+
+**The card radii are not yet a scale.** The codebase uses 10 in 44 places, 12
+in 43, 16 in 22 and 14 in 15, plus a long tail of 2/3/4/5/6/7/9/17/20/32. Those
+values arrived with the components that were ported, not from a decision. This
+section describes what is true rather than a three-step scale nothing follows.
+Normalising them is an open job, not a rule anyone is currently breaking.
 
 ---
 
@@ -212,24 +304,30 @@ as inferred from in-product copy and still wants confirming.
 
 ## Accessibility
 
-Floors: **4.5:1** for body text, **3:1** for large or bold. Every brand token
-meets them in the direction it is used.
+Floors: **4.5:1** for body text, **3:1** for large or bold. Every token of
+every accent meets them in the direction it is used, and
+`scripts/check-accents.mjs` fails the build if one slips.
 
-| | Ratio |
-|---|---|
-| White on `BRAND.fill` | 6.2:1 |
-| `BRAND.text` on background | 10.5:1 |
-| White on comfort fill | 8.4:1 |
-| Comfort text on background | 10.2:1 |
+| | Label on fill | Accent text on background |
+|---|---|---|
+| Porcelain | 15.2:1 | 10.0:1 |
+| Teal | 6.2:1 | 10.5:1 |
+| Plum | 9.1:1 | 9.6:1 |
+| Porcelain, comfort | 9.5:1 | 7.2:1 |
+| Teal, comfort | 8.4:1 | 10.2:1 |
+| Plum, comfort | 11.6:1 | 8.0:1 |
 
 Colour is never the only signal. Charts carry labels and numbers; findings
-carry a confidence word, not just a tier colour.
+carry a confidence word, not just a tier colour. The accent picker itself
+carries a tick, not only a ring.
 
 ---
 
 ## Checking you haven't broken it
 
-- `scripts/make-icons.mjs` — regenerates every icon from the mark
+- `node scripts/check-accents.mjs` — every contrast and separation floor above
+- `node scripts/make-icons.mjs` — regenerates every icon from the mark
+- `node scripts/make-brand-guide.mjs` — regenerates the PDF from the source
 - `scripts/report-layout/` — renders the report in a real engine and fails if
   a page overflows; run it under both fonts
 - `npx expo config --type introspect` — confirms icons, the notification tint
@@ -241,6 +339,9 @@ carry a confidence word, not just a tier colour.
 
 - **No brand typeface.** The largest open question here.
 - **Store screenshots** (`mosaic-app/marketing/app-store-screenshots/`, 17
-  artboards) still show the indigo accent and the placeholder icon.
+  artboards) show the indigo accent and the placeholder icon — two brands out
+  of date now, not one.
+- **The card radii are not a scale**, and the guide now says so rather than
+  pretending otherwise.
 - **The report's mind-line ink** is thin on white.
 - **Voice** is documented but inferred rather than confirmed.
