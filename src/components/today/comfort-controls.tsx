@@ -4,7 +4,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
 import type { Comfort, ComfortDuration } from '@/hooks/use-comfort';
 import { formatTime, type TimeFormat } from '@/lib/time-format';
-import { BRAND } from '@/constants/brand';
+import { BRAND, brandTint } from '@/constants/brand';
 
 // Comfort mode's entry point lives on Today, not only in Settings, because the
 // thing it answers is episodic. Being overstimulated happens at 4pm on a
@@ -27,9 +27,13 @@ function ComfortIcon({ color }: { color: string }) {
  * The on state used to be one step of grey on the icon plus a #12162b fill,
  * which against a #0a0c12 page was close to invisible — and since the banner
  * that says comfort mode is on scrolls away with the rest of Today, this button
- * is what is left to say so. It is now a filled, bordered pill. Still quiet, in
- * keeping with the mode, but no longer ambiguous: a mode that changes what the
- * app asks of you must never be something you cannot tell is running.
+ * is what is left to say so. It is now a filled, bordered pill: quiet, in
+ * keeping with the mode, but not ambiguous — a mode that changes what the app
+ * asks of you must never be something you cannot tell is running.
+ *
+ * The fill is a wash of the brand teal rather than the indigo it was built
+ * with, which survived the brand move and read as a second accent colour
+ * sitting next to the logo.
  */
 export function ComfortButton({ active, onPress }: { active: boolean; onPress: () => void }) {
   return (
@@ -39,7 +43,7 @@ export function ComfortButton({ active, onPress }: { active: boolean; onPress: (
       accessibilityLabel={active ? 'Comfort mode is on' : 'Turn on comfort mode'}
       hitSlop={10}
       style={({ pressed }) => [styles.iconButton, active && styles.iconButtonActive, pressed && styles.pressed]}>
-      <ComfortIcon color={active ? '#e2e8f0' : '#7886a0'} />
+      <ComfortIcon color={active ? '#cbd5e0' : '#7886a0'} />
     </Pressable>
   );
 }
@@ -143,17 +147,17 @@ const styles = StyleSheet.create({
     width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: 'transparent',
   },
-  iconButtonActive: { borderColor: '#4a5078', backgroundColor: '#232842' },
+  iconButtonActive: { borderColor: brandTint(BRAND.text, 0.28), backgroundColor: brandTint(BRAND.fill, 0.22) },
 
   banner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-    backgroundColor: BRAND.surface, borderWidth: 1, borderColor: '#252a44', borderRadius: 16,
+    backgroundColor: '#0d1014', borderWidth: 1, borderColor: '#1b2029', borderRadius: 16,
     paddingVertical: 14, paddingHorizontal: 18, marginBottom: 16,
   },
   bannerText: { flex: 1 },
-  bannerTitle: { fontSize: 15, fontWeight: '600', color: '#cbd5e0' },
+  bannerTitle: { fontSize: 15, fontWeight: '500', color: '#97a1b4' },
   bannerMeta: { fontSize: 13, color: '#7886a0', marginTop: 2 },
-  bannerAction: { fontSize: 14, fontWeight: '600', color: '#a5abc9' },
+  bannerAction: { fontSize: 14, fontWeight: '500', color: '#8b94a8' },
 
   options: { gap: 10, paddingTop: 8 },
   option: {
