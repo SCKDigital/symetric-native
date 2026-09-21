@@ -96,11 +96,11 @@ function buildSleepRow({ findings }: SleepInput): AreaRow {
 
 function buildMedicationRow({ tooRecentLabel, findings }: MedicationInput): AreaRow {
   if (tooRecentLabel) {
-    return { area: 'medication', label: 'Medication', subtitle: tooRecentLabel, state: 'muted' };
+    return { area: 'medication', label: 'Events', subtitle: tooRecentLabel, state: 'muted' };
   }
   const count = countFindings(findings);
   if (count === 0) {
-    return { area: 'medication', label: 'Medication', subtitle: 'No standout effects yet', state: 'empty' };
+    return { area: 'medication', label: 'Events', subtitle: 'No standout effects yet', state: 'empty' };
   }
-  return { area: 'medication', label: 'Medication', subtitle: `${count} effect${count !== 1 ? 's' : ''} observed`, state: 'active' };
+  return { area: 'medication', label: 'Events', subtitle: `${count} effect${count !== 1 ? 's' : ''} observed`, state: 'active' };
 }

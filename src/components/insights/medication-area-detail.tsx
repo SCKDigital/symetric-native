@@ -31,7 +31,7 @@ export default function MedicationAreaDetail({ onBack, markers, impacts }: Props
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <BackRow label="Medication" onBack={onBack} />
+      <BackRow label="Events" onBack={onBack} />
 
       {findings.length === 0 ? (
         <Text style={styles.emptyText}>No standout effects yet. Effects can usually only be read once at least a week has passed on either side of a change.</Text>

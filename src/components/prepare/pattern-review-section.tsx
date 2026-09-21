@@ -11,7 +11,7 @@ import { CONFIDENCE_COPY, GRADE_ORDER, type Area, type Grade, type PatternFindin
 import type { PatternSource, PreparePatternReview } from '@/lib/supabase';
 import { BRAND, brandTint } from '@/constants/brand';
 
-const AREA_LABEL: Record<Area, string> = { mind: 'Mind', body: 'Body', sleep: 'Sleep', medication: 'Medication' };
+const AREA_LABEL: Record<Area, string> = { mind: 'Mind', body: 'Body', sleep: 'Sleep', medication: 'Events' };
 const AREA_COLOR: Record<Area, string> = { mind: MIND_AREA_COLOR, body: BODY_COLOR, sleep: DOMAIN_COLORS.sleep, medication: BRAND.textSoft };
 
 function reviewKey(patternId: string, patternSource: PatternSource) {
