@@ -244,11 +244,25 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       note: note || null,
       entered_retroactively: retro,
     };
-    for (const d of CHECKIN_BODY_DOMAIN_ORDER) {
-      // Every domain stores what its slider was showing, touched or not, so the
-      // form never claims a rating it didn't save. For an untouched domain that
-      // is the rolling baseline — invented data, but "typical for me" rather
-      // than a flat 5, which distorts the baselines it feeds far less.
+    for (const d of activeDomains) {
+      // Every domain the form showed stores what its slider was showing,
+      // touched or not, so the form never claims a rating it didn't save. For
+      // an untouched domain that is the rolling baseline — invented data, but
+      // "typical for me" rather than a flat 5, which distorts the baselines it
+      // feeds far less.
+      //
+      // activeDomains, not CHECKIN_BODY_DOMAIN_ORDER: a domain this person has
+      // never turned on has no slider, so there is nothing it was showing and
+      // nothing to invent. Iterating the full list wrote a value for every
+      // domain in the app on every save, and a never-enabled domain has no
+      // history for rollingBodyBaseline to work from, so that value was the 5
+      // fallback — every day, forever. That is how a flat 5 for gut reached
+      // History for someone who had never been offered the question.
+      //
+      // Domains that are off are omitted from the payload rather than written
+      // as null, which is the rule the morning form already states: writes
+      // touch only what is currently asked, so turning a domain off never
+      // nulls the readings taken while it was on.
       payload[d] = values[d] ?? domainBaselines[d] ?? 5;
     }
 
@@ -313,7 +327,7 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       return;
     }
 
-    const domainCount = CHECKIN_BODY_DOMAIN_ORDER.filter(d => values[d] !== undefined).length;
+    const domainCount = activeDomains.filter(d => values[d] !== undefined).length;
     trackBodyCheckInCompleted(domainCount, tickedEvents.size, retro);
 
     setSaving(false);
