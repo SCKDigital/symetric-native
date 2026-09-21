@@ -1,4 +1,5 @@
-import { BRAND } from '@/constants/brand';
+import { ACCENTS, DEFAULT_ACCENT, type AccentTokens } from '@/constants/accents';
+
 /**
  * The visual half of comfort mode: quieter accents and larger type.
  *
@@ -9,14 +10,29 @@ import { BRAND } from '@/constants/brand';
  * every target anyway.
  *
  * What the web version was reaching for is here instead: hold body text at full
- * contrast and take the shout out of the accents. The bright indigo call to
- * action, the tracked-out accent eyebrow and the lit card borders are what make
- * the screen loud; #e2e8f0 on #0a0c12 is what makes it readable.
+ * contrast and take the shout out of the accents. The bright call to action, the
+ * tracked-out accent eyebrow and the lit card borders are what make the screen
+ * loud; #e2e8f0 on #0a0c12 is what makes it readable.
+ *
+ * ── Why these are functions now ────────────────────────────────────────────
+ *
+ * They were two module-level constants, because there was one accent. Since
+ * 1.5.0 the accent is a user preference with three options, so the quiet set
+ * has to be derived from whichever one is on.
+ *
+ * Each accent carries its own `quiet` block in constants/accents.ts rather
+ * than having one computed here by formula. Pulling chroma and lightness back
+ * by a fixed ratio works for a saturated teal and falls apart for porcelain,
+ * which is already near-white: it gets quieter by going *down* in lightness,
+ * where the other two go down in chroma.
  */
 
 export interface ComfortTokens {
-  /** Filled button background. White text sits on this. */
+  /** Filled button background. */
   accent: string;
+  /** The label colour that sits on `accent`. Near-black under porcelain,
+   *  white under the other two — never hard-code it. */
+  accentOn: string;
   /** Accent-coloured text — eyebrows, values, links. */
   accentText: string;
   /** Lit card borders. */
@@ -28,18 +44,6 @@ export interface ComfortTokens {
   fs: (size: number) => number;
 }
 
-const NORMAL_ACCENT = BRAND.fill;
-const NORMAL_ACCENT_TEXT = BRAND.text;
-const NORMAL_ACCENT_BORDER = BRAND.border;
-
-// Same hue as the accent above, chroma and lightness dropped. White on
-// #2F5450 clears 8.4:1, so the CTA is still unmistakably a button — it just
-// stops being the brightest thing in the room. Derived from the teal when the
-// brand moved, so comfort mode did not stay quietly purple.
-const QUIET_ACCENT = '#2F5450';
-const QUIET_ACCENT_TEXT = '#9FC3BB';
-const QUIET_ACCENT_BORDER = '#1E3330';
-
 /** Chosen to be legible-but-not-disruptive: enough to matter, small enough that
  *  the check-in flow's existing boxes hold it without reflowing to nonsense.
  *  The OS setting (Linking.openSettings) is still the answer for a real
@@ -50,18 +54,37 @@ const COMFORT_SCALE = 1.15;
 const identity = (size: number) => size;
 const scaled = (size: number) => Math.round(size * COMFORT_SCALE * 2) / 2;
 
-export const NORMAL_TOKENS: ComfortTokens = {
-  accent: NORMAL_ACCENT,
-  accentText: NORMAL_ACCENT_TEXT,
-  accentBorder: NORMAL_ACCENT_BORDER,
-  scale: 1,
-  fs: identity,
-};
+/** Comfort mode off: the chosen accent at full strength. */
+export function normalTokens(accent: AccentTokens): ComfortTokens {
+  return {
+    accent: accent.fill,
+    accentOn: accent.onFill,
+    accentText: accent.text,
+    accentBorder: accent.border,
+    scale: 1,
+    fs: identity,
+  };
+}
 
-export const COMFORT_TOKENS: ComfortTokens = {
-  accent: QUIET_ACCENT,
-  accentText: QUIET_ACCENT_TEXT,
-  accentBorder: QUIET_ACCENT_BORDER,
-  scale: COMFORT_SCALE,
-  fs: scaled,
-};
+/** Comfort mode on: the same accent, turned down. */
+export function comfortTokens(accent: AccentTokens): ComfortTokens {
+  return {
+    accent: accent.quiet.fill,
+    accentOn: accent.quiet.onFill,
+    accentText: accent.quiet.text,
+    accentBorder: accent.quiet.border,
+    scale: COMFORT_SCALE,
+    fs: scaled,
+  };
+}
+
+/**
+ * The DEFAULT accent's sets, for the few places that need a comfort token
+ * outside the React tree and so cannot read the context.
+ *
+ * A component should use `makeComfortStyles` or `useAccent()` instead. These
+ * two are porcelain's, and will be the wrong colour for anyone who has chosen
+ * teal or plum.
+ */
+export const NORMAL_TOKENS: ComfortTokens = normalTokens(ACCENTS[DEFAULT_ACCENT]);
+export const COMFORT_TOKENS: ComfortTokens = comfortTokens(ACCENTS[DEFAULT_ACCENT]);
