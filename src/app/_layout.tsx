@@ -10,6 +10,7 @@ import AppTabs from '@/components/app-tabs';
 import AppLockScreen from '@/components/lock/app-lock-screen';
 import Onboarding from '@/components/onboarding/onboarding';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
+import { AccentProvider } from '@/contexts/accent-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
 import { useAppLock } from '@/hooks/use-app-lock';
@@ -40,7 +41,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={DarkTheme}>
         <AuthProvider>
-          <AuthGate />
+          <AccentProvider>
+            <AuthGate />
+          </AccentProvider>
         </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

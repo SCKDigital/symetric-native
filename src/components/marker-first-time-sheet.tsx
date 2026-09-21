@@ -36,5 +36,5 @@ const useStyles = makeAccentStyles(b => ({
   title: { fontSize: 20, fontWeight: '600', color: '#e2e8f0', marginBottom: 10, letterSpacing: -0.3 },
   body: { fontSize: 15, color: '#8892a4', lineHeight: 24, marginBottom: 24 },
   button: { width: '100%', padding: 14, backgroundColor: b.fillAlt, borderRadius: 12, alignItems: 'center' },
-  buttonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  buttonText: { fontSize: 15, fontWeight: '600', color: b.onFill },
 }));

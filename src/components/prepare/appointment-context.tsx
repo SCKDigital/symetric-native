@@ -130,7 +130,7 @@ const useStyles = makeAccentStyles(b => ({
   emptyTitle: { fontSize: 15, fontWeight: '600', color: '#c8d0e0', marginBottom: 6 },
   emptyBody: { fontSize: 13, color: '#6b7a99', lineHeight: 19, marginBottom: 16 },
   setButton: { width: '100%', padding: 12, backgroundColor: b.fill, borderRadius: 10, alignItems: 'center' },
-  setButtonText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  setButtonText: { fontSize: 14, fontWeight: '600', color: b.onFill },
   sectionLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   date: { fontSize: 16, fontWeight: '500', color: '#e2e8f0', marginBottom: 4 },

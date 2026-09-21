@@ -117,6 +117,6 @@ const useStyles = makeAccentStyles(b => ({
   },
   error: { fontSize: 13, color: '#f87171', marginTop: 10 },
   submit: { marginTop: 20, backgroundColor: b.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  submitText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
+  submitText: { fontSize: 15, fontWeight: '600', color: b.onFill },
   cancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
 }));

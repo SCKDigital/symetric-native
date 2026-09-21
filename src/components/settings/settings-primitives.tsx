@@ -4,8 +4,10 @@ import Svg, { Path } from 'react-native-svg';
 
 import { useAuth } from '@/contexts/auth-context';
 import { comfortActiveForProfile } from '@/lib/domains';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
+import type { AccentTokens } from '@/constants/accents';
 
 // Ports of the web SettingsScreen.tsx's own layout primitives — the grouped
 // card, its labelled sections, and the icon + label + subtitle + accessory row
@@ -42,12 +44,13 @@ export function ChevronRight({ color = '#555c72' }: { color?: string }) {
 export function Toggle({ value, onValueChange, disabled }: {
   value: boolean; onValueChange: (v: boolean) => void; disabled?: boolean;
 }) {
+  const accent = useAccent();
   return (
     <Switch
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
-      trackColor={{ true: BRAND.fillAlt, false: '#252b3b' }}
+      trackColor={{ true: accent.fillAlt, false: '#252b3b' }}
       thumbColor="#ffffff"
     />
   );
@@ -60,22 +63,34 @@ export function InlineMessage({ type, children }: { type: 'error' | 'info'; chil
 
 type IconColor = 'indigo' | 'danger' | 'slate';
 
-const ICON_BG: Record<IconColor, string> = {
-  indigo: brandTint(BRAND.textFlat, 0.15),
+// The accent tile follows the accent; the other two are fixed semantics.
+// 'indigo' is a misnomer kept for the call sites -- it means "the app's
+// own colour", whatever that currently is.
+const iconBackgrounds = (accent: AccentTokens): Record<IconColor, string> => ({
+  indigo: brandTint(accent.textFlat, 0.15),
   danger: 'rgba(176,80,80,0.12)',
   slate: 'rgba(139,144,164,0.12)',
-};
+});
 
 /** The single tile colour comfort mode collapses all three into — the quiet
- *  accent rather than the indigo one, same call as COMFORT_DOMAIN_COLOR. */
-const COMFORT_ICON_BG = 'rgba(165,171,201,0.12)';
+ *  accent rather than the full-strength one, same call as
+ *  comfortDomainColor in lib/domains.ts.
+ *
+  *  This was a hard-coded rgba(165,171,201,...) until 1.5.0: a lavender wash
+ *  left over from the indigo accent, which then did not follow the brand to
+ *  teal and would not have followed it to porcelain either. Derived now. */
+const comfortIconBackground = (accent: AccentTokens): string =>
+  brandTint(accent.quiet.text, 0.12);
 
 export function RowIcon({ color, children }: { color: IconColor; children: React.ReactNode }) {
   const styles = useStyles();
   const { profile } = useAuth();
   // One tile colour in comfort mode, which is where simplified colours now
   // lives — see getDomainColorFromProfile.
-  const bg = comfortActiveForProfile(profile) ? COMFORT_ICON_BG : ICON_BG[color];
+  const accent = useAccent();
+  const bg = comfortActiveForProfile(profile)
+    ? comfortIconBackground(accent)
+    : iconBackgrounds(accent)[color];
   return <View style={[styles.rowIcon, { backgroundColor: bg }]}>{children}</View>;
 }
 
@@ -246,7 +261,7 @@ const useStyles = makeAccentStyles(b => ({
   sheetButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: b.fill, alignItems: 'center' },
   sheetButtonDanger: { backgroundColor: '#7f1d1d' },
   sheetButtonDisabled: { backgroundColor: '#1e2533' },
-  sheetButtonText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
+  sheetButtonText: { fontSize: 15, fontWeight: '600', color: b.onFill },
   sheetButtonTextDisabled: { color: '#4a5568' },
   sheetCancel: { fontSize: 14, color: '#8b90a4', textAlign: 'center', paddingTop: 14 },
 }));

@@ -6,8 +6,9 @@ import { formatShortDate, parseDateString } from '@/lib/date-utils';
 import { DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
 import type { CheckIn, ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
 import { FACTOR_LABELS, factorLabel } from '@/lib/pattern-findings';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 // Ported from the web app's components/ClusterCard.tsx. Mechanic swap: the
 // web version hand-rolls a 500ms touch-hold timer (onTouchStart/End/Move)
@@ -110,6 +111,7 @@ export function ClusterCard({
   timezone, timeFormat,
 }: Props) {
   const styles = useStyles();
+  const accent = useAccent();
   const { profile } = useAuth();
   const fmt = formatShortDate;
 
@@ -170,7 +172,7 @@ export function ClusterCard({
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <Text style={[styles.heading, { color: domainColor }]}>{headingLabel}</Text>
-          {cluster.flagged_for_report && <FlagIcon color={BRAND.fillAlt} filled />}
+          {cluster.flagged_for_report && <FlagIcon color={accent.fillAlt} filled />}
         </View>
         <View style={styles.viewPatternRow}>
           <Text style={styles.viewPatternText}>View pattern</Text>
@@ -312,7 +314,7 @@ export function ClusterCard({
             </Pressable>
             <Pressable onPress={onToggleFlag} style={styles.actionButton}>
               <View style={styles.flagButtonRow}>
-                <FlagIcon color={cluster.flagged_for_report ? BRAND.text : '#6b7a99'} filled={!!cluster.flagged_for_report} />
+                <FlagIcon color={cluster.flagged_for_report ? accent.text : '#6b7a99'} filled={!!cluster.flagged_for_report} />
                 <Text style={[styles.actionButtonText, cluster.flagged_for_report && styles.actionButtonTextActive]}>
                   {cluster.flagged_for_report ? 'Flagged for report' : 'Flag for report'}
                 </Text>

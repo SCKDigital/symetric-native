@@ -62,6 +62,11 @@ export async function ensureAndroidNotificationChannel(): Promise<void> {
     name: 'Check-in reminders',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
+    // The DEFAULT accent, deliberately. Android fixes a channel's properties
+    // when it is created and ignores later changes, so this cannot follow a
+    // preference the user has not made yet -- and it is the notification LED,
+    // which is not worth deleting and recreating a channel over (that would
+    // reset the user's own per-channel sound and importance choices).
     lightColor: BRAND.text,
   });
 }

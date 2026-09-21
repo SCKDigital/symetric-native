@@ -6,8 +6,8 @@ import { parseDateString } from '@/lib/date-utils';
 import { generateReport } from '@/lib/report/generate-report';
 import { supabase } from '@/lib/supabase';
 import type { DetectedCluster } from '@/lib/supabase';
-import { BRAND } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 function fmtDate(d: string): string {
   return parseDateString(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -32,6 +32,7 @@ interface Props {
 // downloads folder on native to drop a file into.
 export default function GenerateReportSection({ clusters, appointmentId, fromDate, toDate }: Props) {
   const styles = useStyles();
+  const accent = useAccent();
   const { user, profile } = useAuth();
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
@@ -133,7 +134,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
       <Pressable onPress={handleGenerate} disabled={disabled} style={[styles.generateButton, disabled && styles.generateButtonDisabled]}>
         {generating ? (
           <View style={styles.generatingRow}>
-            <ActivityIndicator size="small" color={BRAND.text} />
+            <ActivityIndicator size="small" color={accent.text} />
             <Text style={styles.generateButtonText}>Generating…</Text>
           </View>
         ) : (
@@ -177,7 +178,7 @@ const useStyles = makeAccentStyles(b => ({
     alignItems: 'center', justifyContent: 'center',
   },
   checkboxOn: { backgroundColor: b.fill, borderColor: b.fill },
-  checkboxTick: { fontSize: 13, color: '#fff', fontWeight: '700' },
+  checkboxTick: { fontSize: 13, color: b.onFill, fontWeight: '700' },
   includeLabel: { fontSize: 15, color: '#e2e8f0', flex: 1 },
   patternCount: { fontSize: 13, color: '#6b7a99', marginBottom: 16 },
   statusText: { fontSize: 13, color: '#6b7a99', marginBottom: 12 },
@@ -185,6 +186,6 @@ const useStyles = makeAccentStyles(b => ({
   successText: { fontSize: 13, color: b.text, marginBottom: 12 },
   generateButton: { width: '100%', padding: 13, backgroundColor: b.fill, borderRadius: 10, alignItems: 'center' },
   generateButtonDisabled: { backgroundColor: '#2d3748' },
-  generateButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  generateButtonText: { fontSize: 15, fontWeight: '600', color: b.onFill },
   generatingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 }));

@@ -377,7 +377,7 @@ const useStyles = makeAccentStyles(b => ({
   cancelButtonText: { fontSize: 15, color: '#8892a4' },
   saveButton: { flex: 1, padding: 13, borderRadius: 12, backgroundColor: b.fillAlt, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#2d3748' },
-  saveButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  saveButtonText: { fontSize: 15, fontWeight: '600', color: b.onFill },
   saveButtonTextDisabled: { color: '#4a5568' },
   deleteTextButton: { marginTop: 16, padding: 12, alignItems: 'center' },
   deleteTextButtonText: { fontSize: 14, color: '#f87171' },

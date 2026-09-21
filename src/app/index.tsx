@@ -28,8 +28,10 @@ import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 import { timeOfDayInTZ } from '@/lib/scheduler';
 import { formatTime, formatWindowTime } from '@/lib/time-format';
 import { supabase, type Appointment, type CheckIn } from '@/lib/supabase';
-import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
-import { BRAND, brandTint } from '@/constants/brand';
+import { type ComfortTokens } from '@/lib/comfort-theme';
+import { brandTint } from '@/constants/brand';
+import type { AccentTokens } from '@/constants/accents';
+import { makeComfortStyles } from '@/lib/accent-styles';
 
 function formatDate(): string {
   return new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
@@ -66,7 +68,7 @@ function TodayHome() {
   const comfort = useComfort();
   const setupCards = useSetupCards();
   const [openBonus, setOpenBonus] = useState(false);
-  const styles = comfort.active ? STYLES.comfort : STYLES.normal;
+  const styles = useStyles(comfort.active);
   const [showComfortSheet, setShowComfortSheet] = useState(false);
   const [showRescheduleList, setShowRescheduleList] = useState(false);
   const [reschedulingCheckIn, setReschedulingCheckIn] = useState<CheckIn | null>(null);
@@ -464,9 +466,9 @@ function TodayHome() {
   );
 }
 
-const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+const useStyles = makeComfortStyles(makeStyles);
 
-function makeStyles(t: ComfortTokens) {
+function makeStyles(t: ComfortTokens, b: AccentTokens) {
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   page: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 60 },
@@ -477,10 +479,10 @@ function makeStyles(t: ComfortTokens) {
   headerTrailing: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   addEvent: {
-    borderWidth: 1, borderColor: brandTint(BRAND.textSoft, 0.25), borderRadius: 8,
+    borderWidth: 1, borderColor: brandTint(b.textSoft, 0.25), borderRadius: 8,
     paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center', marginBottom: 20,
   },
-  addEventText: { fontSize: t.fs(13), fontWeight: '500', color: BRAND.textSoft },
+  addEventText: { fontSize: t.fs(13), fontWeight: '500', color: b.textSoft },
   error: { fontSize: t.fs(13), color: '#f87171', marginBottom: 12 },
 
   statusBlock: { paddingTop: 12, marginBottom: 24 },
@@ -492,19 +494,19 @@ function makeStyles(t: ComfortTokens) {
   statusBody: { fontSize: t.fs(15), color: '#b0b8c8', lineHeight: 22 },
 
   editButton: {
-    backgroundColor: brandTint(BRAND.fillAlt, 0.06), borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.15),
+    backgroundColor: brandTint(b.fillAlt, 0.06), borderWidth: 1, borderColor: brandTint(b.fillAlt, 0.15),
     borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editButtonText: { fontSize: t.fs(13), color: BRAND.text },
+  editButtonText: { fontSize: t.fs(13), color: b.text },
   editButtonMeta: { fontSize: t.fs(11), color: '#4a5568' },
   windowClosed: { fontSize: t.fs(12), color: '#4a5568', marginBottom: 16 },
 
   checkInNow: {
-    backgroundColor: brandTint(BRAND.fill, 0.10), borderWidth: 1, borderColor: brandTint(BRAND.fill, 0.28),
+    backgroundColor: brandTint(b.fill, 0.10), borderWidth: 1, borderColor: brandTint(b.fill, 0.28),
     borderRadius: 12, padding: 16, marginBottom: 16, gap: 6,
   },
-  checkInNowTitle: { fontSize: t.fs(15), fontWeight: '600', color: BRAND.textSoft },
+  checkInNowTitle: { fontSize: t.fs(15), fontWeight: '600', color: b.textSoft },
   checkInNowBody: { fontSize: t.fs(13), color: '#8892a4', lineHeight: 19 },
   });
 }

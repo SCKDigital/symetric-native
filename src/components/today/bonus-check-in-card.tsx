@@ -349,7 +349,7 @@ const useStyles = makeAccentStyles(b => ({
     paddingVertical: 14, alignItems: 'center',
   },
   submitDisabled: { backgroundColor: '#1e2533' },
-  submitText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
+  submitText: { fontSize: 15, fontWeight: '600', color: b.onFill },
   submitTextDisabled: { color: '#4a5568' },
   cancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
 }));

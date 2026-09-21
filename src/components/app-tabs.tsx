@@ -3,12 +3,11 @@ import { Tabs } from 'expo-router';
 import { HistoryIcon, InsightsIcon, PrepareIcon, SettingsIcon, TodayIcon } from '@/components/nav-icons';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { BRAND } from '@/constants/brand';
+import { useAccent } from '@/contexts/accent-context';
 
 // Nav chrome is matched to the web app's <nav> in App.tsx rather than to the
 // theme: indigo active, slate inactive, 10px labels that bold when selected.
 // The app tint stays the body-domain accent for everything else.
-const NAV_ACTIVE = BRAND.text;
 const NAV_INACTIVE = '#4a5568';
 
 // Standard expo-router Tabs rather than the (still-unstable) NativeTabs API —
@@ -19,12 +18,13 @@ const NAV_INACTIVE = '#4a5568';
 export default function AppTabs() {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const accent = useAccent();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: NAV_ACTIVE,
+        tabBarActiveTintColor: accent.text,
         tabBarInactiveTintColor: NAV_INACTIVE,
         tabBarLabelStyle: { fontSize: 10, letterSpacing: 0.2 },
         tabBarStyle: {

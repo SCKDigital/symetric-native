@@ -1,4 +1,4 @@
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -9,7 +9,10 @@ import { trackSleepLogged } from '@/lib/analytics';
 import { SLEEP_COPY as copy, SLEEP_OPTIONS, sleepScoreToMeta } from '@/lib/sleep';
 import { SleepLog, supabase } from '@/lib/supabase';
 import { useComfort } from '@/hooks/use-comfort';
-import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
+import { type ComfortTokens } from '@/lib/comfort-theme';
+import type { AccentTokens } from '@/constants/accents';
+import { makeComfortStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 // Port of the web app's SleepCard.tsx — the Today-screen sleep row, in its
 // three states: a CTA when nothing is logged, the expanded question when
@@ -24,7 +27,9 @@ interface Props {
 }
 
 export default function SleepCard({ onLogged }: Props) {
-  const styles = useComfort().active ? STYLES.comfort : STYLES.normal;
+  const styles = useStyles(useComfort().active);
+
+  const accent = useAccent();
   const { user } = useAuth();
   const [sleepLog, setSleepLog] = useState<SleepLog | null | undefined>(undefined);
   const [expanded, setExpanded] = useState(false);
@@ -208,14 +213,14 @@ export default function SleepCard({ onLogged }: Props) {
         <Text style={styles.ctaLabel}>{copy.card.sectionLabel.toUpperCase()}</Text>
         <Text style={styles.ctaText}>{copy.card.cta}</Text>
       </View>
-      <ChevronRightIcon size={16} color={BRAND.text} />
+      <ChevronRightIcon size={16} color={accent.text} />
     </Pressable>
   );
 }
 
-const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+const useStyles = makeComfortStyles(makeStyles);
 
-function makeStyles(t: ComfortTokens) {
+function makeStyles(t: ComfortTokens, b: AccentTokens) {
   return StyleSheet.create({
   block: { marginBottom: 12 },
   pressed: { opacity: 0.7 },
@@ -232,16 +237,16 @@ function makeStyles(t: ComfortTokens) {
   loggedHours: { fontSize: t.fs(15), color: '#6b7688' },
   dots: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  dotOn: { backgroundColor: BRAND.text },
+  dotOn: { backgroundColor: b.text },
   dotOff: { backgroundColor: '#2d3748' },
   tick: { fontSize: t.fs(14), color: '#2d3748' },
 
   editButton: {
-    marginTop: 8, backgroundColor: brandTint(BRAND.fillAlt, 0.06), borderWidth: 1,
-    borderColor: brandTint(BRAND.fillAlt, 0.15), borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
+    marginTop: 8, backgroundColor: brandTint(b.fillAlt, 0.06), borderWidth: 1,
+    borderColor: brandTint(b.fillAlt, 0.15), borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editButtonText: { fontSize: t.fs(13), color: BRAND.text },
+  editButtonText: { fontSize: t.fs(13), color: b.text },
   editButtonMeta: { fontSize: t.fs(11), color: '#4a5568' },
 
   expanded: {
@@ -268,7 +273,7 @@ function makeStyles(t: ComfortTokens) {
     paddingVertical: 14, paddingHorizontal: 18, marginBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  ctaLabel: { fontSize: t.fs(11), color: BRAND.fillAlt, letterSpacing: 0.9, fontWeight: '700', marginBottom: 3 },
+  ctaLabel: { fontSize: t.fs(11), color: b.fillAlt, letterSpacing: 0.9, fontWeight: '700', marginBottom: 3 },
   ctaText: { fontSize: t.fs(15), color: '#cbd5e0', fontWeight: '500' },
   });
 }

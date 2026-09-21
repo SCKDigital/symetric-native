@@ -1,4 +1,4 @@
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -7,9 +7,12 @@ import DomainSlider from '@/components/checkin/domain-slider';
 import { useAuth } from '@/contexts/auth-context';
 import { trackCheckInCompleted } from '@/lib/analytics';
 import { useComfort } from '@/hooks/use-comfort';
-import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
+import { type ComfortTokens } from '@/lib/comfort-theme';
 import { getDomainColorFromProfile, DOMAIN_COPY } from '@/lib/domains';
 import { CheckIn, DomainType, supabase } from '@/lib/supabase';
+import type { AccentTokens } from '@/constants/accents';
+import { makeComfortStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 interface CheckInFormProps {
   checkIn: CheckIn;
@@ -47,7 +50,8 @@ export default function CheckInForm({
 }: CheckInFormProps) {
   const { user, profile } = useAuth();
   const { active: comfortActive } = useComfort();
-  const styles = comfortActive ? STYLES.comfort : STYLES.normal;
+  const styles = useStyles(comfortActive);
+  const accent = useAccent();
   // Sliders live inside this ScrollView. A horizontal drag that starts with
   // any vertical component gets claimed by the scroll, which is what made the
   // sliders feel sticky — worst on the last domain, where there is the most
@@ -112,7 +116,7 @@ export default function CheckInForm({
       <View style={styles.confirmationRoot}>
         <View style={styles.confirmationIcon}>
           <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
-            <Path d="M3 8l3.5 3.5L13 5" stroke={comfortActive ? COMFORT_TOKENS.accentText : BRAND.text} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            <Path d="M3 8l3.5 3.5L13 5" stroke={comfortActive ? accent.quiet.text : accent.text} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
           </Svg>
         </View>
         <Text style={styles.confirmationLogged}>Logged</Text>
@@ -174,9 +178,9 @@ export default function CheckInForm({
   );
 }
 
-const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+const useStyles = makeComfortStyles(makeStyles);
 
-function makeStyles(t: ComfortTokens) {
+function makeStyles(t: ComfortTokens, b: AccentTokens) {
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   saveError: { fontSize: t.fs(13), color: '#f87171', marginBottom: 12, lineHeight: 19 },
@@ -200,16 +204,16 @@ function makeStyles(t: ComfortTokens) {
   notesCountWarn: { color: '#f6ad55' },
   submitButton: { padding: 14, borderRadius: 12, backgroundColor: t.accent, alignItems: 'center' },
   submitButtonDisabled: { backgroundColor: '#1e2533' },
-  submitButtonText: { color: '#ffffff', fontSize: t.fs(15), fontWeight: '600' },
+  submitButtonText: { color: t.accentOn, fontSize: t.fs(15), fontWeight: '600' },
   pressed: { opacity: 0.85 },
   confirmationRoot: { flex: 1, backgroundColor: '#0a0c12', alignItems: 'center', justifyContent: 'center' },
   confirmationIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: brandTint(BRAND.fillAlt, 0.15),
+    backgroundColor: brandTint(b.fillAlt, 0.15),
     borderWidth: 1,
-    borderColor: brandTint(BRAND.fillAlt, 0.3),
+    borderColor: brandTint(b.fillAlt, 0.3),
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,

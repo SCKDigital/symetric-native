@@ -157,6 +157,6 @@ const useStyles = makeAccentStyles(b => ({
   confirmCancel: { fontSize: 13, color: '#4a5568', padding: 8 },
   doneButton: { paddingVertical: 10, paddingHorizontal: 18, backgroundColor: b.fill, borderRadius: 8 },
   doneButtonDisabled: { backgroundColor: '#2d3748' },
-  doneButtonText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  doneButtonText: { fontSize: 14, fontWeight: '600', color: b.onFill },
   doneButtonTextDisabled: { color: '#6b7a99' },
 }));

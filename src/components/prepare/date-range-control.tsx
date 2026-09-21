@@ -131,7 +131,7 @@ const useStyles = makeAccentStyles(b => ({
   pill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748' },
   pillActive: { borderWidth: 0, backgroundColor: b.fill },
   pillText: { fontSize: 13, fontWeight: '500', color: '#8892a4' },
-  pillTextActive: { color: '#fff' },
+  pillTextActive: { color: b.onFill },
   customRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginBottom: 8, flexWrap: 'wrap' },
   customField: { gap: 3 },
   customLabel: { fontSize: 11, color: '#6b7a99' },

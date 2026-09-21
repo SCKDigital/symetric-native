@@ -1,4 +1,3 @@
-import { BRAND } from '@/constants/brand';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import Svg, { Path, Polygon, Polyline } from 'react-native-svg';
@@ -6,6 +5,7 @@ import Svg, { Path, Polygon, Polyline } from 'react-native-svg';
 import { deleteQuestion, markQuestionAddressed, updateQuestion } from '@/lib/api/questions';
 import type { PrepareQuestion } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 // Edit/delete glyphs, traced from the web app's QuestionCard.tsx — same path
 // data, same 24-unit viewBox, same 14px render size and 2 stroke.
@@ -57,6 +57,7 @@ function StarIcon({ filled, color }: { filled: boolean; color: string }) {
 // that role itself.
 export default function QuestionCard({ question, onChange, onDelete, onTogglePriority, drag, isActive }: Props) {
   const styles = useStyles();
+  const accent = useAccent();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(question.question_text);
   const [saving, setSaving] = useState(false);
@@ -159,7 +160,7 @@ export default function QuestionCard({ question, onChange, onDelete, onTogglePri
       {!editing && (
         <View style={styles.bottomRow}>
           <Pressable onPress={handleTogglePriority} disabled={toggling} style={styles.priorityButton}>
-            <StarIcon filled={question.is_priority} color={question.is_priority ? BRAND.text : '#4a5568'} />
+            <StarIcon filled={question.is_priority} color={question.is_priority ? accent.text : '#4a5568'} />
             <Text style={[styles.priorityText, question.is_priority && styles.priorityTextActive]}>
               {question.is_priority ? 'Priority' : 'Make priority'}
             </Text>
@@ -201,7 +202,7 @@ const useStyles = makeAccentStyles(b => ({
   editActions: { flexDirection: 'row', gap: 8, marginTop: 8, paddingLeft: 28 },
   saveButton: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: b.fill, borderRadius: 7 },
   saveButtonDisabled: { backgroundColor: '#2d3748' },
-  saveButtonText: { fontSize: 13, fontWeight: '500', color: '#fff' },
+  saveButtonText: { fontSize: 13, fontWeight: '500', color: b.onFill },
   saveButtonTextDisabled: { color: '#6b7a99' },
   cancelText: { fontSize: 13, color: '#6b7a99' },
   bottomRow: { paddingLeft: 28, marginTop: 6, flexDirection: 'row', gap: 12, alignItems: 'center' },

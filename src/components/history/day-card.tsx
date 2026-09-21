@@ -11,8 +11,8 @@ import type { BodyColumnMode } from '@/lib/history/day-card-helpers';
 import { summariseDay, type BodyReadingPair, type DaySummaryCheckIn } from '@/lib/summarise-day';
 import { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite, CheckIn, Profile, SleepLog } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
-import { BRAND } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 /** Same-day am/pm pairs for the body-direction clause — only domains logged
  *  at both times of day count (see BodyReadingPair). */
@@ -54,8 +54,9 @@ const MARKER_ICON: Partial<Record<InterventionMarker['marker_type'], typeof Pill
 };
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
+  const accent = useAccent();
   return (
-    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={BRAND.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}>
+    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={accent.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}>
       <Path d="M6 9l6 6 6-6" />
     </Svg>
   );

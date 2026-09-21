@@ -1,15 +1,15 @@
 import Svg, { Circle, Line, Path, Polyline, Rect } from 'react-native-svg';
-import { BRAND } from '@/constants/brand';
+import { useAccent } from '@/contexts/accent-context';
 
 // Direct ports of the web app's settingsIcons.tsx — same 16-unit viewBox,
 // same path data, same 1.6 stroke. Row icons are indigo, the destructive one
 // is the danger red.
 
-const STROKE = BRAND.textFlat;
 const COMMON = { strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' };
 
-function Frame({ stroke = STROKE, children }: { stroke?: string; children: React.ReactNode }) {
-  return <Svg width={16} height={16} viewBox="0 0 16 16" stroke={stroke} {...COMMON}>{children}</Svg>;
+function Frame({ stroke, children }: { stroke?: string; children: React.ReactNode }) {
+  const accent = useAccent();
+  return <Svg width={16} height={16} viewBox="0 0 16 16" stroke={stroke ?? accent.textFlat} {...COMMON}>{children}</Svg>;
 }
 
 export function BrainIcon() {

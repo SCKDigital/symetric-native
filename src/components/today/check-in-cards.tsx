@@ -1,9 +1,10 @@
-import { BRAND } from '@/constants/brand';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useComfort } from '@/hooks/use-comfort';
-import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
+import { type ComfortTokens } from '@/lib/comfort-theme';
 import type { CheckIn } from '@/lib/supabase';
+import type { AccentTokens } from '@/constants/accents';
+import { makeComfortStyles } from '@/lib/accent-styles';
 
 // Ports of ActiveCheckInCard, LateCheckInCard and PendingCheckInCard from the
 // web app's today/TodayCards.tsx.
@@ -34,7 +35,7 @@ function expiresLabel(minutes: number): string {
 
 /** Both sheets are built once at module load rather than per render — the
  *  tokens are two module-level singletons, so there is nothing to recompute. */
-const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+const useStyles = makeComfortStyles(makeStyles);
 
 /** The one-tap. Offered only inside an armed comfort window, never as part of
  *  the standing preference: it is a concession to a bad hour, not a permanent
@@ -53,7 +54,7 @@ export function ActiveCheckInCard({ checkIn, nowMs, onStart, onSnooze, onLogAsUs
   onLogAsUsual?: () => void;
 }) {
   const { active, reducesDemand } = useComfort();
-  const styles = active ? STYLES.comfort : STYLES.normal;
+  const styles = useStyles(active);
   const minutes = minutesLeft(checkIn, nowMs);
   const isUrgent = !active && minutes <= 5;
 
@@ -84,7 +85,7 @@ export function LateCheckInCard({ onStart, onLogAsUsual }: {
   onLogAsUsual?: () => void;
 }) {
   const { active, reducesDemand } = useComfort();
-  const styles = active ? STYLES.comfort : STYLES.normal;
+  const styles = useStyles(active);
 
   return (
     <View style={styles.hero}>
@@ -109,7 +110,7 @@ export function PendingCheckInCard({ checkIn, nowMs, isLate, onResume }: {
   checkIn: CheckIn; nowMs: number; isLate: boolean; onResume: () => void;
 }) {
   const { active } = useComfort();
-  const styles = active ? STYLES.comfort : STYLES.normal;
+  const styles = useStyles(active);
 
   return (
     <View style={styles.pendingCard}>
@@ -129,12 +130,12 @@ export function PendingCheckInCard({ checkIn, nowMs, isLate, onResume }: {
 
 type Styles = ReturnType<typeof makeStyles>;
 
-function makeStyles(t: ComfortTokens) {
+function makeStyles(t: ComfortTokens, b: AccentTokens) {
   return StyleSheet.create({
     pressed: { opacity: 0.85 },
 
     hero: {
-      backgroundColor: BRAND.surface, borderWidth: 1, borderColor: t.accentBorder, borderRadius: 24,
+      backgroundColor: b.surface, borderWidth: 1, borderColor: t.accentBorder, borderRadius: 24,
       paddingTop: 32, paddingHorizontal: 28, paddingBottom: 28, gap: 28,
     },
     eyebrow: { fontSize: t.fs(12), color: t.accentText, letterSpacing: 1.4, fontWeight: '700', marginBottom: 12 },
@@ -143,7 +144,7 @@ function makeStyles(t: ComfortTokens) {
     heroMetaUrgent: { color: '#f87171', fontWeight: '600' },
     heroActions: { gap: 10 },
     cta: { paddingVertical: 18, borderRadius: 14, backgroundColor: t.accent, alignItems: 'center' },
-    ctaText: { fontSize: t.fs(17), fontWeight: '700', color: '#ffffff', letterSpacing: -0.2 },
+    ctaText: { fontSize: t.fs(17), fontWeight: '700', color: t.accentOn, letterSpacing: -0.2 },
     snooze: { fontSize: t.fs(14), fontWeight: '500', color: '#7886a0', textAlign: 'center', paddingVertical: 8 },
     asUsual: {
       fontSize: t.fs(15), fontWeight: '600', color: '#cbd5e0', textAlign: 'center',
@@ -151,7 +152,7 @@ function makeStyles(t: ComfortTokens) {
     },
 
     pendingCard: {
-      backgroundColor: BRAND.surface, borderWidth: 1, borderColor: t.accentBorder, borderRadius: 24,
+      backgroundColor: b.surface, borderWidth: 1, borderColor: t.accentBorder, borderRadius: 24,
       paddingVertical: 24, paddingHorizontal: 28, marginBottom: 16,
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16,
     },
@@ -159,6 +160,6 @@ function makeStyles(t: ComfortTokens) {
     pendingTitle: { fontSize: t.fs(17), color: '#e2e8f0', fontWeight: '600', letterSpacing: -0.2 },
     pendingMeta: { fontSize: t.fs(13), color: '#7886a0', marginTop: 2 },
     resume: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, backgroundColor: t.accent, flexShrink: 0 },
-    resumeText: { fontSize: t.fs(14), fontWeight: '700', color: '#ffffff' },
+    resumeText: { fontSize: t.fs(14), fontWeight: '700', color: t.accentOn },
   });
 }

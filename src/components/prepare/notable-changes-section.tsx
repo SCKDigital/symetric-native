@@ -10,8 +10,8 @@ import { markerColors, markerTypeLabels } from '@/lib/marker-colors';
 import { createMarker, deleteMarker, fetchMarkersInRange, updateMarker as updateMarkerQuery } from '@/lib/queries/markers';
 import { supabase } from '@/lib/supabase';
 import type { CreateMarkerInput, InterventionMarker } from '@/types/marker';
-import { BRAND } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 const MARKER_FIRST_TIME_KEY = 'symetric_marker_first_time';
 
@@ -44,6 +44,7 @@ interface Props {
 // localStorage, so handleModalClose is async now.
 export default function NotableChangesSection({ fromDate, toDate }: Props) {
   const styles = useStyles();
+  const accent = useAccent();
   const { user, profile } = useAuth();
   const [today] = useState(() => todayDateString());
   const [markers, setMarkers] = useState<InterventionMarker[]>([]);
@@ -172,7 +173,7 @@ export default function NotableChangesSection({ fromDate, toDate }: Props) {
           {markers.length > 0 && (
             <View style={contextNotes.length > 0 || dataGaps.length > 0 ? styles.blockSpaced : undefined}>
               {markers.map(marker => {
-                const color = markerColors[marker.marker_type] ?? BRAND.text;
+                const color = markerColors[marker.marker_type] ?? accent.text;
                 const typeLabel = markerTypeLabels[marker.marker_type] ?? marker.marker_type;
                 return (
                   <View key={marker.id} style={styles.markerRow}>

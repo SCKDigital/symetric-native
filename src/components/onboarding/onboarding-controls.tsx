@@ -1,8 +1,9 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 // Shared across all three consent steps — the web app defines an identical
 // Checkbox component three times (one per step file); consolidated here
@@ -67,6 +68,7 @@ export function OnboardingPrimaryButton({
   loading?: boolean;
 }) {
   const styles = useStyles();
+  const accent = useAccent();
   const inactive = disabled || loading;
   return (
     <Pressable onPress={onPress} disabled={inactive} style={styles.primaryButtonWrap}>
@@ -75,7 +77,7 @@ export function OnboardingPrimaryButton({
           {loading ? <ActivityIndicator color="#4a5568" /> : <Text style={styles.primaryButtonTextDisabled}>{label}</Text>}
         </View>
       ) : (
-        <LinearGradient colors={[BRAND.fill, BRAND.fillAlt]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primaryButton}>
+        <LinearGradient colors={[accent.fill, accent.fillAlt]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primaryButton}>
           <Text style={styles.primaryButtonText}>{loading ? (loadingLabel ?? label) : label}</Text>
         </LinearGradient>
       )}
@@ -127,7 +129,7 @@ const useStyles = makeAccentStyles(b => ({
   primaryButtonWrap: {},
   primaryButton: { padding: 14, borderRadius: 12, alignItems: 'center' },
   primaryButtonDisabled: { backgroundColor: '#1e2533' },
-  primaryButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
+  primaryButtonText: { color: b.onFill, fontSize: 15, fontWeight: '600' },
   primaryButtonTextDisabled: { color: '#4a5568', fontSize: 15, fontWeight: '600' },
 
   backButton: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, borderWidth: 1, borderColor: '#1e2533' },

@@ -24,8 +24,8 @@ import { supabase, type BodyDomainType, type DomainType } from '@/lib/supabase';
 import { todayDateString } from '@/lib/date-utils';
 import { TimeField } from '@/components/today/time-field';
 import type { TimeFormat } from '@/lib/time-format';
-import { BRAND } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 /**
  * First-run setup, as cards on Today rather than a wizard in front of it.
@@ -71,7 +71,8 @@ function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, 
   tone?: 'indigo' | 'body';
 }) {
   const styles = useStyles();
-  const accent = tone === 'body' ? BODY_COLOR : BRAND.text;
+  const accentTokens = useAccent();
+  const accent = tone === 'body' ? BODY_COLOR : accentTokens.text;
   return (
     <View style={[styles.card, { borderLeftColor: accent }]}>
       <Text style={styles.cardTitle}>{title}</Text>
@@ -558,6 +559,6 @@ const useStyles = makeAccentStyles(b => ({
   pillText: { fontSize: 13, color: '#8892a4' },
   pillTextActive: { color: '#e2c08a' },
   sheetSave: { marginTop: 28, backgroundColor: b.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  sheetSaveText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  sheetSaveText: { fontSize: 15, fontWeight: '600', color: b.onFill },
   sheetCancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
 }));

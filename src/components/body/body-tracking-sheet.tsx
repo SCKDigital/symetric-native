@@ -4,14 +4,13 @@ import { Modal, Platform, Pressable, ScrollView, Switch, Text, View } from 'reac
 
 import { BODY_DOMAIN_ORDER, BODY_DOMAINS } from '@/lib/body/constants';
 import type { BodyDomainType } from '@/lib/supabase';
-import { BRAND } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 // Settings chrome uses the app's default indigo, not the body-tracking
 // amber accent — that accent is reserved for the capture screens
 // themselves (BodyCheckIn, BodyMap, History) so it reads as a distinct
-// experience there. Matches the web app's own CHROME_COLOR convention.
-const CHROME_COLOR = BRAND.textFlat;
+// experience there. Matches the web app's own b.textFlat convention.
 
 function timeStringToDate(t: string): Date {
   const [h, m] = t.split(':').map(Number);
@@ -49,6 +48,7 @@ export default function BodyTrackingSheet({
   currentMorningEnabled, currentMorningTime, onSaveTiming, onClose,
 }: Props) {
   const styles = useStyles();
+  const accent = useAccent();
   const [availableFrom, setAvailableFrom] = useState(currentAvailableFrom);
   const [reminderTime, setReminderTime] = useState(currentReminderTime);
   const [morningEnabled, setMorningEnabled] = useState(currentMorningEnabled);
@@ -144,7 +144,7 @@ export default function BodyTrackingSheet({
                   Optional and short: three scores (fatigue, pain, dizziness) to catch how the day started, kept separate from tonight’s numbers.
                 </Text>
               </View>
-              <Switch value={morningEnabled} onValueChange={setMorningEnabled} trackColor={{ true: CHROME_COLOR }} />
+              <Switch value={morningEnabled} onValueChange={setMorningEnabled} trackColor={{ true: accent.textFlat }} />
             </View>
             {morningEnabled && (
               <View style={styles.morningTimeBlock}>
@@ -192,12 +192,12 @@ const useStyles = makeAccentStyles(b => ({
   subtitle: { fontSize: 13, color: '#718096', marginBottom: 22 },
   sectionLabel: { fontSize: 12, color: '#8892a4', marginBottom: 8 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 22 },
-  requiredPill: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: `${CHROME_COLOR}1a`, borderWidth: 1, borderColor: `${CHROME_COLOR}40` },
-  requiredPillText: { fontSize: 12, fontWeight: '500', color: CHROME_COLOR },
+  requiredPill: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: `${b.textFlat}1a`, borderWidth: 1, borderColor: `${b.textFlat}40` },
+  requiredPillText: { fontSize: 12, fontWeight: '500', color: b.textFlat },
   domainPill: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
-  domainPillActive: { backgroundColor: `${CHROME_COLOR}1a`, borderColor: `${CHROME_COLOR}40` },
+  domainPillActive: { backgroundColor: `${b.textFlat}1a`, borderColor: `${b.textFlat}40` },
   domainPillText: { fontSize: 12, fontWeight: '500', color: '#555c72' },
-  domainPillTextActive: { color: CHROME_COLOR },
+  domainPillTextActive: { color: b.textFlat },
   timeRow: { flexDirection: 'row', gap: 12, marginBottom: 6 },
   timeCol: { flex: 1 },
   timeLabel: { fontSize: 11, color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
@@ -215,6 +215,6 @@ const useStyles = makeAccentStyles(b => ({
   errorText: { fontSize: 12, color: '#f87171', marginBottom: 16 },
   saveButton: { padding: 14, borderRadius: 12, backgroundColor: b.fill, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#1e2533' },
-  saveButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  saveButtonText: { fontSize: 15, fontWeight: '600', color: b.onFill },
   saveButtonTextDisabled: { color: '#4a5568' },
 }));

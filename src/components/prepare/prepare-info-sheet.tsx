@@ -1,13 +1,14 @@
-import { BRAND } from '@/constants/brand';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 // The five item glyphs, traced from the web app's PrepareInfoSheet.tsx — same
 // path data, same 16-unit viewBox, same 1.6 stroke.
 function Frame({ children }: { children: React.ReactNode }) {
+  const accent = useAccent();
   return (
-    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke={BRAND.textFlat}
+    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke={accent.textFlat}
       strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
       {children}
     </Svg>

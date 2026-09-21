@@ -5,8 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SymetricLogo } from '@/components/symetric-logo';
 import { useAuth } from '@/contexts/auth-context';
-import { BRAND } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 // Ported from the web app's src/components/auth/AuthScreen.tsx. Same three
 // states (landing / email / sent), same copy, same staggered landing-screen
@@ -70,6 +70,7 @@ type Mode = 'landing' | 'email' | 'sent';
 
 export function AuthScreen() {
   const styles = useStyles();
+  const accent = useAccent();
   const [mode, setMode] = useState<Mode>('landing');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -140,7 +141,7 @@ export function AuthScreen() {
                     </View>
                   ) : (
                     <LinearGradient
-                      colors={[BRAND.fill, BRAND.fillAlt]}
+                      colors={[accent.fill, accent.fillAlt]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.submitButton}>
@@ -189,7 +190,7 @@ const useStyles = makeAccentStyles(b => ({
   tagline: { fontSize: 16, color: '#6b6882', maxWidth: 210, textAlign: 'center' },
   buttonGroup: { maxWidth: 340, width: '100%', gap: 12 },
   continueButton: { paddingVertical: 18, backgroundColor: b.signIn, borderRadius: 8, alignItems: 'center' },
-  continueButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  continueButtonText: { color: b.onFill, fontSize: 16, fontWeight: '600' },
   pressed: { opacity: 0.88 },
   disclaimer: { fontSize: 11, color: '#38364a', textAlign: 'center' },
 
@@ -215,7 +216,7 @@ const useStyles = makeAccentStyles(b => ({
   errorText: { fontSize: 13, color: '#a0aec0' },
   submitButton: { padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 },
   submitButtonDisabled: { backgroundColor: '#1e2533' },
-  submitButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
+  submitButtonText: { color: b.onFill, fontSize: 15, fontWeight: '600' },
   backButton: { alignItems: 'center', marginTop: 24 },
   backButtonText: { fontSize: 12, color: '#4a5568' },
   sentBody: { fontSize: 15, color: '#718096', lineHeight: 22, marginBottom: 8 },

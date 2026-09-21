@@ -1,12 +1,15 @@
-import { BRAND } from '@/constants/brand';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useComfort } from '@/hooks/use-comfort';
-import { COMFORT_TOKENS, NORMAL_TOKENS, type ComfortTokens } from '@/lib/comfort-theme';
+import { type ComfortTokens } from '@/lib/comfort-theme';
 import { SLIDER_LABELS } from '@/lib/domains';
 import { DomainType } from '@/lib/supabase';
+import type { AccentTokens } from '@/constants/accents';
+import { makeComfortStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 interface DomainSliderProps {
   /** Unique id/key for this slider — a DomainType for mind, a BodyDomainType for body (once ported). */
@@ -58,7 +61,8 @@ export default function DomainSlider({
   onSlidingComplete,
 }: DomainSliderProps) {
   const { active } = useComfort();
-  const styles = active ? STYLES.comfort : STYLES.normal;
+  const styles = useStyles(active);
+  const accent = useAccent();
   const fillPercent = ((value - 1) / 9) * 100;
 
   const builtIn = SLIDER_LABELS[domain as DomainType];
@@ -83,7 +87,7 @@ export default function DomainSlider({
         <View style={styles.trackBg} pointerEvents="none">
           {touched ? (
             <LinearGradient
-              colors={active ? [COMFORT_TOKENS.accent, COMFORT_TOKENS.accentText] : [BRAND.fill, BRAND.text]}
+              colors={active ? [accent.quiet.fill, accent.quiet.text] : [accent.fill, accent.text]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={[styles.trackFill, { width: `${fillPercent}%` }]}
@@ -107,7 +111,7 @@ export default function DomainSlider({
           tapToSeek
           minimumTrackTintColor="transparent"
           maximumTrackTintColor="transparent"
-          thumbTintColor={active ? COMFORT_TOKENS.accentText : BRAND.text}
+          thumbTintColor={active ? accent.quiet.text : accent.text}
         />
       </View>
 
@@ -130,13 +134,13 @@ export default function DomainSlider({
 
 const TRACK_HEIGHT = 4;
 
-const STYLES = { normal: makeStyles(NORMAL_TOKENS), comfort: makeStyles(COMFORT_TOKENS) };
+const useStyles = makeComfortStyles(makeStyles);
 
 // The anchor copy is the tightest box in the daily-use flow — fontSize 10 in a
 // 45%-wide column. Comfort mode scales it like everything else, so the width
 // cap lifts to 48% and the line height is derived rather than fixed, letting a
 // scaled anchor wrap to a second line instead of clipping.
-function makeStyles(t: ComfortTokens) {
+function makeStyles(t: ComfortTokens, b: AccentTokens) {
   return StyleSheet.create({
   root: {},
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
@@ -146,7 +150,7 @@ function makeStyles(t: ComfortTokens) {
   // those into 'End Of Day Exhaustion'.
   label: { fontSize: t.fs(14), color: '#cbd5e0', fontWeight: '400' },
   hint: { fontSize: t.fs(12), color: '#6b7690', marginTop: 2, lineHeight: t.fs(17) },
-  value: { fontSize: t.fs(13), color: BRAND.fillAlt, fontFamily: 'DM Mono', fontWeight: '500' },
+  value: { fontSize: t.fs(13), color: b.fillAlt, fontFamily: 'DM Mono', fontWeight: '500' },
   valueUntouched: { fontSize: t.fs(11.5), color: '#6b7690', fontStyle: 'italic' },
   trackWrap: { justifyContent: 'center', paddingVertical: 8, height: 40 },
   trackBg: { position: 'absolute', left: 0, right: 0, height: TRACK_HEIGHT, borderRadius: 2, backgroundColor: '#2d3748', overflow: 'hidden' },

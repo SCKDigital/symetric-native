@@ -9,11 +9,17 @@ import { trackPatternMarkedForDiscussion, trackPatternNoteAdded } from '@/lib/an
 import { BODY_COLOR, DOMAIN_COLORS, MIND_AREA_COLOR } from '@/lib/domains';
 import { CONFIDENCE_COPY, GRADE_ORDER, type Area, type Grade, type PatternFinding } from '@/lib/pattern-findings';
 import type { PatternSource, PreparePatternReview } from '@/lib/supabase';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
+import type { AccentTokens } from '@/constants/accents';
 
 const AREA_LABEL: Record<Area, string> = { mind: 'Mind', body: 'Body', sleep: 'Sleep', medication: 'Events' };
-const AREA_COLOR: Record<Area, string> = { mind: MIND_AREA_COLOR, body: BODY_COLOR, sleep: DOMAIN_COLORS.sleep, medication: BRAND.textSoft };
+// Three of these are data colours and fixed; the medication one is chrome,
+// so it follows the accent and the map has to be built per render.
+const areaColors = (accent: AccentTokens): Record<Area, string> => ({
+  mind: MIND_AREA_COLOR, body: BODY_COLOR, sleep: DOMAIN_COLORS.sleep, medication: accent.textSoft,
+});
 
 function reviewKey(patternId: string, patternSource: PatternSource) {
   return `${patternSource}:${patternId}`;
@@ -50,6 +56,7 @@ interface PatternRowProps {
 
 function PatternRow({ finding, review, onToggle, onNoteChange }: PatternRowProps) {
   const styles = useStyles();
+  const AREA_COLOR = areaColors(useAccent());
   const shouldDiscuss = review?.should_discuss ?? true;
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState(review?.user_note ?? '');

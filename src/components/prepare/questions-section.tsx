@@ -200,7 +200,7 @@ const useStyles = makeAccentStyles(b => ({
   addActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
   addButton: { paddingVertical: 7, paddingHorizontal: 16, backgroundColor: b.fill, borderRadius: 7 },
   addButtonDisabled: { backgroundColor: '#2d3748' },
-  addButtonText: { fontSize: 13, fontWeight: '500', color: '#fff' },
+  addButtonText: { fontSize: 13, fontWeight: '500', color: b.onFill },
   addButtonTextDisabled: { color: '#6b7a99' },
   cancelText: { fontSize: 13, color: '#6b7a99', paddingVertical: 7, paddingHorizontal: 14 },
 }));

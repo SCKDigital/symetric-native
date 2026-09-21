@@ -1,5 +1,5 @@
 import { BODY_DOMAINS } from '@/lib/body/constants';
-import { COMFORT_TOKENS } from '@/lib/comfort-theme';
+import { ACCENTS, DEFAULT_ACCENT, toAccentName, type AccentName } from '@/constants/accents';
 import { DomainType, Profile } from '@/lib/supabase';
 
 // Scoped port of what MindSetup needs from the web app's src/utils/domainUtils.ts
@@ -88,17 +88,26 @@ export const MIND_AREA_COLOR = '#e2e8f0';
 /**
  * The one colour every domain takes in comfort mode.
  *
- * Not the brand colour, which is what the old simplified-colours toggle used. Comfort
- * mode drops the accents to COMFORT_TOKENS' quieter set, so painting every chip
- * and sparkline the full-strength brand indigo made the calm mode the loudest
- * one on some screens — thirteen bright chips where there had been a spread of
- * hues. Same value as COMFORT_TOKENS.accentText, for the same reason: muted is
- * the point.
+ * Not the accent at full strength, which is what the old simplified-colours
+ * toggle used. Comfort mode drops the accents to their quieter set, so
+ * painting every chip and sparkline the full-strength brand colour made the
+ * calm mode the loudest one on some screens — thirteen bright chips where
+ * there had been a spread of hues. The quiet accent text, for the same
+ * reason: muted is the point.
+ *
+ * Depends on which accent is on, so it is a lookup rather than the constant
+ * it used to be.
  */
-const COMFORT_DOMAIN_COLOR = COMFORT_TOKENS.accentText;
+function comfortDomainColor(accent: AccentName): string {
+  return ACCENTS[accent].quiet.text;
+}
 
-export function getDomainColor(domain: string, comfortMode = false): string {
-  if (comfortMode) return COMFORT_DOMAIN_COLOR;
+export function getDomainColor(
+  domain: string,
+  comfortMode = false,
+  accent: AccentName = DEFAULT_ACCENT,
+): string {
+  if (comfortMode) return comfortDomainColor(accent);
   const normalized = domain.toLowerCase().replace(/ /g, '_');
   if (normalized in BODY_DOMAINS) return BODY_COLOR;
   return DOMAIN_COLORS[normalized] ?? UNKNOWN_FACTOR_COLOR;
@@ -134,7 +143,7 @@ export function comfortActiveForProfile(profile: Profile | null | undefined): bo
  * longer read — the column stays for the web app until it makes the same move.
  */
 export function getDomainColorFromProfile(domain: string, profile: Profile | null | undefined): string {
-  return getDomainColor(domain, comfortActiveForProfile(profile));
+  return getDomainColor(domain, comfortActiveForProfile(profile), toAccentName(profile?.accent));
 }
 
 /** Returns a heading label for one or more domains. Ported from the web

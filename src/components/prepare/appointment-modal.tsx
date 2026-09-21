@@ -5,8 +5,9 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextIn
 import { CheckIcon } from '@/components/marker-icons';
 import { addDays, dateToString, parseDateString, todayDateString } from '@/lib/date-utils';
 import type { Appointment, AppointmentFocusCategory } from '@/lib/supabase';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { useAccent } from '@/contexts/accent-context';
 
 interface Props {
   appointment: Appointment | null;
@@ -16,9 +17,10 @@ interface Props {
 
 function CategoryBubble({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   const styles = useStyles();
+  const accent = useAccent();
   return (
     <Pressable onPress={onPress} style={[styles.bubble, active && styles.bubbleActive]}>
-      {active && <CheckIcon size={12} color={BRAND.text} />}
+      {active && <CheckIcon size={12} color={accent.text} />}
       <Text style={[styles.bubbleText, active && styles.bubbleTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -180,5 +182,5 @@ const useStyles = makeAccentStyles(b => ({
   cancelButtonText: { fontSize: 15, fontWeight: '500', color: '#8892a4' },
   saveButton: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: b.fill, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#2d3748' },
-  saveButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  saveButtonText: { fontSize: 15, fontWeight: '600', color: b.onFill },
 }));

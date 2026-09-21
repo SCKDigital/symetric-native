@@ -390,5 +390,5 @@ const useStyles = makeAccentStyles(b => ({
   flagButton: { padding: 14, paddingHorizontal: 20, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#2d3748', borderRadius: 12, alignItems: 'center' },
   flagButtonActive: { backgroundColor: b.fillAlt, borderColor: b.fillAlt },
   flagButtonText: { fontSize: 15, fontWeight: '500', color: '#8892a4' },
-  flagButtonTextActive: { color: '#ffffff' },
+  flagButtonTextActive: { color: b.onFill },
 }));
