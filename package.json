@@ -59,12 +59,17 @@
   "private": true,
   "expo": {
     "autolinking": {
+      "exclude": [
+        "@expo/dom-webview",
+        "expo-symbols",
+        "expo-web-browser"
+      ],
       "android": {
         "exclude": [
           "@expo/dom-webview",
-          "expo-glass-effect",
           "expo-symbols",
-          "expo-web-browser"
+          "expo-web-browser",
+          "expo-glass-effect"
         ]
       }
     }
