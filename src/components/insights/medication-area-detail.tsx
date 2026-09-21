@@ -2,16 +2,17 @@ import { ScrollView, Text, View } from 'react-native';
 
 import BackRow from '@/components/insights/back-row';
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
-import type { InterventionImpact } from '@/lib/detection/intervention-impact';
+import { readsAsEvent, type InterventionImpact } from '@/lib/detection/intervention-impact';
 import { parseDateString } from '@/lib/date-utils';
 import { interventionImpactFindings } from '@/lib/pattern-findings';
 import type { InterventionMarker } from '@/types/marker';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Ported from the web app's components/insights/MedicationAreaDetail.tsx —
-// before/after effects of medication & therapy markers. No new detection
-// logic; reuses detectInterventionImpacts (already ported, already feeding
-// the Medication area row and "What stands out").
+// before/after effects of the events you log. No new detection logic; reuses
+// detectInterventionImpacts (already ported, already feeding the Events area
+// row and "What stands out"). Which markers count as an event lives in one
+// place, readsAsEvent, rather than in a filter repeated per screen.
 
 function fmtDate(d: string): string {
   return parseDateString(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -27,7 +28,7 @@ export default function MedicationAreaDetail({ onBack, markers, impacts }: Props
   const styles = useStyles();
   const findings = interventionImpactFindings(impacts);
   const impactedMarkerIds = new Set(impacts.map(i => i.marker_id));
-  const eligibleMarkers = markers.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy');
+  const eligibleMarkers = markers.filter(readsAsEvent);
   const noImpactYet = eligibleMarkers.filter(m => !impactedMarkerIds.has(m.id));
 
   return (

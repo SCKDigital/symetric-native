@@ -18,9 +18,30 @@ export interface DomainImpact {
   window_days: 7 | 14 | 21;
 }
 
+/**
+ * The marker types the Events area reads a before/after from.
+ *
+ * Cycle Day 1 is deliberately not one of them, and that is the only exclusion.
+ * Every other marker is a one-off — a dose change, an appointment, a
+ * bereavement, a house move — so the fortnight either side of it is a fair
+ * comparison. Day 1 recurs every few weeks, which breaks that twice over: one
+ * cycle's "before" window is the previous cycle's "after", and since markers
+ * are read newest-first against a cap of three results, a few months of cycle
+ * logging would push every medication change out of the area entirely. Cycle
+ * day is on History and in the report, where it is shown rather than averaged.
+ */
+export const EVENT_MARKER_TYPES = ['medication', 'therapy', 'life_event'] as const;
+
+export type EventMarkerType = (typeof EVENT_MARKER_TYPES)[number];
+
+/** Whether the Events area reads this marker at all. */
+export function readsAsEvent(marker: { marker_type: string }): boolean {
+  return (EVENT_MARKER_TYPES as readonly string[]).includes(marker.marker_type);
+}
+
 export interface InterventionImpact {
   marker_id: string;
-  marker_type: 'medication' | 'therapy';
+  marker_type: EventMarkerType;
   marker_date: string;
   marker_label: string;
   affected_domains: DomainImpact[];
@@ -52,7 +73,7 @@ export function detectInterventionImpacts(markers: InterventionMarker[], days: D
   const dataStart = sorted[0].date;
   const dataEnd = sorted[sorted.length - 1].date;
 
-  const eligible = markers.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy').sort((a, b) => b.marker_date.localeCompare(a.marker_date));
+  const eligible = markers.filter(readsAsEvent).sort((a, b) => b.marker_date.localeCompare(a.marker_date));
 
   const results: InterventionImpact[] = [];
 
@@ -93,7 +114,7 @@ export function detectInterventionImpacts(markers: InterventionMarker[], days: D
 
       const candidate: InterventionImpact = {
         marker_id: marker.id,
-        marker_type: marker.marker_type as 'medication' | 'therapy',
+        marker_type: marker.marker_type as EventMarkerType,
         marker_date: marker.marker_date,
         marker_label: marker.label,
         affected_domains: affected.sort((a, b) => Math.abs(b.change) - Math.abs(a.change)),

@@ -236,7 +236,7 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
   }
 
   for (const f of interventionImpactFindings(data.interventionImpacts)) {
-    findings.push(toUnified('med', 'Medication effect', f));
+    findings.push(toUnified('med', 'Event effect', f));
   }
 
   // 10 — Body patterns (deviations, evolution, rare events, time-of-day,

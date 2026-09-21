@@ -24,7 +24,7 @@ import { detectBodyEventFrequency, BodyEventFrequencyPattern } from '@/lib/detec
 import { detectBodyEventImpacts, BodyEventMindImpact } from '@/lib/detection/body-event-impact';
 import { detectBodyTimeOfDayPatterns, MorningEveningPair, BodyTimeOfDayPattern } from '@/lib/detection/body-time-of-day';
 import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
-import { detectInterventionImpacts, InterventionImpact } from '@/lib/detection/intervention-impact';
+import { detectInterventionImpacts, InterventionImpact, readsAsEvent } from '@/lib/detection/intervention-impact';
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
 import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
@@ -624,7 +624,7 @@ export default function InsightsScreen() {
     // (not at render time) since it needs Date.now() — impure, and the
     // React Compiler-era lint rules flag that during render even for a
     // one-off "how many days ago" calculation like this.
-    const eligibleMarkers = markersInRange.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy');
+    const eligibleMarkers = markersInRange.filter(readsAsEvent);
     const impactedMarkerIds = new Set(impacts.map(i => i.marker_id));
     const unreadMarkers = eligibleMarkers.filter(m => !impactedMarkerIds.has(m.id));
     const mostRecentUnread = [...unreadMarkers].sort((a, b) => b.marker_date.localeCompare(a.marker_date))[0];
@@ -758,7 +758,7 @@ export default function InsightsScreen() {
     ...allLagFindings.filter(f => f.areas.includes('sleep')),
   ];
   const medicationFindings = interventionImpactFindings(interventionImpacts);
-  const eligibleMarkerCount = markers.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy').length;
+  const eligibleMarkerCount = markers.filter(readsAsEvent).length;
 
   // Day-of-week and what-follows-what run over merged mind+body days, so their
   // results are mixed. Rare events are already detected per area, and circadian
