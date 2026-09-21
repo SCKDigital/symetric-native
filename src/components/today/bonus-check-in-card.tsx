@@ -1,7 +1,6 @@
-import { BRAND } from '@/constants/brand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import DomainSlider from '@/components/checkin/domain-slider';
 import EditCheckInModal from '@/components/checkin/edit-check-in-modal';
@@ -11,6 +10,7 @@ import { RESCUE_WINDOW_MS } from '@/lib/constants';
 import { DOMAIN_COPY, getDomainColorFromProfile } from '@/lib/domains';
 import { getMinutesRemaining, isWithinEditWindow } from '@/lib/edit-window';
 import { CheckIn, DomainType, supabase } from '@/lib/supabase';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Port of the web app's QuickMoodCard.tsx — the "Log a bonus mind check-in"
 // row at the foot of Today, and the slider sheet behind it. Unlike a scheduled
@@ -50,6 +50,7 @@ interface Props {
 }
 
 export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, onForceOpenHandled, onLogged }: Props) {
+  const styles = useStyles();
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -311,7 +312,7 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   pressed: { opacity: 0.7 },
   trigger: {
     borderWidth: 1, borderColor: '#1e2533', borderRadius: 12,
@@ -321,7 +322,7 @@ const styles = StyleSheet.create({
   triggerDisabled: { opacity: 0.5 },
   triggerText: { fontSize: 14, color: '#b8c4d8' },
   triggerMeta: { fontSize: 12, color: '#9aabb8' },
-  triggerSaved: { fontSize: 12, color: BRAND.text },
+  triggerSaved: { fontSize: 12, color: b.text },
   triggerPlus: { fontSize: 18, color: '#64748b', lineHeight: 20 },
 
   editRow: {
@@ -329,12 +330,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 16, marginTop: -4, marginBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editRowText: { fontSize: 14, color: BRAND.text },
+  editRowText: { fontSize: 14, color: b.text },
   editRowMeta: { fontSize: 12, color: '#6b7690' },
 
   sheet: { flex: 1, backgroundColor: '#0a0c12' },
   sheetContent: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 60, gap: 8 },
-  sheetLabel: { fontSize: 11, color: BRAND.text, fontWeight: '600', letterSpacing: 0.9 },
+  sheetLabel: { fontSize: 11, color: b.text, fontWeight: '600', letterSpacing: 0.9 },
   sheetHeading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0', marginBottom: 12 },
   notes: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 12,
@@ -344,11 +345,11 @@ const styles = StyleSheet.create({
   error: { fontSize: 13, color: '#f87171', marginTop: 10 },
   cooldownNotice: { fontSize: 13, color: '#9aabb8', marginTop: 16, lineHeight: 19 },
   submit: {
-    marginTop: 20, backgroundColor: BRAND.fill, borderRadius: 12,
+    marginTop: 20, backgroundColor: b.fill, borderRadius: 12,
     paddingVertical: 14, alignItems: 'center',
   },
   submitDisabled: { backgroundColor: '#1e2533' },
   submitText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
   submitTextDisabled: { color: '#4a5568' },
   cancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
-});
+}));

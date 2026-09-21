@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/contexts/auth-context';
 import { parseDateString } from '@/lib/date-utils';
@@ -7,6 +7,7 @@ import { generateReport } from '@/lib/report/generate-report';
 import { supabase } from '@/lib/supabase';
 import type { DetectedCluster } from '@/lib/supabase';
 import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 function fmtDate(d: string): string {
   return parseDateString(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -30,6 +31,7 @@ interface Props {
 // the native share sheet (expo-sharing), since there's no browser
 // downloads folder on native to drop a file into.
 export default function GenerateReportSection({ clusters, appointmentId, fromDate, toDate }: Props) {
+  const styles = useStyles();
   const { user, profile } = useAuth();
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
@@ -143,6 +145,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
 }
 
 function IncludeToggle({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onToggle}
@@ -157,7 +160,7 @@ function IncludeToggle({ label, checked, onToggle }: { label: string; checked: b
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
   sectionLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 12 },
   dateRange: { fontSize: 12, color: '#4a5568', marginBottom: 16 },
@@ -173,15 +176,15 @@ const styles = StyleSheet.create({
     width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#2d3748',
     alignItems: 'center', justifyContent: 'center',
   },
-  checkboxOn: { backgroundColor: BRAND.fill, borderColor: BRAND.fill },
+  checkboxOn: { backgroundColor: b.fill, borderColor: b.fill },
   checkboxTick: { fontSize: 13, color: '#fff', fontWeight: '700' },
   includeLabel: { fontSize: 15, color: '#e2e8f0', flex: 1 },
   patternCount: { fontSize: 13, color: '#6b7a99', marginBottom: 16 },
   statusText: { fontSize: 13, color: '#6b7a99', marginBottom: 12 },
   errorText: { fontSize: 13, color: '#f87171', marginBottom: 12 },
-  successText: { fontSize: 13, color: BRAND.text, marginBottom: 12 },
-  generateButton: { width: '100%', padding: 13, backgroundColor: BRAND.fill, borderRadius: 10, alignItems: 'center' },
+  successText: { fontSize: 13, color: b.text, marginBottom: 12 },
+  generateButton: { width: '100%', padding: 13, backgroundColor: b.fill, borderRadius: 10, alignItems: 'center' },
   generateButtonDisabled: { backgroundColor: '#2d3748' },
   generateButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   generatingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-});
+}));

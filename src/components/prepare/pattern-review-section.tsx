@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { useAuth } from '@/contexts/auth-context';
@@ -10,6 +10,7 @@ import { BODY_COLOR, DOMAIN_COLORS, MIND_AREA_COLOR } from '@/lib/domains';
 import { CONFIDENCE_COPY, GRADE_ORDER, type Area, type Grade, type PatternFinding } from '@/lib/pattern-findings';
 import type { PatternSource, PreparePatternReview } from '@/lib/supabase';
 import { BRAND, brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 const AREA_LABEL: Record<Area, string> = { mind: 'Mind', body: 'Body', sleep: 'Sleep', medication: 'Events' };
 const AREA_COLOR: Record<Area, string> = { mind: MIND_AREA_COLOR, body: BODY_COLOR, sleep: DOMAIN_COLORS.sleep, medication: BRAND.textSoft };
@@ -28,6 +29,7 @@ function confirmAsync(title: string, message: string, confirmLabel: string): Pro
 }
 
 function ConfidenceBadge({ grade }: { grade: Grade }) {
+  const styles = useStyles();
   const conf = CONFIDENCE_COPY[grade];
   return (
     <View style={styles.badgeRow}>
@@ -47,6 +49,7 @@ interface PatternRowProps {
 }
 
 function PatternRow({ finding, review, onToggle, onNoteChange }: PatternRowProps) {
+  const styles = useStyles();
   const shouldDiscuss = review?.should_discuss ?? true;
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState(review?.user_note ?? '');
@@ -149,6 +152,7 @@ interface Props {
 // (used only by PostAppointmentSection, not ported yet) is intentionally not
 // in lib/api/pattern-reviews.ts — add it when that section is ported.
 export default function PatternReviewSection({ appointmentId, findings }: Props) {
+  const styles = useStyles();
   const { user } = useAuth();
   const [reviews, setReviews] = useState<PreparePatternReview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -341,21 +345,21 @@ export default function PatternReviewSection({ appointmentId, findings }: Props)
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
   sectionLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: brandTint(BRAND.text, 0.15), borderRadius: 20 },
-  countText: { fontSize: 11, fontWeight: '600', color: BRAND.text },
+  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: brandTint(b.text, 0.15), borderRadius: 20 },
+  countText: { fontSize: 11, fontWeight: '600', color: b.text },
   countSummary: { fontSize: 12, color: '#6b7a99' },
   hint: { fontSize: 12, color: '#4a5568', marginBottom: 12 },
   toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8, flexWrap: 'wrap' },
   filterRow: { flexDirection: 'row', gap: 4 },
   filterPill: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20, borderWidth: 1, borderColor: '#1e2533' },
-  filterPillActive: { borderWidth: 0, backgroundColor: brandTint(BRAND.fill, 0.15) },
+  filterPillActive: { borderWidth: 0, backgroundColor: brandTint(b.fill, 0.15) },
   filterPillText: { fontSize: 12, color: '#4a5568' },
-  filterPillTextActive: { color: BRAND.text, fontWeight: '600' },
+  filterPillTextActive: { color: b.text, fontWeight: '600' },
   markAllText: { fontSize: 12, color: '#4a5568' },
   errorBanner: { marginBottom: 12, padding: 10, paddingHorizontal: 12, backgroundColor: 'rgba(248,113,113,0.08)', borderWidth: 1, borderColor: 'rgba(248,113,113,0.2)', borderRadius: 8 },
   errorText: { fontSize: 13, color: '#f87171' },
@@ -385,11 +389,11 @@ const styles = StyleSheet.create({
   areaPill: { paddingVertical: 2, paddingHorizontal: 7, borderRadius: 20 },
   areaPillText: { fontSize: 11, fontWeight: '500' },
   noteToggle: { fontSize: 12, color: '#4a5568' },
-  noteToggleActive: { color: BRAND.text },
+  noteToggleActive: { color: b.text },
   noteBlock: { marginTop: 8 },
   noteInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#2d3748', borderRadius: 8, padding: 10, paddingHorizontal: 12, color: '#c8d0e0', fontSize: 13, minHeight: 44, textAlignVertical: 'top' },
   noteStatus: { fontSize: 11, color: '#4a5568', marginTop: 4, height: 14 },
-  noteStatusSaving: { color: BRAND.text },
+  noteStatusSaving: { color: b.text },
   showEarlyButton: { paddingTop: 12 },
-  showEarlyText: { fontSize: 13, color: BRAND.fillAlt },
-});
+  showEarlyText: { fontSize: 13, color: b.fillAlt },
+}));

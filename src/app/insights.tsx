@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BodyAreaDetail from '@/components/insights/body-area-detail';
@@ -43,7 +43,7 @@ import { selectStandoutFindings } from '@/lib/standout-ranking';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
 import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 type RangeDays = 7 | 14 | 30 | 60 | 90;
 const RANGE_OPTIONS: RangeDays[] = [7, 14, 30, 60, 90];
@@ -93,6 +93,7 @@ function fmtDate(dateStr: string): string {
 // the select is a button plus a modal sheet; the label, the stat line under it
 // and the option wording all match the web control exactly.
 function RangeControl({ range, onChange, fromDate, toDate, checkInCount, daysWithCheckIn }: { range: RangeDays; onChange: (r: RangeDays) => void; fromDate: string; toDate: string; checkInCount: number; daysWithCheckIn: number }) {
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
   return (
     <View style={styles.rangeControl}>
@@ -131,6 +132,7 @@ function RangeControl({ range, onChange, fromDate, toDate, checkInCount, daysWit
 // four rows are now tappable (BodyAreaDetail from the body detector sub-
 // series; Sleep/Medication/MindAreaDetail from this area-detail series).
 function AreaIndex({ rows, onSelect }: { rows: AreaRow[]; onSelect: (area: Area) => void }) {
+  const styles = useStyles();
   if (rows.length === 0) return null;
   const TAPPABLE: Area[] = ['mind', 'body', 'sleep', 'medication'];
   return (
@@ -189,6 +191,7 @@ const RANGE_TOO_SHORT =
 // short sentences under three screens of chrome. The evidence line is dropped
 // here for the same reason the web drops it — the grading lives in Prepare.
 function WhatStandsOut({ findings, rangeDays }: { findings: PatternFinding[]; rangeDays: RangeDays }) {
+  const styles = useStyles();
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>What stands out</Text>
@@ -282,6 +285,7 @@ interface InsightsFetchBundle {
 }
 
 export default function InsightsScreen() {
+  const styles = useStyles();
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const hasLoadedOnce = useRef(false);
@@ -919,7 +923,7 @@ export default function InsightsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   list: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40, gap: 8 },
   heading: { fontSize: 26, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.6, marginBottom: 20 },
@@ -942,7 +946,7 @@ const styles = StyleSheet.create({
   rangeOptionTextActive: { color: '#e2e8f0', fontWeight: '600' },
   areaRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 14, padding: 14, paddingHorizontal: 16 },
   areaRowMuted: { opacity: 0.7 },
-  areaDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: BRAND.text, flexShrink: 0 },
+  areaDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: b.text, flexShrink: 0 },
   areaRowText: { flex: 1 },
   areaRowLabel: { fontSize: 14, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   areaRowSubtitle: { fontSize: 12, color: '#8892a4' },
@@ -972,4 +976,4 @@ const styles = StyleSheet.create({
   empty: { paddingTop: 60, alignItems: 'center', paddingHorizontal: 32, gap: 8 },
   emptyHeading: { fontSize: 16, fontWeight: '600', color: '#cbd5e0' },
   emptyBody: { fontSize: 13, color: '#4a5568', textAlign: 'center', lineHeight: 19 },
-});
+}));

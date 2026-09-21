@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-import { BRAND } from '@/constants/brand';
+import { Animated, Pressable, Text, View } from 'react-native';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Ported from the web app's components/lock/PinEntry.tsx — a dot-progress
 // row + numeric keypad, shared by AppLockScreen and AppLockPinSheet.
@@ -17,6 +17,7 @@ interface Props {
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
 
 export default function PinEntry({ length, value, onChange, shake }: Props) {
+  const styles = useStyles();
   const [shakeAnim] = useState(() => new Animated.Value(0));
   const prevShake = useRef(false);
 
@@ -60,14 +61,14 @@ export default function PinEntry({ length, value, onChange, shake }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { alignItems: 'center', gap: 32 },
   dotsRow: { flexDirection: 'row', gap: 14 },
   dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: '#3a4258', backgroundColor: 'transparent' },
-  dotFilled: { backgroundColor: BRAND.text, borderColor: BRAND.text },
+  dotFilled: { backgroundColor: b.text, borderColor: b.text },
   keypad: { flexDirection: 'row', flexWrap: 'wrap', width: 3 * 64 + 2 * 14, gap: 14 },
   key: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#181c26', borderWidth: 1, borderColor: '#252b3b', alignItems: 'center', justifyContent: 'center' },
   keyHidden: { backgroundColor: 'transparent', borderWidth: 0 },
   keyText: { fontSize: 22, fontWeight: '500', color: '#e2e4ec' },
   keyTextDel: { fontSize: 13 },
-});
+}));

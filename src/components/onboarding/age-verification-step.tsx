@@ -1,11 +1,11 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingCheckbox, OnboardingPrimaryButton } from '@/components/onboarding/onboarding-controls';
 import { calculateAge, dateToString, parseDateString } from '@/lib/date-utils';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 interface AgeVerificationStepProps {
   dateOfBirth: string;
@@ -21,6 +21,7 @@ const MAX_AGE = 120;
 // @react-native-community/datetimepicker — a legal age gate is worth a
 // proper native picker over freeform day/month/year text entry.
 export default function AgeVerificationStep({ dateOfBirth, ageConfirmed, onUpdate, onNext }: AgeVerificationStepProps) {
+  const styles = useStyles();
   const [showPicker, setShowPicker] = useState(false);
 
   const age = dateOfBirth ? calculateAge(dateOfBirth) : null;
@@ -82,7 +83,7 @@ export default function AgeVerificationStep({ dateOfBirth, ageConfirmed, onUpdat
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0f1117' },
   content: { flex: 1, maxWidth: 480, width: '100%', alignSelf: 'center', paddingHorizontal: 24, paddingTop: 40 },
   heading: { fontSize: 24, fontWeight: '300', color: '#e2e8f0', marginBottom: 16 },
@@ -92,7 +93,7 @@ const styles = StyleSheet.create({
   dateInputPlaceholder: { fontSize: 15, color: '#4a5568' },
   pickerWrap: { marginBottom: 16, backgroundColor: '#141820', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
   errorText: { fontSize: 13, color: '#f87171', marginBottom: 16, lineHeight: 19 },
   checkboxSpacing: { marginBottom: 28 },
-});
+}));

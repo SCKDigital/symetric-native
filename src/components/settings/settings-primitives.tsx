@@ -5,6 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '@/contexts/auth-context';
 import { comfortActiveForProfile } from '@/lib/domains';
 import { BRAND, brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Ports of the web SettingsScreen.tsx's own layout primitives — the grouped
 // card, its labelled sections, and the icon + label + subtitle + accessory row
@@ -13,14 +14,17 @@ import { BRAND, brandTint } from '@/constants/brand';
 // two screens looked nothing alike even where they offered the same control.
 
 export function SectionLabel({ children, danger }: { children: React.ReactNode; danger?: boolean }) {
+  const styles = useStyles();
   return <Text style={[styles.sectionLabel, danger && styles.sectionLabelDanger]}>{String(children).toUpperCase()}</Text>;
 }
 
 export function SectionCard({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
   return <View style={styles.sectionCard}>{children}</View>;
 }
 
 export function RowDivider() {
+  const styles = useStyles();
   return <View style={styles.divider} />;
 }
 
@@ -50,6 +54,7 @@ export function Toggle({ value, onValueChange, disabled }: {
 }
 
 export function InlineMessage({ type, children }: { type: 'error' | 'info'; children: React.ReactNode }) {
+  const styles = useStyles();
   return <Text style={[styles.inlineMessage, type === 'error' && styles.inlineMessageError]}>{children}</Text>;
 }
 
@@ -66,6 +71,7 @@ const ICON_BG: Record<IconColor, string> = {
 const COMFORT_ICON_BG = 'rgba(165,171,201,0.12)';
 
 export function RowIcon({ color, children }: { color: IconColor; children: React.ReactNode }) {
+  const styles = useStyles();
   const { profile } = useAuth();
   // One tile colour in comfort mode, which is where simplified colours now
   // lives — see getDomainColorFromProfile.
@@ -84,6 +90,7 @@ interface SettingsRowProps {
 }
 
 export function SettingsRow({ icon, iconColor = 'indigo', label, subtitle, right, onPress, danger }: SettingsRowProps) {
+  const styles = useStyles();
   const inner = (
     <View style={styles.row}>
       <RowIcon color={danger ? 'danger' : iconColor}>{icon}</RowIcon>
@@ -107,6 +114,7 @@ export function SettingsRow({ icon, iconColor = 'indigo', label, subtitle, right
 
 /** The "Edit ›" accessory the web rows use on the right-hand side. */
 export function RowValue({ children, danger }: { children: React.ReactNode; danger?: boolean }) {
+  const styles = useStyles();
   return (
     <>
       <Text style={styles.rowValue}>{children}</Text>
@@ -118,6 +126,7 @@ export function RowValue({ children, danger }: { children: React.ReactNode; dang
 /** Transient confirmation/failure message. The web version is fixed above the
  *  tab bar; here it sits in the same place via absolute positioning. */
 export function Toast({ message, onDone }: { message: string; onDone: () => void }) {
+  const styles = useStyles();
   useEffect(() => {
     const t = setTimeout(onDone, 2500);
     return () => clearTimeout(t);
@@ -142,6 +151,7 @@ export function SheetShell({ title, description, onClose, children }: {
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.sheetRoot}>
@@ -163,6 +173,7 @@ export function SheetShell({ title, description, onClose, children }: {
 export function SheetButton({ label, onPress, disabled, danger }: {
   label: string; onPress: () => void; disabled?: boolean; danger?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -180,6 +191,7 @@ export function SheetButton({ label, onPress, disabled, danger }: {
 }
 
 export function SheetCancel({ onPress, label = 'Cancel' }: { onPress: () => void; label?: string }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
       <Text style={styles.sheetCancel}>{label}</Text>
@@ -187,7 +199,7 @@ export function SheetCancel({ onPress, label = 'Cancel' }: { onPress: () => void
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   pressed: { opacity: 0.7 },
 
   sectionLabel: {
@@ -231,10 +243,10 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 16, fontWeight: '600', color: '#e2e4ec', marginBottom: 6 },
   sheetDescription: { fontSize: 13, color: '#8b90a4', lineHeight: 20, marginBottom: 20 },
 
-  sheetButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: BRAND.fill, alignItems: 'center' },
+  sheetButton: { marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: b.fill, alignItems: 'center' },
   sheetButtonDanger: { backgroundColor: '#7f1d1d' },
   sheetButtonDisabled: { backgroundColor: '#1e2533' },
   sheetButtonText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
   sheetButtonTextDisabled: { color: '#4a5568' },
   sheetCancel: { fontSize: 14, color: '#8b90a4', textAlign: 'center', paddingTop: 14 },
-});
+}));

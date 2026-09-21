@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
@@ -10,7 +10,8 @@ import { supabase } from '@/lib/supabase';
 import type { ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
 import { FACTOR_LABELS, factorLabel } from '@/lib/pattern-findings';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Ported from the web app's components/insights/PatternDetailScreen.tsx —
 // chunk 3 (final) of the MindAreaDetail port. Self-contained: fetches its
@@ -41,6 +42,7 @@ const fmtDate = formatShortDate;
 function DomainStatCard({ domain, baselines, avgInCluster }: {
   domain: DomainType; baselines: Partial<Record<DomainType, number>>; avgInCluster: number | null;
 }) {
+  const styles = useStyles();
   const { profile } = useAuth();
   const baseline = baselines[domain] ?? 5;
   const deviation = avgInCluster !== null ? avgInCluster - baseline : null;
@@ -63,6 +65,7 @@ function DomainStatCard({ domain, baselines, avgInCluster }: {
 }
 
 function MetaRow({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.metaRow}>
       <Text style={styles.metaLabel}>{label}</Text>
@@ -84,6 +87,7 @@ interface Props {
 export default function PatternDetailScreen({
   cluster, baselines, contextTags, onBack, onToggleFlag, from = 'insights', volatilityGroup,
 }: Props) {
+  const styles = useStyles();
   const { user, profile } = useAuth();
   const [days, setDays] = useState<DayScores[]>([]);
   const [dayMinMax, setDayMinMax] = useState<Map<string, Partial<Record<DomainType, { min: number; max: number }>>>>(new Map());
@@ -343,7 +347,7 @@ export default function PatternDetailScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0a0c12', padding: 20, paddingTop: 20 },
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 28, alignSelf: 'flex-start' },
   backText: { fontSize: 14, color: '#8892a4' },
@@ -357,8 +361,8 @@ const styles = StyleSheet.create({
   durationText: { fontSize: 14, color: '#8892a4' },
   ongoingPill: { paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)', borderRadius: 8 },
   ongoingText: { fontSize: 11, color: '#f59e0b', fontWeight: '500' },
-  notesBox: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.2), borderRadius: 12, padding: 14, paddingHorizontal: 16, marginBottom: 20 },
-  notesLabel: { fontSize: 11, color: BRAND.text, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: 6 },
+  notesBox: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: brandTint(b.fillAlt, 0.2), borderRadius: 12, padding: 14, paddingHorizontal: 16, marginBottom: 20 },
+  notesLabel: { fontSize: 11, color: b.text, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: 6 },
   notesText: { fontSize: 14, color: '#c8d0e0', lineHeight: 22 },
   contextRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 24 },
   contextTag: { backgroundColor: 'rgba(148,163,184,0.1)', borderWidth: 1, borderColor: 'rgba(148,163,184,0.15)', borderRadius: 6, paddingVertical: 4, paddingHorizontal: 10 },
@@ -384,7 +388,7 @@ const styles = StyleSheet.create({
   metaLabel: { fontSize: 13, color: '#6b7a99', flexShrink: 0 },
   metaValue: { fontSize: 13, color: '#c8d0e0', textAlign: 'right', fontFamily: 'DM Mono' },
   flagButton: { padding: 14, paddingHorizontal: 20, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#2d3748', borderRadius: 12, alignItems: 'center' },
-  flagButtonActive: { backgroundColor: BRAND.fillAlt, borderColor: BRAND.fillAlt },
+  flagButtonActive: { backgroundColor: b.fillAlt, borderColor: b.fillAlt },
   flagButtonText: { fontSize: 15, fontWeight: '500', color: '#8892a4' },
   flagButtonTextActive: { color: '#ffffff' },
-});
+}));

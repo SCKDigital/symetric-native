@@ -1,10 +1,10 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import Sparkline from '@/components/history/sparkline';
 import { ensureUTC } from '@/lib/date-utils';
 import { ALL_DOMAINS, DOMAIN_NAMES, getDomainColorFromProfile } from '@/lib/domains';
 import { CheckIn, DomainType, Profile } from '@/lib/supabase';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 interface MindSectionProps {
   completedCheckIns: CheckIn[];
@@ -17,6 +17,7 @@ function timeLabel(iso: string): string {
 
 // Ported from the web app's MindSection.tsx — same per-domain sparkline rows.
 export default function MindSection({ completedCheckIns, profile }: MindSectionProps) {
+  const styles = useStyles();
   const sorted = [...completedCheckIns].sort((a, b) => new Date(a.completed_at || a.scheduled_at).getTime() - new Date(b.completed_at || b.scheduled_at).getTime());
 
   const rows = ALL_DOMAINS.flatMap(domain => {
@@ -51,12 +52,12 @@ export default function MindSection({ completedCheckIns, profile }: MindSectionP
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 },
-  headerLabel: { fontSize: 11, color: BRAND.text, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9 },
+  headerLabel: { fontSize: 11, color: b.text, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.9 },
   headerTime: { fontSize: 11, color: '#4a5568' },
   rows: { gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rowLabel: { fontSize: 12, color: '#b0b8c8', width: 82, flexShrink: 0 },
   rowRange: { fontSize: 12, color: '#8892a4', marginLeft: 'auto', flexShrink: 0, fontVariant: ['tabular-nums'] },
-});
+}));

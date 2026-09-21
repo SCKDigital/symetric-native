@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import BodySection from '@/components/history/body-section';
@@ -12,6 +12,7 @@ import { summariseDay, type BodyReadingPair, type DaySummaryCheckIn } from '@/li
 import { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite, CheckIn, Profile, SleepLog } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 /** Same-day am/pm pairs for the body-direction clause — only domains logged
  *  at both times of day count (see BodyReadingPair). */
@@ -86,6 +87,7 @@ export default function DayCard({
   date: _date, dayLabel, fullDateLabel, completedCheckIns, profile, sleepLog, dayMarkers,
   bodyColumnMode, bodyEntry, bodyPainSites, bodyEvents, onEditMarker,
 }: DayCardProps) {
+  const styles = useStyles();
   const [expanded, setExpanded] = useState(false);
 
   const mindCount = completedCheckIns.length;
@@ -195,7 +197,7 @@ export default function DayCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, overflow: 'hidden' },
   padding: { padding: 16, paddingHorizontal: 20 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 2 },
@@ -208,6 +210,6 @@ const styles = StyleSheet.create({
   chipLabel: { fontSize: 11, color: '#8892a4' },
   bodySectionSpaced: { marginTop: 20 },
   expandButton: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12, paddingVertical: 4 },
-  expandButtonText: { fontSize: 13, color: BRAND.text },
+  expandButtonText: { fontSize: 13, color: b.text },
   expandedSection: { borderTopWidth: 1, borderTopColor: '#1e2533', padding: 20, paddingTop: 16 },
-});
+}));

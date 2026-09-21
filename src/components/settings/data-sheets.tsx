@@ -1,8 +1,7 @@
-import { BRAND } from '@/constants/brand';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { File, Paths } from 'expo-file-system';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
 import { useAuth } from '@/contexts/auth-context';
@@ -10,6 +9,7 @@ import { median, round2, stddevPop } from '@/lib/baseline-stats';
 import { buildCsvExport, buildJsonExport, type ExportFile } from '@/lib/data-export';
 import { resolveActiveDomains } from '@/lib/domains';
 import { supabase } from '@/lib/supabase';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // The "Your data" and "Account" sheets, ported from the web app's
 // sheets/SettingsSheets.tsx (ExportSheet), DeleteRangeSheet.tsx,
@@ -41,6 +41,7 @@ async function shareExportFile(file: ExportFile): Promise<void> {
 // ── Export ───────────────────────────────────────────────────────────────────
 
 export function ExportSheet({ onClose }: { onClose: () => void }) {
+  const styles = useStyles();
   const { user } = useAuth();
   const [fmt, setFmt] = useState<'CSV' | 'JSON'>('CSV');
   const [exporting, setExporting] = useState(false);
@@ -90,6 +91,7 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
 // ── Delete a date range ──────────────────────────────────────────────────────
 
 function DateField({ label, value, onChange }: { label: string; value: Date | null; onChange: (d: Date) => void }) {
+  const styles = useStyles();
   const [picking, setPicking] = useState(false);
   const handleChange = (event: DateTimePickerEvent, selected?: Date) => {
     if (Platform.OS !== 'ios') setPicking(false);
@@ -115,6 +117,7 @@ function DateField({ label, value, onChange }: { label: string; value: Date | nu
 export function DeleteRangeSheet({ userId, onClose, onDeleted }: {
   userId: string; onClose: () => void; onDeleted: () => void;
 }) {
+  const styles = useStyles();
   const [step, setStep] = useState<'pick' | 'confirm'>('pick');
   const [from, setFrom] = useState<Date | null>(null);
   const [to, setTo] = useState<Date | null>(null);
@@ -174,6 +177,7 @@ export function DeleteRangeSheet({ userId, onClose, onDeleted }: {
 // ── Delete everything ────────────────────────────────────────────────────────
 
 export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
+  const styles = useStyles();
   const { user, signOut } = useAuth();
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -248,6 +252,7 @@ export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
 interface CurrentBaseline { domain: string; baseline_score: number; source: string; set_at: string }
 
 export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const styles = useStyles();
   const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
   const [current, setCurrent] = useState<CurrentBaseline[] | null>(null);
 
@@ -332,12 +337,12 @@ export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClos
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   pressed: { opacity: 0.7 },
   error: { fontSize: 12, color: '#f87171', marginBottom: 12, lineHeight: 18 },
   hint: { fontSize: 12, color: '#8b90a4', lineHeight: 18, marginBottom: 12 },
   fieldLabel: { fontSize: 11, color: '#4a5568', letterSpacing: 0.6, marginBottom: 6 },
-  done: { fontSize: 14, color: BRAND.text, textAlign: 'center', paddingVertical: 8 },
+  done: { fontSize: 14, color: b.text, textAlign: 'center', paddingVertical: 8 },
 
   segmented: {
     flexDirection: 'row', backgroundColor: '#0f1117', borderWidth: 1, borderColor: '#252b3b',
@@ -366,4 +371,4 @@ const styles = StyleSheet.create({
   baselineRow: { flexDirection: 'row', justifyContent: 'space-between' },
   baselineDomain: { fontSize: 13, color: '#8b90a4', textTransform: 'capitalize' },
   baselineScore: { fontSize: 13, color: '#e2e4ec' },
-});
+}));

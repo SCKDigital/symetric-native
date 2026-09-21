@@ -1,6 +1,5 @@
-import { BRAND } from '@/constants/brand';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import DomainSlider from '@/components/checkin/domain-slider';
 import BodyMap, { type PainSite } from '@/components/body/body-map';
@@ -20,6 +19,7 @@ import { BODY_COLOR } from '@/lib/domains';
 import { addDays, parseDateString, todayDateString } from '@/lib/date-utils';
 import { supabase } from '@/lib/supabase';
 import type { BodyDomainType, BodyEventType, BodySide } from '@/lib/supabase';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 function friendlyDate(dateStr: string, todayStr: string): string {
   if (dateStr === todayStr) return 'Today';
@@ -44,6 +44,7 @@ type DomainValues = Partial<Record<BodyDomainType, number>>;
 // character tags, and a note field. Deliberately NOT ported: the optional
 // morning check-in, onboarding's body-consent step.
 export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
+  const styles = useStyles();
   const { user, profile } = useAuth();
   // Sliders live inside this ScrollView. A horizontal drag that starts with
   // any vertical component gets claimed by the scroll, which is what made the
@@ -478,7 +479,7 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   content: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 96 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
@@ -506,7 +507,7 @@ const styles = StyleSheet.create({
   eventsList: { gap: 4 },
   eventRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, minHeight: 44 },
   eventCheckbox: { width: 18, height: 18, borderRadius: 5, marginTop: 1, borderWidth: 1.5, borderColor: '#4a5568' },
-  eventCheckboxChecked: { borderWidth: 0, backgroundColor: BRAND.textSoft },
+  eventCheckboxChecked: { borderWidth: 0, backgroundColor: b.textSoft },
   eventText: { flex: 1 },
   eventLabel: { fontSize: 14, color: '#cbd5e0' },
   eventLabelTicked: { color: '#e2e8f0' },
@@ -521,4 +522,4 @@ const styles = StyleSheet.create({
   saveButtonTextDisabled: { color: '#4a5568' },
   requiredHint: { fontSize: 13, color: '#8892a4', marginTop: 10, textAlign: 'center' },
   errorText: { fontSize: 13, color: '#f87171', marginTop: 12, textAlign: 'center' },
-});
+}));

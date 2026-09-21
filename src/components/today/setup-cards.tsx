@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
 import MarkerModal from '@/components/marker-modal';
 import CheckInPreferencesStep from '@/components/onboarding/check-in-preferences-step';
@@ -25,6 +25,7 @@ import { todayDateString } from '@/lib/date-utils';
 import { TimeField } from '@/components/today/time-field';
 import type { TimeFormat } from '@/lib/time-format';
 import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 /**
  * First-run setup, as cards on Today rather than a wizard in front of it.
@@ -69,6 +70,7 @@ function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, 
   secondaryLabel?: string;
   tone?: 'indigo' | 'body';
 }) {
+  const styles = useStyles();
   const accent = tone === 'body' ? BODY_COLOR : BRAND.text;
   return (
     <View style={[styles.card, { borderLeftColor: accent }]}>
@@ -89,6 +91,7 @@ function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, 
 }
 
 export default function SetupCards({ state, onChanged }: Props) {
+  const styles = useStyles();
   const { user, profile, refreshProfile } = useAuth();
   const [sheet, setSheet] = useState<null | 'domains' | 'times' | 'body' | 'cycle' | 'preferences'>(null);
   const [pinSheet, setPinSheet] = useState(false);
@@ -524,7 +527,7 @@ function TimesSheet({ initialTimeFormat, onClose, onSaved, onError }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   stack: { gap: 12, marginBottom: 24 },
   error: { fontSize: 13, color: '#f87171', lineHeight: 19 },
   card: {
@@ -554,7 +557,7 @@ const styles = StyleSheet.create({
   pillDisabled: { opacity: 0.35 },
   pillText: { fontSize: 13, color: '#8892a4' },
   pillTextActive: { color: '#e2c08a' },
-  sheetSave: { marginTop: 28, backgroundColor: BRAND.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  sheetSave: { marginTop: 28, backgroundColor: b.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   sheetSaveText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   sheetCancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
-});
+}));

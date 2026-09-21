@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Pressable, Text, View, ViewStyle } from 'react-native';
 import Svg, { Polygon } from 'react-native-svg';
 
 import { useAuth } from '@/contexts/auth-context';
@@ -7,6 +7,7 @@ import { DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/l
 import type { CheckIn, ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
 import { FACTOR_LABELS, factorLabel } from '@/lib/pattern-findings';
 import { BRAND, brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Ported from the web app's components/ClusterCard.tsx. Mechanic swap: the
 // web version hand-rolls a 500ms touch-hold timer (onTouchStart/End/Move)
@@ -108,6 +109,7 @@ export function ClusterCard({
   cluster, days, baselines, contextTags, checkIns = [], expanded, onToggle, onViewTimeline, onToggleFlag,
   timezone, timeFormat,
 }: Props) {
+  const styles = useStyles();
   const { profile } = useAuth();
   const fmt = formatShortDate;
 
@@ -323,8 +325,8 @@ export function ClusterCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.2), borderLeftWidth: 4, borderRadius: 14, padding: 16, paddingHorizontal: 18 },
+const useStyles = makeAccentStyles(b => ({
+  card: { backgroundColor: '#0f1523', borderWidth: 1, borderColor: brandTint(b.fillAlt, 0.2), borderLeftWidth: 4, borderRadius: 14, padding: 16, paddingHorizontal: 18 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heading: { fontSize: 12, letterSpacing: 0.4, fontWeight: '600' },
@@ -334,9 +336,9 @@ const styles = StyleSheet.create({
   summaryMuted: { color: '#6b7a99', fontSize: 13 },
   ongoingPill: { alignSelf: 'flex-start', marginTop: 6, paddingVertical: 2, paddingHorizontal: 8, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)', borderRadius: 8 },
   ongoingText: { fontSize: 11, color: '#f59e0b', fontWeight: '500' },
-  expanded: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: brandTint(BRAND.fillAlt, 0.15), gap: 0 },
+  expanded: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: brandTint(b.fillAlt, 0.15), gap: 0 },
   expandedDescription: { fontSize: 14, color: '#c8d0e0', lineHeight: 21, marginBottom: 14 },
-  primaryStatsBox: { backgroundColor: brandTint(BRAND.fillAlt, 0.06), borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.15), borderRadius: 10, padding: 12, paddingHorizontal: 14, marginBottom: 12 },
+  primaryStatsBox: { backgroundColor: brandTint(b.fillAlt, 0.06), borderWidth: 1, borderColor: brandTint(b.fillAlt, 0.15), borderRadius: 10, padding: 12, paddingHorizontal: 14, marginBottom: 12 },
   primaryStatsLabel: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600', marginBottom: 8 },
   intradayRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
   intradayTime: { fontSize: 13, color: '#8892a4' },
@@ -363,7 +365,7 @@ const styles = StyleSheet.create({
   contextTagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   contextTag: { backgroundColor: 'rgba(148,163,184,0.1)', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   contextTagText: { fontSize: 11, color: '#94a3b8' },
-  sleepBox: { backgroundColor: brandTint(BRAND.fillAlt, 0.04), borderWidth: 1, borderColor: brandTint(BRAND.fillAlt, 0.1), borderRadius: 10, padding: 10, paddingHorizontal: 14, marginBottom: 12 },
+  sleepBox: { backgroundColor: brandTint(b.fillAlt, 0.04), borderWidth: 1, borderColor: brandTint(b.fillAlt, 0.1), borderRadius: 10, padding: 10, paddingHorizontal: 14, marginBottom: 12 },
   sleepLabel: { fontSize: 12, color: '#8892a4', fontWeight: '600', marginBottom: 6 },
   sleepText: { fontSize: 13, color: '#c8d0e0' },
   sleepValue: { color: '#e2e8f0', fontWeight: '700' },
@@ -373,7 +375,7 @@ const styles = StyleSheet.create({
   dataQualityWarning: { color: '#92701e' },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 20, paddingTop: 6 },
   actionButton: { padding: 0 },
-  actionButtonText: { fontSize: 13, color: BRAND.text },
-  actionButtonTextActive: { color: BRAND.text },
+  actionButtonText: { fontSize: 13, color: b.text },
+  actionButtonTextActive: { color: b.text },
   flagButtonRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-});
+}));

@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import BackRow from '@/components/insights/back-row';
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
@@ -6,7 +6,7 @@ import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import { parseDateString } from '@/lib/date-utils';
 import { interventionImpactFindings } from '@/lib/pattern-findings';
 import type { InterventionMarker } from '@/types/marker';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Ported from the web app's components/insights/MedicationAreaDetail.tsx —
 // before/after effects of medication & therapy markers. No new detection
@@ -24,6 +24,7 @@ interface Props {
 }
 
 export default function MedicationAreaDetail({ onBack, markers, impacts }: Props) {
+  const styles = useStyles();
   const findings = interventionImpactFindings(impacts);
   const impactedMarkerIds = new Set(impacts.map(i => i.marker_id));
   const eligibleMarkers = markers.filter(m => m.marker_type === 'medication' || m.marker_type === 'therapy');
@@ -72,13 +73,13 @@ export default function MedicationAreaDetail({ onBack, markers, impacts }: Props
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   content: { padding: 20, gap: 24 },
   emptyText: { fontSize: 14, color: '#8892a4', lineHeight: 20 },
   list: { gap: 10 },
   impactCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 12, padding: 14, paddingHorizontal: 16 },
   impactHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  impactLabel: { fontSize: 12, color: BRAND.textSoft, fontWeight: '600' },
+  impactLabel: { fontSize: 12, color: b.textSoft, fontWeight: '600' },
   impactDate: { fontSize: 11, color: '#4a5568' },
   impactSentence: { fontSize: 13, color: '#c8d0e0', marginBottom: 4, lineHeight: 19 },
   impactEvidence: { fontSize: 11, color: '#4a5568' },
@@ -87,4 +88,4 @@ const styles = StyleSheet.create({
   tooEarlyList: { gap: 6 },
   tooEarlyText: { fontSize: 13, color: '#6b7a99', lineHeight: 19 },
   disclaimer: { fontSize: 12, color: '#4a5568', lineHeight: 18 },
-});
+}));

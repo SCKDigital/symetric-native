@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
@@ -33,7 +33,8 @@ import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
 import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Rebuilt against the web app's SettingsScreen.tsx. This screen previously
 // carried four of its controls (markers, body tracking, app lock, push) in a
@@ -100,6 +101,7 @@ async function describeTestFailure(error: unknown): Promise<string> {
 }
 
 function DomainPills({ activeDomains, onToggle }: { activeDomains: DomainType[]; onToggle: (d: DomainType) => void }) {
+  const styles = useStyles();
   return (
     <View style={styles.pillRow}>
       {ALL_DOMAINS.map(d => {
@@ -127,6 +129,7 @@ function MorningDomainPills({ activeDomains, morningDomains, onToggle }: {
   morningDomains: BodyDomainType[];
   onToggle: (d: BodyDomainType) => void;
 }) {
+  const styles = useStyles();
   const atLimit = morningDomains.length >= MORNING_DOMAIN_LIMIT;
   const offered = MORNING_CAPABLE_DOMAIN_ORDER.filter(d => activeDomains.includes(d));
   return (
@@ -149,6 +152,7 @@ function MorningDomainPills({ activeDomains, morningDomains, onToggle }: {
 }
 
 function BodyDomainPills({ activeDomains, onToggle }: { activeDomains: BodyDomainType[]; onToggle: (d: BodyDomainType) => void }) {
+  const styles = useStyles();
   return (
     <View style={styles.pillRow}>
       {CHECKIN_BODY_DOMAIN_ORDER.filter(d => !BODY_DOMAINS[d].required).map(d => {
@@ -164,6 +168,7 @@ function BodyDomainPills({ activeDomains, onToggle }: { activeDomains: BodyDomai
 }
 
 export default function SettingsScreen() {
+  const styles = useStyles();
   const comfort = useComfort();
   const appLock = useAppLockSettings();
   const { user, profile, signOut, refreshProfile } = useAuth();
@@ -728,7 +733,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0f1117' },
   page: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 60 },
   pressed: { opacity: 0.7 },
@@ -742,11 +747,11 @@ const styles = StyleSheet.create({
 
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
   pill: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 8, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
-  pillActive: { backgroundColor: brandTint(BRAND.textFlat, 0.15), borderColor: brandTint(BRAND.textFlat, 0.4) },
+  pillActive: { backgroundColor: brandTint(b.textFlat, 0.15), borderColor: brandTint(b.textFlat, 0.4) },
   pillDisabled: { opacity: 0.35 },
   pillActiveBody: { backgroundColor: 'rgba(188,129,47,0.15)', borderColor: 'rgba(188,129,47,0.4)' },
   pillText: { fontSize: 12, fontWeight: '500', color: '#555c72' },
-  pillTextActive: { color: BRAND.textSoft },
+  pillTextActive: { color: b.textSoft },
   pillTextActiveBody: { color: '#BC812F' },
 
   inlineWrap: { paddingHorizontal: 16, paddingBottom: 14 },
@@ -768,4 +773,4 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#252b3b', borderRadius: 12, alignItems: 'center',
   },
   signOutText: { fontSize: 15, color: '#8b90a4' },
-});
+}));

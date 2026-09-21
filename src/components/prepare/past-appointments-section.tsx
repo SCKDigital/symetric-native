@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { fetchAllAppointments } from '@/lib/api/appointments';
 import { parseDateString } from '@/lib/date-utils';
 import type { Appointment } from '@/lib/supabase';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 function categoryLabel(categories: Appointment['focus_categories']): string {
   const hasMind = categories.includes('mind');
@@ -33,6 +34,7 @@ interface Props {
  * app's PastAppointmentsSection.tsx.
  */
 export default function PastAppointmentsSection({ userId, refreshKey }: Props) {
+  const styles = useStyles();
   const [past, setPast] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -87,20 +89,20 @@ export default function PastAppointmentsSection({ userId, refreshKey }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 16, paddingHorizontal: 20, marginBottom: 16 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   label: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9 },
-  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: brandTint(BRAND.text, 0.15), borderRadius: 20 },
-  countText: { fontSize: 11, fontWeight: '600', color: BRAND.text },
+  countBadge: { paddingVertical: 1, paddingHorizontal: 6, backgroundColor: brandTint(b.text, 0.15), borderRadius: 20 },
+  countText: { fontSize: 11, fontWeight: '600', color: b.text },
   chevron: { fontSize: 10, color: '#6b7a99' },
   list: { marginTop: 14, gap: 14 },
   item: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#1e2533' },
   itemHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   itemDate: { fontSize: 14, fontWeight: '500', color: '#c8d0e0' },
-  pill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 8, backgroundColor: brandTint(BRAND.text, 0.12), borderWidth: 1, borderColor: brandTint(BRAND.text, 0.25) },
-  pillText: { fontSize: 10, fontWeight: '600', color: BRAND.text },
+  pill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 8, backgroundColor: brandTint(b.text, 0.12), borderWidth: 1, borderColor: brandTint(b.text, 0.25) },
+  pillText: { fontSize: 10, fontWeight: '600', color: b.text },
   itemFocus: { fontSize: 12, color: '#6b7a99', marginBottom: 4 },
   itemNotes: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
-});
+}));

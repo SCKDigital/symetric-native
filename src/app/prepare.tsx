@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Line, Rect } from 'react-native-svg';
 
@@ -21,6 +21,7 @@ import { fetchMarkers } from '@/lib/queries/markers';
 import type { Appointment, DetectedCluster } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 
 // Chunk 6 of the Prepare tab port — every sub-component is now wired,
@@ -33,6 +34,7 @@ import { BRAND } from '@/constants/brand';
 // native yet, same deferral noted in pattern-findings.ts since Insights
 // chunk 1.
 export default function PrepareScreen() {
+  const styles = useStyles();
   const { user } = useAuth();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [loading, setLoading] = useState(true);
@@ -155,7 +157,7 @@ export default function PrepareScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0a0c12' },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 96 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
@@ -166,4 +168,4 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#c8d0e0', marginBottom: 8 },
   emptyBody: { fontSize: 14, color: '#6b7a99', lineHeight: 22, marginBottom: 20, textAlign: 'center' },
   emptyHint: { fontSize: 13, color: '#4a5568' },
-});
+}));

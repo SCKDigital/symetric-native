@@ -1,11 +1,12 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { CheckIcon } from '@/components/marker-icons';
 import { addDays, dateToString, parseDateString, todayDateString } from '@/lib/date-utils';
 import type { Appointment, AppointmentFocusCategory } from '@/lib/supabase';
 import { BRAND, brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 interface Props {
   appointment: Appointment | null;
@@ -14,6 +15,7 @@ interface Props {
 }
 
 function CategoryBubble({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} style={[styles.bubble, active && styles.bubbleActive]}>
       {active && <CheckIcon size={12} color={BRAND.text} />}
@@ -32,6 +34,7 @@ function CategoryBubble({ label, active, onPress }: { label: string; active: boo
 // elsewhere in this app), so the form state's useState initializers just
 // read the initial props directly and no reset effect is needed.
 export default function AppointmentModal({ appointment, onSave, onClose }: Props) {
+  const styles = useStyles();
   // today() reads the clock, so it's captured once via a lazy initializer
   // rather than called directly in the render body (react-hooks/purity).
   const [today] = useState(() => todayDateString());
@@ -149,7 +152,7 @@ export default function AppointmentModal({ appointment, onSave, onClose }: Props
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: '#141820', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: '#1e2533', borderBottomWidth: 0, padding: 24, paddingBottom: 40, maxHeight: '90%' },
   handle: { width: 32, height: 3, backgroundColor: '#2d3748', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
@@ -162,12 +165,12 @@ const styles = StyleSheet.create({
   dateInputText: { fontSize: 15, color: '#e2e8f0' },
   pickerWrap: { marginTop: 10, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
   bubbleRow: { flexDirection: 'row', gap: 8 },
   bubble: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1.5, borderColor: '#2d3748' },
-  bubbleActive: { borderColor: BRAND.text, backgroundColor: brandTint(BRAND.text, 0.15) },
+  bubbleActive: { borderColor: b.text, backgroundColor: brandTint(b.text, 0.15) },
   bubbleText: { fontSize: 13, color: '#8892a4' },
-  bubbleTextActive: { color: BRAND.text, fontWeight: '600' },
+  bubbleTextActive: { color: b.text, fontWeight: '600' },
   focusLabelRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 4 },
   optionalText: { fontSize: 12, fontWeight: '400', color: '#4a5568', textTransform: 'none' },
   hint: { fontSize: 12, color: '#4a5568', marginBottom: 8 },
@@ -175,7 +178,7 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
   cancelButton: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: '#1e2533', alignItems: 'center' },
   cancelButtonText: { fontSize: 15, fontWeight: '500', color: '#8892a4' },
-  saveButton: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: BRAND.fill, alignItems: 'center' },
+  saveButton: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: b.fill, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#2d3748' },
   saveButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
-});
+}));

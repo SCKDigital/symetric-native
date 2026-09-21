@@ -1,11 +1,11 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { addDays, dateToString, parseDateString, todayDateString } from '@/lib/date-utils';
 import { defaultRangeForPreset, weeksBetween, type PrepareRange } from '@/lib/prepare-range';
 import type { InterventionMarker } from '@/types/marker';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 function fmtLabel(d: string): string {
   return parseDateString(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -25,6 +25,7 @@ const PRESETS: ('14' | '30' | '60' | '90')[] = ['14', '30', '60', '90'];
 // one @react-native-community/datetimepicker shared between the start/end
 // pills, tracked by which field is currently being edited.
 export default function DateRangeControl({ range, onChange, lastVisitDate, mostRecentMarker }: Props) {
+  const styles = useStyles();
   const [today] = useState(() => todayDateString());
   const [editingField, setEditingField] = useState<'start' | 'end' | null>(null);
   const isCustom = range.preset === 'custom';
@@ -123,12 +124,12 @@ export default function DateRangeControl({ range, onChange, lastVisitDate, mostR
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 18, paddingHorizontal: 20, marginBottom: 16 },
   label: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 12 },
   pillRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 },
   pill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748' },
-  pillActive: { borderWidth: 0, backgroundColor: BRAND.fill },
+  pillActive: { borderWidth: 0, backgroundColor: b.fill },
   pillText: { fontSize: 13, fontWeight: '500', color: '#8892a4' },
   pillTextActive: { color: '#fff' },
   customRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginBottom: 8, flexWrap: 'wrap' },
@@ -139,6 +140,6 @@ const styles = StyleSheet.create({
   customDash: { color: '#4a5568', marginBottom: 8 },
   pickerWrap: { marginBottom: 10, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
   summary: { fontSize: 12, color: '#4a5568' },
-});
+}));

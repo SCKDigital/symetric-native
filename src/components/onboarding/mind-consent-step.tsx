@@ -1,8 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingBackButton, OnboardingCheckbox, OnboardingPrimaryButton } from '@/components/onboarding/onboarding-controls';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 interface MindConsentStepProps {
   mindNotHealthServiceAck: boolean;
@@ -24,6 +24,7 @@ export default function MindConsentStep({
   onNext,
   onBack,
 }: MindConsentStepProps) {
+  const styles = useStyles();
   const canProceed = mindNotHealthServiceAck && mindDataConsent;
 
   return (
@@ -61,14 +62,14 @@ export default function MindConsentStep({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0f1117' },
   content: { flex: 1, maxWidth: 480, width: '100%', alignSelf: 'center', paddingHorizontal: 24, paddingTop: 40 },
   heading: { fontSize: 24, fontWeight: '300', color: '#e2e8f0', marginBottom: 16 },
   subheading: { fontSize: 15, color: '#94a3b8', lineHeight: 24, marginBottom: 28 },
   checkboxGroup: { gap: 12, marginBottom: 28 },
   legal: { fontSize: 12, color: '#4a5568', lineHeight: 18, marginBottom: 28 },
-  legalLink: { color: BRAND.text, textDecorationLine: 'underline' },
+  legalLink: { color: b.text, textDecorationLine: 'underline' },
   buttonRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   primaryButtonFlex: { flex: 1 },
-});
+}));

@@ -1,11 +1,11 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Toggle } from '@/components/settings/settings-primitives';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 export interface CheckInPreferencesUpdate {
   checkInsPerDay?: number;
@@ -75,6 +75,7 @@ export default function CheckInPreferencesStep({
   onNext,
   onBack,
 }: CheckInPreferencesStepProps) {
+  const styles = useStyles();
   const [activePicker, setActivePicker] = useState<PickerField | null>(null);
 
   // Matches ActiveWindowSheet's rule for editing this later — reversed or too-short
@@ -221,7 +222,7 @@ export default function CheckInPreferencesStep({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0f1117' },
   content: {
     maxWidth: 480, width: '100%', alignSelf: 'center',
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
   timeInputText: { fontSize: 15, color: '#e2e8f0' },
   pickerWrap: { marginTop: 12, backgroundColor: '#1a1d28', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#334155' },
-  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
   errorText: { fontSize: 13, color: '#f87171', marginTop: 12, lineHeight: 19 },
   buttonRow: { flexDirection: 'row', gap: 16, alignItems: 'center' },
   backButton: { paddingVertical: 12, paddingHorizontal: 24 },
@@ -255,4 +256,4 @@ const styles = StyleSheet.create({
   nextButtonText: { fontSize: 15, fontWeight: '600', color: '#e2e8f0' },
   nextButtonTextDisabled: { color: '#64748b' },
   pressed: { opacity: 0.7 },
-});
+}));

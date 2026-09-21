@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import Svg, { Circle, G, Line, Path, Polygon, Polyline } from 'react-native-svg';
 
 import { BODY_MAP_REGIONS, type BodySiteOption } from '@/lib/body/constants';
 import { BODY_COLOR } from '@/lib/domains';
 import type { BodyAspect, BodySide } from '@/lib/supabase';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 export interface PainSite {
   region: string;
@@ -207,6 +208,7 @@ export function Silhouette({ aspect }: { aspect: BodyAspect }) {
 }
 
 function SiteChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} style={[styles.siteChip, selected && styles.siteChipSelected]}>
       <Text style={[styles.siteChipText, selected && styles.siteChipTextSelected]}>{label}</Text>
@@ -223,6 +225,7 @@ function SiteChip({ label, selected, onPress }: { label: string; selected: boole
 // react-native-svg's Svg/Path/Polygon/etc., which support onPress
 // directly on shape elements the same way the web version uses onClick.
 export default function BodyMap({ sites, onChange }: Props) {
+  const styles = useStyles();
   const [aspect, setAspect] = useState<BodyAspect>('front');
   const [mode, setMode] = useState<'map' | 'list'>('map');
   const [listSide, setListSide] = useState<BodySide>('L');
@@ -415,7 +418,7 @@ export default function BodyMap({ sites, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   tabRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   tabGroup: { flexDirection: 'row', gap: 6 },
   aspectTab: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748' },
@@ -423,9 +426,9 @@ const styles = StyleSheet.create({
   aspectTabText: { fontSize: 12.5, color: '#8892a4' },
   aspectTabTextActive: { color: BODY_COLOR, fontWeight: '600' },
   modeTab: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748' },
-  modeTabActive: { borderColor: BRAND.textSoft, backgroundColor: brandTint(BRAND.textSoft, 0.15) },
+  modeTabActive: { borderColor: b.textSoft, backgroundColor: brandTint(b.textSoft, 0.15) },
   modeTabText: { fontSize: 12, color: '#8892a4' },
-  modeTabTextActive: { color: BRAND.textSoft, fontWeight: '600' },
+  modeTabTextActive: { color: b.textSoft, fontWeight: '600' },
   svg: { alignSelf: 'center', maxWidth: 260 },
   sideLabelRow: { flexDirection: 'row', justifyContent: 'space-between', maxWidth: 260, alignSelf: 'center', width: '100%', marginTop: 6, paddingHorizontal: 4 },
   sideLabelText: { fontSize: 10, color: '#4a5568', letterSpacing: 0.6 },
@@ -459,4 +462,4 @@ const styles = StyleSheet.create({
   selectedTagText: { fontSize: 12, fontWeight: '500', color: BODY_COLOR },
   selectedTagAspect: { fontSize: 12, color: BODY_COLOR, opacity: 0.6 },
   selectedTagRemove: { fontSize: 11, color: BODY_COLOR, padding: 2 },
-});
+}));

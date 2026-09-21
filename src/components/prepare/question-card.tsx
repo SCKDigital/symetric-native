@@ -1,10 +1,11 @@
 import { BRAND } from '@/constants/brand';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import Svg, { Path, Polygon, Polyline } from 'react-native-svg';
 
 import { deleteQuestion, markQuestionAddressed, updateQuestion } from '@/lib/api/questions';
 import type { PrepareQuestion } from '@/lib/supabase';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Edit/delete glyphs, traced from the web app's QuestionCard.tsx — same path
 // data, same 24-unit viewBox, same 14px render size and 2 stroke.
@@ -55,6 +56,7 @@ function StarIcon({ filled, color }: { filled: boolean; color: string }) {
 // separate SortableQuestionCard wrapper needed, DraggableFlatList handles
 // that role itself.
 export default function QuestionCard({ question, onChange, onDelete, onTogglePriority, drag, isActive }: Props) {
+  const styles = useStyles();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(question.question_text);
   const [saving, setSaving] = useState(false);
@@ -179,7 +181,7 @@ export default function QuestionCard({ question, onChange, onDelete, onTogglePri
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   card: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1e2533' },
   cardAddressed: { opacity: 0.4 },
   cardActive: { opacity: 0.7 },
@@ -192,12 +194,12 @@ const styles = StyleSheet.create({
   checkmark: { color: '#9ca3af', fontSize: 10, fontWeight: '700' },
   textWrap: { flex: 1, minWidth: 0 },
   questionText: { fontSize: 14, color: '#c8d0e0', lineHeight: 20 },
-  editInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: BRAND.border, borderRadius: 8, padding: 8, paddingHorizontal: 10, color: '#e2e8f0', fontSize: 14, minHeight: 44, textAlignVertical: 'top' },
+  editInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: b.border, borderRadius: 8, padding: 8, paddingHorizontal: 10, color: '#e2e8f0', fontSize: 14, minHeight: 44, textAlignVertical: 'top' },
   autoGenText: { fontSize: 11, color: '#4a5568', marginTop: 4 },
   actions: { flexDirection: 'row', gap: 6 },
   iconButton: { padding: 2 },
   editActions: { flexDirection: 'row', gap: 8, marginTop: 8, paddingLeft: 28 },
-  saveButton: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: BRAND.fill, borderRadius: 7 },
+  saveButton: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: b.fill, borderRadius: 7 },
   saveButtonDisabled: { backgroundColor: '#2d3748' },
   saveButtonText: { fontSize: 13, fontWeight: '500', color: '#fff' },
   saveButtonTextDisabled: { color: '#6b7a99' },
@@ -205,6 +207,6 @@ const styles = StyleSheet.create({
   bottomRow: { paddingLeft: 28, marginTop: 6, flexDirection: 'row', gap: 12, alignItems: 'center' },
   priorityButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   priorityText: { fontSize: 12, color: '#4a5568' },
-  priorityTextActive: { color: BRAND.text },
+  priorityTextActive: { color: b.text },
   deleteText: { fontSize: 12, color: '#f87171', fontWeight: '600' },
-});
+}));

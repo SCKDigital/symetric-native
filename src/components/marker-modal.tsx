@@ -1,11 +1,12 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { dateToString, parseDateString } from '@/lib/date-utils';
 import { markerColors, markerTypeLabels, MarkerType } from '@/lib/marker-colors';
 import type { CreateMarkerInput, InterventionMarker, MedicationAction } from '@/types/marker';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 const MAX_LABEL_LENGTH = 100;
 
@@ -36,6 +37,7 @@ const THERAPY_ACTIONS: { action: MedicationAction; label: string }[] = [
 // sub-view. Mechanic swap: the date field uses
 // @react-native-community/datetimepicker instead of <input type="date">.
 export default function MarkerModal({ marker, defaultDate, onSave, onDelete, onClose, cycleTrackingEnabled = false }: MarkerModalProps) {
+  const styles = useStyles();
   const today = dateToString(new Date());
   const isEditing = !!marker;
 
@@ -343,7 +345,7 @@ export default function MarkerModal({ marker, defaultDate, onSave, onDelete, onC
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   overlay: { flex: 1, backgroundColor: 'rgba(10,12,18,0.85)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   card: { width: '100%', maxWidth: 440, maxHeight: '90%', backgroundColor: '#141820', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#1e2533' },
   title: { fontSize: 18, fontWeight: '700', color: '#e2e8f0', letterSpacing: -0.3, marginBottom: 24 },
@@ -358,22 +360,22 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, color: '#f87171', marginTop: 4 },
   quickDateRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
   quickDatePill: { flex: 1, paddingVertical: 7, paddingHorizontal: 4, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748', backgroundColor: '#0a0c12', alignItems: 'center' },
-  quickDatePillActive: { borderColor: BRAND.fillAlt, backgroundColor: brandTint(BRAND.fillAlt, 0.15) },
+  quickDatePillActive: { borderColor: b.fillAlt, backgroundColor: brandTint(b.fillAlt, 0.15) },
   quickDateText: { fontSize: 12, color: '#8892a4' },
-  quickDateTextActive: { color: BRAND.text },
+  quickDateTextActive: { color: b.text },
   dateInput: { padding: 11, paddingHorizontal: 14, backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10 },
   dateInputError: { borderColor: '#f87171' },
   dateInputText: { fontSize: 15, color: '#e2e8f0' },
   pickerWrap: { marginTop: 10, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
   textInput: { padding: 11, paddingHorizontal: 14, backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10, color: '#e2e8f0', fontSize: 15 },
   charCount: { fontSize: 12, color: '#4a5568', marginTop: 4, textAlign: 'right' },
   charCountWarn: { color: '#f87171' },
   actionRow: { flexDirection: 'row', gap: 10 },
   cancelButton: { flex: 1, padding: 13, borderRadius: 12, borderWidth: 1, borderColor: '#2d3748', alignItems: 'center' },
   cancelButtonText: { fontSize: 15, color: '#8892a4' },
-  saveButton: { flex: 1, padding: 13, borderRadius: 12, backgroundColor: BRAND.fillAlt, alignItems: 'center' },
+  saveButton: { flex: 1, padding: 13, borderRadius: 12, backgroundColor: b.fillAlt, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#2d3748' },
   saveButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   saveButtonTextDisabled: { color: '#4a5568' },
@@ -387,4 +389,4 @@ const styles = StyleSheet.create({
   deleteButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   cancelTextButton: { padding: 8, alignItems: 'center' },
   cancelTextButtonText: { fontSize: 14, color: '#8892a4' },
-});
+}));

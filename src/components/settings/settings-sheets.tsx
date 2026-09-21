@@ -1,10 +1,11 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // The scheduling and preference sheets, ported from the web app's
 // ActiveWindowSheet.tsx, FrequencySheet.tsx and sheets/SettingsSheets.tsx.
@@ -32,6 +33,7 @@ function dateToTimeString(d: Date): string {
 function TimeField({ label, value, timeFormat, onChange }: {
   label: string; value: string; timeFormat: TimeFormat; onChange: (v: string) => void;
 }) {
+  const styles = useStyles();
   const [picking, setPicking] = useState(false);
   const handleChange = (event: DateTimePickerEvent, selected?: Date) => {
     if (Platform.OS !== 'ios') setPicking(false);
@@ -67,6 +69,7 @@ export function ActiveWindowSheet({ currentStart, currentEnd, timeFormat, onSave
   currentStart: string; currentEnd: string; timeFormat: TimeFormat;
   onSave: (start: string, end: string) => Promise<void>; onClose: () => void;
 }) {
+  const styles = useStyles();
   const [start, setStart] = useState(currentStart);
   const [end, setEnd] = useState(currentEnd);
   const [saving, setSaving] = useState(false);
@@ -108,6 +111,7 @@ export function ActiveWindowSheet({ currentStart, currentEnd, timeFormat, onSave
 export function FrequencySheet({ current, onSave, onClose }: {
   current: number; onSave: (freq: number) => Promise<void>; onClose: () => void;
 }) {
+  const styles = useStyles();
   const [selected, setSelected] = useState(current);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -147,6 +151,7 @@ export function DndSheet({ dndStartTime, dndEndTime, timeFormat, onTimeChange, o
   dndStartTime: string; dndEndTime: string; timeFormat: TimeFormat;
   onTimeChange: (start: string, end: string) => void; onClose: () => void;
 }) {
+  const styles = useStyles();
   const [start, setStart] = useState(dndStartTime);
   const [end, setEnd] = useState(dndEndTime);
   return (
@@ -166,6 +171,7 @@ export function DndSheet({ dndStartTime, dndEndTime, timeFormat, onTimeChange, o
 export function TimeFormatSheet({ current, onChange, onClose }: {
   current: TimeFormat; onChange: (v: TimeFormat) => void; onClose: () => void;
 }) {
+  const styles = useStyles();
   const opts: { value: TimeFormat; label: string; sub: string }[] = [
     { value: '12hr', label: '12-hour', sub: '7:30 am' },
     { value: '24hr', label: '24-hour', sub: '07:30' },
@@ -214,6 +220,7 @@ export function ConfirmDisableSheet({ domainLabel, onConfirm, onClose }: {
 export function BaselineModal({ domainLabel, onSubmit, onClose }: {
   domainLabel: string; onSubmit: (score: number) => Promise<void>; onClose: () => void;
 }) {
+  const styles = useStyles();
   const [saving, setSaving] = useState(false);
   return (
     <SheetShell
@@ -236,7 +243,7 @@ export function BaselineModal({ domainLabel, onSubmit, onClose }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   pressed: { opacity: 0.7 },
   error: { fontSize: 12, color: '#f87171', marginBottom: 12 },
   hint: { fontSize: 12, color: '#8b90a4', lineHeight: 18, marginBottom: 12 },
@@ -249,7 +256,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11, paddingHorizontal: 14,
   },
   timeInputText: { fontSize: 15, color: '#e2e8f0' },
-  timeDone: { fontSize: 14, color: BRAND.text, textAlign: 'center', paddingVertical: 8 },
+  timeDone: { fontSize: 14, color: b.text, textAlign: 'center', paddingVertical: 8 },
 
   segmented: {
     flexDirection: 'row', backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533',
@@ -266,9 +273,9 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#252b3b', borderRadius: 10,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  optionActive: { backgroundColor: brandTint(BRAND.textFlat, 0.12), borderColor: brandTint(BRAND.textFlat, 0.3) },
+  optionActive: { backgroundColor: brandTint(b.textFlat, 0.12), borderColor: brandTint(b.textFlat, 0.3) },
   optionLabel: { fontSize: 15, color: '#e2e4ec' },
-  optionLabelActive: { color: BRAND.textFlat },
+  optionLabelActive: { color: b.textFlat },
   optionSub: { fontSize: 13, color: '#555c72' },
 
   scaleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
@@ -277,4 +284,4 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f1117', borderWidth: 1, borderColor: '#252b3b',
   },
   scaleButtonText: { fontSize: 15, color: '#e2e4ec' },
-});
+}));

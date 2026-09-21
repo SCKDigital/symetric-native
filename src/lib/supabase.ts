@@ -114,6 +114,12 @@ export interface Profile {
    *  the behaviour that shipped. Muting costs coverage (a check-in expires 30
    *  minutes after it is due), so it is the user's call. */
   comfort_pauses_reminders?: boolean;
+  /** Which accent the app wears: 'porcelain' (the default), 'teal' or 'plum'.
+   *  Purely presentational. Typed as a bare string rather than AccentName on
+   *  purpose — an older build meeting a value it does not know should fall
+   *  back to the default rather than render undefined tokens, which is what
+   *  toAccentName() in constants/accents.ts is for. */
+  accent?: string | null;
   haptic_feedback_enabled: boolean;
   symptom_summary_enabled: boolean;  // WP4: off by default, requires product/clinical sign-off
   report_display_name?: string | null; // optional name/nickname for the clinical report header

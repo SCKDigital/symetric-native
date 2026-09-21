@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { trackBodySitePickerUsed } from '@/lib/analytics';
 import { EVENT_SITE_LISTS } from '@/lib/body/constants';
 import type { BodyEventType, BodySide } from '@/lib/supabase';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 export interface EventSite {
   region: string;
@@ -28,6 +29,7 @@ function siteKey(site: EventSite): string {
  * dependency on the (not yet ported) interactive BodyMap diagram.
  */
 export default function EventSitePicker({ eventType, sites, onChange }: Props) {
+  const styles = useStyles();
   const [pendingRegion, setPendingRegion] = useState<string | null>(null);
 
   useEffect(() => {
@@ -100,18 +102,18 @@ export default function EventSitePicker({ eventType, sites, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   root: { marginTop: 10, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#2d3748' },
   label: { fontSize: 12, color: '#8892a4', marginBottom: 8 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   chip: { paddingVertical: 7, paddingHorizontal: 11, minHeight: 32, borderRadius: 8, borderWidth: 1, borderColor: '#2d3748', backgroundColor: '#0a0c12', justifyContent: 'center' },
-  chipActive: { borderWidth: 1.5, borderColor: BRAND.textSoft, backgroundColor: brandTint(BRAND.textSoft, 0.15) },
+  chipActive: { borderWidth: 1.5, borderColor: b.textSoft, backgroundColor: brandTint(b.textSoft, 0.15) },
   chipText: { fontSize: 12.5, color: '#8892a4' },
-  chipTextActive: { color: BRAND.textSoft, fontWeight: '600' },
+  chipTextActive: { color: b.textSoft, fontWeight: '600' },
   sideRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
-  sideButton: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: BRAND.textSoft, backgroundColor: brandTint(BRAND.textSoft, 0.1), alignItems: 'center' },
-  sideButtonText: { fontSize: 13, fontWeight: '600', color: BRAND.textSoft },
-  tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingLeft: 11, paddingRight: 6, borderRadius: 8, backgroundColor: brandTint(BRAND.textSoft, 0.15) },
-  tagText: { fontSize: 12, fontWeight: '500', color: BRAND.textSoft },
-  tagRemove: { fontSize: 11, color: BRAND.textSoft, padding: 2 },
-});
+  sideButton: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: b.textSoft, backgroundColor: brandTint(b.textSoft, 0.1), alignItems: 'center' },
+  sideButtonText: { fontSize: 13, fontWeight: '600', color: b.textSoft },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingLeft: 11, paddingRight: 6, borderRadius: 8, backgroundColor: brandTint(b.textSoft, 0.15) },
+  tagText: { fontSize: 12, fontWeight: '500', color: b.textSoft },
+  tagRemove: { fontSize: 11, color: b.textSoft, padding: 2 },
+}));

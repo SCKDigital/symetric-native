@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import MarkerFirstTimeSheet from '@/components/marker-first-time-sheet';
 import MarkerModal from '@/components/marker-modal';
@@ -11,6 +11,7 @@ import { createMarker, deleteMarker, fetchMarkersInRange, updateMarker as update
 import { supabase } from '@/lib/supabase';
 import type { CreateMarkerInput, InterventionMarker } from '@/types/marker';
 import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 const MARKER_FIRST_TIME_KEY = 'symetric_marker_first_time';
 
@@ -42,6 +43,7 @@ interface Props {
 // "show the first-time marker sheet once" flag uses AsyncStorage instead of
 // localStorage, so handleModalClose is async now.
 export default function NotableChangesSection({ fromDate, toDate }: Props) {
+  const styles = useStyles();
   const { user, profile } = useAuth();
   const [today] = useState(() => todayDateString());
   const [markers, setMarkers] = useState<InterventionMarker[]>([]);
@@ -236,11 +238,11 @@ export default function NotableChangesSection({ fromDate, toDate }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 16, padding: 20, marginBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   sectionLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9 },
-  addText: { fontSize: 13, fontWeight: '500', color: BRAND.text },
+  addText: { fontSize: 13, fontWeight: '500', color: b.text },
   hint: { fontSize: 12, color: '#4a5568', marginBottom: 12 },
   skeletonRow: { height: 40, justifyContent: 'center' },
   skeletonLine: { height: 12, backgroundColor: '#1e2533', borderRadius: 4, width: '50%', opacity: 0.6 },
@@ -258,6 +260,6 @@ const styles = StyleSheet.create({
   noteDate: { fontSize: 11, color: '#6b7a99', minWidth: 44, marginTop: 2 },
   noteTextWrap: { flex: 1 },
   noteText: { fontSize: 13, color: '#c8d0e0', lineHeight: 19 },
-  readMore: { fontSize: 12, color: BRAND.text, marginTop: 4 },
+  readMore: { fontSize: 12, color: b.text, marginTop: 4 },
   gapText: { fontSize: 13, color: '#6b7a99', marginBottom: 4 },
-});
+}));

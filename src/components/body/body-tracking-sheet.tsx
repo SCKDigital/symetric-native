@@ -1,10 +1,11 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 
 import { BODY_DOMAIN_ORDER, BODY_DOMAINS } from '@/lib/body/constants';
 import type { BodyDomainType } from '@/lib/supabase';
 import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Settings chrome uses the app's default indigo, not the body-tracking
 // amber accent — that accent is reserved for the capture screens
@@ -47,6 +48,7 @@ export default function BodyTrackingSheet({
   activeDomains, onToggleDomain, currentAvailableFrom, currentReminderTime,
   currentMorningEnabled, currentMorningTime, onSaveTiming, onClose,
 }: Props) {
+  const styles = useStyles();
   const [availableFrom, setAvailableFrom] = useState(currentAvailableFrom);
   const [reminderTime, setReminderTime] = useState(currentReminderTime);
   const [morningEnabled, setMorningEnabled] = useState(currentMorningEnabled);
@@ -182,7 +184,7 @@ export default function BodyTrackingSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: '#141820', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 48, maxHeight: '85%' },
   handle: { width: 36, height: 4, backgroundColor: '#2d3748', borderRadius: 2, alignSelf: 'center', marginBottom: 24 },
@@ -209,10 +211,10 @@ const styles = StyleSheet.create({
   morningTimeBlock: { marginBottom: 20 },
   pickerWrap: { marginBottom: 20, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
   pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: BRAND.text, fontSize: 14, fontWeight: '600' },
+  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
   errorText: { fontSize: 12, color: '#f87171', marginBottom: 16 },
-  saveButton: { padding: 14, borderRadius: 12, backgroundColor: BRAND.fill, alignItems: 'center' },
+  saveButton: { padding: 14, borderRadius: 12, backgroundColor: b.fill, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#1e2533' },
   saveButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   saveButtonTextDisabled: { color: '#4a5568' },
-});
+}));

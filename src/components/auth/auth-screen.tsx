@@ -1,21 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SymetricLogo } from '@/components/symetric-logo';
 import { useAuth } from '@/contexts/auth-context';
 import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Ported from the web app's src/components/auth/AuthScreen.tsx. Same three
 // states (landing / email / sent), same copy, same staggered landing-screen
@@ -41,6 +32,7 @@ function useStaggeredFade(delaysMs: [number, number, number]) {
 }
 
 function LandingView({ onContinue }: { onContinue: () => void }) {
+  const styles = useStyles();
   const [wordmark, tagline, buttons] = useStaggeredFade([2300, 2600, 2900]);
 
   return (
@@ -65,6 +57,7 @@ function LandingView({ onContinue }: { onContinue: () => void }) {
 }
 
 function FormLogoHeader() {
+  const styles = useStyles();
   return (
     <View style={styles.formHeader}>
       <SymetricLogo size={48} />
@@ -76,6 +69,7 @@ function FormLogoHeader() {
 type Mode = 'landing' | 'email' | 'sent';
 
 export function AuthScreen() {
+  const styles = useStyles();
   const [mode, setMode] = useState<Mode>('landing');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -187,14 +181,14 @@ export function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   landingRoot: { flex: 1, backgroundColor: '#0a0c12' },
   landingCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 36 },
   wordmarkGroup: { alignItems: 'center', gap: 12 },
   wordmark: { fontSize: 24, fontWeight: '600', color: '#ffffff', letterSpacing: -0.5 },
   tagline: { fontSize: 16, color: '#6b6882', maxWidth: 210, textAlign: 'center' },
   buttonGroup: { maxWidth: 340, width: '100%', gap: 12 },
-  continueButton: { paddingVertical: 18, backgroundColor: BRAND.signIn, borderRadius: 8, alignItems: 'center' },
+  continueButton: { paddingVertical: 18, backgroundColor: b.signIn, borderRadius: 8, alignItems: 'center' },
   continueButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   pressed: { opacity: 0.88 },
   disclaimer: { fontSize: 11, color: '#38364a', textAlign: 'center' },
@@ -226,4 +220,4 @@ const styles = StyleSheet.create({
   backButtonText: { fontSize: 12, color: '#4a5568' },
   sentBody: { fontSize: 15, color: '#718096', lineHeight: 22, marginBottom: 8 },
   sentSubBody: { fontSize: 13, color: '#4a5568', lineHeight: 20 },
-});
+}));

@@ -1,7 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BRAND, brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Shared across all three consent steps — the web app defines an identical
 // Checkbox component three times (one per step file); consolidated here
@@ -16,6 +17,7 @@ export function OnboardingCheckbox({
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onToggle}
@@ -33,6 +35,7 @@ export function OnboardingCheckbox({
 }
 
 export function YesNoToggle({ value, onChange }: { value: boolean; onChange: (yes: boolean) => void }) {
+  const styles = useStyles();
   return (
     <View style={styles.yesNoRow}>
       {([
@@ -63,6 +66,7 @@ export function OnboardingPrimaryButton({
   disabled?: boolean;
   loading?: boolean;
 }) {
+  const styles = useStyles();
   const inactive = disabled || loading;
   return (
     <Pressable onPress={onPress} disabled={inactive} style={styles.primaryButtonWrap}>
@@ -80,6 +84,7 @@ export function OnboardingPrimaryButton({
 }
 
 export function OnboardingBackButton({ onPress, disabled }: { onPress: () => void; disabled?: boolean }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} disabled={disabled} style={styles.backButton}>
       <Text style={styles.backButtonText}>Back</Text>
@@ -87,7 +92,7 @@ export function OnboardingBackButton({ onPress, disabled }: { onPress: () => voi
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   checkboxRow: {
     padding: 14,
     borderRadius: 12,
@@ -96,7 +101,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
   },
-  checkboxRowChecked: { borderColor: brandTint(BRAND.fillAlt, 0.5), backgroundColor: brandTint(BRAND.fillAlt, 0.1) },
+  checkboxRowChecked: { borderColor: brandTint(b.fillAlt, 0.5), backgroundColor: brandTint(b.fillAlt, 0.1) },
   checkboxRowUnchecked: { borderColor: '#1e2533', backgroundColor: '#141820' },
   checkboxBox: {
     width: 20,
@@ -108,13 +113,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 1,
   },
-  checkboxBoxChecked: { borderColor: BRAND.text, backgroundColor: BRAND.fill },
+  checkboxBoxChecked: { borderColor: b.text, backgroundColor: b.fill },
   checkboxLabel: { flex: 1, fontSize: 14, color: '#cbd5e1', lineHeight: 21 },
   checkboxContent: { flex: 1 },
 
   yesNoRow: { flexDirection: 'row', gap: 10 },
   yesNoButton: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
-  yesNoButtonActive: { borderColor: brandTint(BRAND.fillAlt, 0.5), backgroundColor: brandTint(BRAND.fillAlt, 0.1) },
+  yesNoButtonActive: { borderColor: brandTint(b.fillAlt, 0.5), backgroundColor: brandTint(b.fillAlt, 0.1) },
   yesNoButtonInactive: { borderColor: '#1e2533', backgroundColor: '#141820' },
   yesNoLabel: { fontSize: 14, fontWeight: '500', color: '#6b7a99' },
   yesNoLabelActive: { color: '#e2e8f0' },
@@ -127,4 +132,4 @@ const styles = StyleSheet.create({
 
   backButton: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, borderWidth: 1, borderColor: '#1e2533' },
   backButtonText: { color: '#6b7a99', fontSize: 14 },
-});
+}));

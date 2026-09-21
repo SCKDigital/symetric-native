@@ -1,9 +1,9 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text } from 'react-native';
+import { Platform, Pressable, Text } from 'react-native';
 
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 /**
  * A tappable HH:MM field backed by the platform time picker.
@@ -29,6 +29,7 @@ export function TimeField({ value, timeFormat = '24hr', onChange }: {
   timeFormat?: TimeFormat;
   onChange: (t: string) => void;
 }) {
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
 
   const handle = (event: DateTimePickerEvent, selected?: Date) => {
@@ -62,12 +63,12 @@ export function TimeField({ value, timeFormat = '24hr', onChange }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   field: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533',
     borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, marginTop: 6,
   },
   text: { fontSize: 15, color: '#e2e8f0' },
-  done: { fontSize: 14, color: BRAND.text, textAlign: 'center', paddingVertical: 10 },
+  done: { fontSize: 14, color: b.text, textAlign: 'center', paddingVertical: 10 },
   pressed: { opacity: 0.7 },
-});
+}));

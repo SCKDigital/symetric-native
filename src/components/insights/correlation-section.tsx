@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { CollapsibleRow } from '@/components/insights/pattern-sections';
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
@@ -10,7 +10,7 @@ import {
 } from '@/lib/correlation-groups';
 import { getDomainColorFromProfile } from '@/lib/domains';
 import { CONFIDENCE_COPY, factorLabel } from '@/lib/pattern-findings';
-import { BRAND } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 // "What goes with what" — the same-day correlations, stated as blocks rather
 // than as one card per edge.
@@ -24,12 +24,14 @@ import { BRAND } from '@/constants/brand';
 // own day counts, for anyone who wants to check the working.
 
 function DomainChip({ factor }: { factor: string }) {
+  const styles = useStyles();
   const { profile } = useAuth();
   const color = getDomainColorFromProfile(factor, profile);
   return <Text style={[styles.chip, { color, borderColor: color }]}>{factorLabel(factor)}</Text>;
 }
 
 function GroupCard({ group }: { group: CorrelationGroup }) {
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
   return (
     <View style={styles.card}>
@@ -86,6 +88,7 @@ function DomainChipInline({ factor }: { factor: string }) {
 // as the pair being the weaker of the two when it isn't. The grade is still on
 // the card, in the word, next to the day count.
 function PairCard({ pair }: { pair: CorrelationPair }) {
+  const styles = useStyles();
   const highlights = [
     { text: factorLabel(pair.a), factor: pair.a },
     { text: factorLabel(pair.b), factor: pair.b },
@@ -106,6 +109,7 @@ export default function WhatGoesWithWhatSection({ rows, defaultOpen = false }: {
   rows: ConnectionRow[];
   defaultOpen?: boolean;
 }) {
+  const styles = useStyles();
   const { groups, pairs, cardCount } = useMemo(() => groupConnections(rows), [rows]);
   if (cardCount === 0) return null;
 
@@ -123,11 +127,11 @@ export default function WhatGoesWithWhatSection({ rows, defaultOpen = false }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   intro: { fontSize: 12, color: '#4a5568', marginBottom: 4, lineHeight: 18 },
   card: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533',
-    borderLeftWidth: 5, borderLeftColor: BRAND.text, borderRadius: 12,
+    borderLeftWidth: 5, borderLeftColor: b.text, borderRadius: 12,
     padding: 16, paddingHorizontal: 18, gap: 8, marginBottom: 8,
   },
   heading: { fontSize: 15.5, fontWeight: '600', color: '#e2e8f0', letterSpacing: -0.2, lineHeight: 21 },
@@ -139,7 +143,7 @@ const styles = StyleSheet.create({
   sub: { fontSize: 13, color: '#8892a4', lineHeight: 19 },
   evidence: { fontSize: 12, color: '#4a5568' },
   toggle: { paddingTop: 2 },
-  toggleText: { fontSize: 12, color: BRAND.text },
+  toggleText: { fontSize: 12, color: b.text },
   pressed: { opacity: 0.7 },
   detail: { marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#1e2533', gap: 8 },
   detailRow: { gap: 2 },
@@ -147,8 +151,8 @@ const styles = StyleSheet.create({
   detailMeta: { fontSize: 11, color: '#6b7a99' },
   pairCard: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533',
-    borderLeftWidth: 4, borderLeftColor: BRAND.text, borderRadius: 12,
+    borderLeftWidth: 4, borderLeftColor: b.text, borderRadius: 12,
     padding: 14, paddingHorizontal: 16, gap: 6, marginBottom: 8,
   },
   pairSentence: { fontSize: 14, color: '#e2e8f0', lineHeight: 21 },
-});
+}));

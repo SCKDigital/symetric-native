@@ -1,10 +1,12 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
 import type { Comfort, ComfortDuration } from '@/hooks/use-comfort';
 import { formatTime, type TimeFormat } from '@/lib/time-format';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
+
 
 // Comfort mode's entry point lives on Today, not only in Settings, because the
 // thing it answers is episodic. Being overstimulated happens at 4pm on a
@@ -36,6 +38,7 @@ function ComfortIcon({ color }: { color: string }) {
  * sitting next to the logo.
  */
 export function ComfortButton({ active, onPress }: { active: boolean; onPress: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -59,6 +62,7 @@ export function ComfortBanner({ comfort, timeFormat, onTurnOff }: {
   timeFormat: TimeFormat;
   onTurnOff: () => void;
 }) {
+  const styles = useStyles();
   if (!comfort.active) return null;
 
   const endsLabel = comfort.endsAt
@@ -94,6 +98,7 @@ const DURATIONS: { value: ComfortDuration; label: string; hint: string }[] = [
 ];
 
 export function ComfortSheet({ comfort, onClose }: { comfort: Comfort; onClose: () => void }) {
+  const styles = useStyles();
   const arm = async (duration: ComfortDuration) => {
     await comfort.arm(duration);
     onClose();
@@ -140,14 +145,14 @@ export function ComfortSheet({ comfort, onClose }: { comfort: Comfort; onClose: 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   pressed: { opacity: 0.7 },
 
   iconButton: {
     width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: 'transparent',
   },
-  iconButtonActive: { borderColor: brandTint(BRAND.text, 0.28), backgroundColor: brandTint(BRAND.fill, 0.22) },
+  iconButtonActive: { borderColor: brandTint(b.text, 0.28), backgroundColor: brandTint(b.fill, 0.22) },
 
   banner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
@@ -173,4 +178,4 @@ const styles = StyleSheet.create({
   turnOffText: { fontSize: 15, fontWeight: '600', color: '#cbd5e0' },
 
   footnote: { fontSize: 12, color: '#6b7690', lineHeight: 17, marginTop: 16, marginBottom: 4 },
-});
+}));

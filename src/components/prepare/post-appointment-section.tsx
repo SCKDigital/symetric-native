@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { completeAppointment } from '@/lib/api/appointments';
 import { fetchQuestionsForAppointment } from '@/lib/api/questions';
 import { trackAppointmentCompleted, trackPostAppointmentOutcomeCaptured } from '@/lib/analytics';
 import { todayDateString } from '@/lib/date-utils';
 import type { Appointment, PrepareQuestion } from '@/lib/supabase';
-import { BRAND, brandTint } from '@/constants/brand';
+import { brandTint } from '@/constants/brand';
+import { makeAccentStyles } from '@/lib/accent-styles';
 
 interface Props {
   appointment: Appointment;
@@ -18,6 +19,7 @@ interface Props {
 // (react-hooks/purity), same fix as every other Date.now()/new Date() catch
 // in this port.
 export default function PostAppointmentSection({ appointment, onComplete }: Props) {
+  const styles = useStyles();
   const [today] = useState(() => todayDateString());
   const [notes, setNotes] = useState(appointment.notes ?? '');
   const [completing, setCompleting] = useState(false);
@@ -130,7 +132,7 @@ export default function PostAppointmentSection({ appointment, onComplete }: Prop
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeAccentStyles(b => ({
   card: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#2d3748', borderRadius: 16, padding: 20, marginBottom: 16 },
   sectionLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 12 },
   subtitle: { fontSize: 14, color: '#8892a4', lineHeight: 21, marginBottom: 16 },
@@ -144,17 +146,17 @@ const styles = StyleSheet.create({
   archiveLabel: { fontSize: 11, fontWeight: '600', color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
   archiveLabelSpaced: { marginTop: 12 },
   archiveRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#1e2533' },
-  archiveCheck: { color: BRAND.text, fontSize: 12, fontWeight: '700', marginTop: 2 },
+  archiveCheck: { color: b.text, fontSize: 12, fontWeight: '700', marginTop: 2 },
   archiveEmptyBox: { width: 12, height: 12, borderRadius: 2, borderWidth: 1.5, borderColor: '#2d3748', marginTop: 3 },
   archiveTextDone: { flex: 1, fontSize: 13, color: '#8892a4', lineHeight: 19 },
   archiveTextPending: { flex: 1, fontSize: 13, color: '#4a5568', lineHeight: 19 },
-  markDoneButton: { paddingVertical: 12, paddingHorizontal: 20, backgroundColor: brandTint(BRAND.fill, 0.1), borderWidth: 1, borderColor: brandTint(BRAND.fill, 0.3), borderRadius: 10, alignSelf: 'flex-start' },
-  markDoneText: { fontSize: 14, fontWeight: '500', color: BRAND.text },
+  markDoneButton: { paddingVertical: 12, paddingHorizontal: 20, backgroundColor: brandTint(b.fill, 0.1), borderWidth: 1, borderColor: brandTint(b.fill, 0.3), borderRadius: 10, alignSelf: 'flex-start' },
+  markDoneText: { fontSize: 14, fontWeight: '500', color: b.text },
   confirmRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   confirmText: { flex: 1, fontSize: 13, color: '#8892a4', lineHeight: 18 },
   confirmCancel: { fontSize: 13, color: '#4a5568', padding: 8 },
-  doneButton: { paddingVertical: 10, paddingHorizontal: 18, backgroundColor: BRAND.fill, borderRadius: 8 },
+  doneButton: { paddingVertical: 10, paddingHorizontal: 18, backgroundColor: b.fill, borderRadius: 8 },
   doneButtonDisabled: { backgroundColor: '#2d3748' },
   doneButtonText: { fontSize: 14, fontWeight: '600', color: '#fff' },
   doneButtonTextDisabled: { color: '#6b7a99' },
-});
+}));
