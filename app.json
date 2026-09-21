@@ -19,7 +19,7 @@
       "package": "app.symetric.mobile",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#0F6E56",
+        "backgroundColor": "#2A251C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -46,7 +46,7 @@
       [
         "expo-notifications",
         {
-          "color": "#4FD1C5",
+          "color": "#C8B79A",
           "defaultChannel": "default",
           "mode": "production"
         }

@@ -17,7 +17,7 @@ const OUT = `${NATIVE}/assets/images`;
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 
 const logo = readFileSync(`${NATIVE}/src/components/symetric-logo.tsx`, 'utf8');
-const brand = readFileSync(`${NATIVE}/src/constants/brand.ts`, 'utf8');
+const accents = readFileSync(`${NATIVE}/src/constants/accents.ts`, 'utf8');
 
 const MARK_PATH = logo.match(/const MARK_PATH =\s*'([^']+)'/)[1];
 const TRANSFORM = logo.match(/transform="(translate\([^"]+\))"/)[1];
@@ -25,10 +25,37 @@ const STOPS = [...logo.matchAll(/offset="(\d+)%" stopColor="(#[0-9A-Fa-f]{6})"/g
   .map(m => `<stop offset="${m[1]}%" stop-color="${m[2]}"/>`).join('');
 const GRAD = logo.match(/<LinearGradient[^>]*x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)"/);
 
-// The launcher tile uses BRAND.fill, not BRAND.tile. The in-app tile is a
-// near-black teal because it sits on a near-black screen; a home screen is
-// not that, and an almost-black icon disappears on a dark wallpaper.
-const FILL = brand.match(/fill: '(#[0-9A-Fa-f]{6})'/)[1];
+// ── The launcher tile ──────────────────────────────────────────────────────
+//
+// The DEFAULT accent's `tile`, read out of constants/accents.ts. A runtime
+// preference cannot reach a PNG, so the home screen wears whatever ships.
+//
+// It used to be the accent's `fill`, on the reasoning that an almost-black
+// icon disappears against a dark wallpaper. That reasoning does not survive
+// the move to porcelain, and measuring it showed the old rule was costing
+// more than it bought. The mark is a gradient of seven light, saturated
+// domain colours, so what it needs is a DARK ground:
+//
+//   tile                      worst gradient stop   best
+//   porcelain fill  #E7E2D9          1.29:1        2.11:1   <- unreadable
+//   teal fill       #0F6E56          2.28:1        3.72:1   <- what shipped
+//   porcelain tile  #2A251C          5.34:1        8.71:1
+//
+// On the near-white fill the S is barely there. The trade is separation from
+// a dark wallpaper (1.4:1 against pure black, against the teal's 3.4:1), and
+// it is worth taking: both platforms mask and shade the icon themselves, a
+// pure-black wallpaper is the worst case rather than the common one, and an
+// icon you cannot read is worse than one that sits quietly. This also makes
+// the launcher icon and the in-app lockup the same tile for the first time.
+//
+// Resolved through DEFAULT_ACCENT rather than by taking the first `tile:` in
+// the file, so reordering the palette cannot silently repaint the icon.
+const DEFAULT_ACCENT = accents.split("DEFAULT_ACCENT: AccentName = '")[1].split("'")[0];
+// Sliced rather than matched: the block is delimited by its own indentation,
+// and a regex for that is harder to read than the two splits it replaces.
+const ACCENT_BLOCK = accents.split(`\n  ${DEFAULT_ACCENT}: {\n`)[1];
+if (!ACCENT_BLOCK) throw new Error(`no accent block for '${DEFAULT_ACCENT}' in accents.ts`);
+const FILL = ACCENT_BLOCK.split('\n  },')[0].match(/tile: '(#[0-9A-Fa-f]{6})'/)[1];
 
 /** The mark alone, on a transparent ground, filling `scale` of the canvas. */
 function markSvg(size, scale) {
@@ -87,7 +114,7 @@ function shoot(svg, w, h, outPath, transparent) {
   console.log(`  ${outPath.split('/').pop().padEnd(32)} ${w}x${h}`);
 }
 
-console.log(`mark + gradient read from symetric-logo.tsx; tile ${FILL} read from brand.ts\n`);
+console.log(`mark + gradient read from symetric-logo.tsx; tile ${FILL} read from accents.ts\n`);
 
 // Universal icon, and the iOS fallback. 22% corner radius matches the mark's own tile.
 shoot(tileSvg(1024, 225.28, 1.41), 1024, 1024, `${OUT}/icon.png`, false);        // 58% of the tile

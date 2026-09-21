@@ -26,6 +26,7 @@ import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
 import {
   BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER, MORNING_CAPABLE_DOMAIN_ORDER, MORNING_DOMAIN_LIMIT,
 } from '@/lib/body/constants';
+import { AccentPicker } from '@/components/settings/accent-picker';
 import { useComfort } from '@/hooks/use-comfort';
 import { resolveActiveDomains } from '@/lib/domains';
 import { subscribeToPushNotifications, syncPushToken, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
@@ -583,6 +584,11 @@ export default function SettingsScreen() {
         {/* ── Preferences ─────────────────────────────────────────────────── */}
         <SectionLabel>Preferences</SectionLabel>
         <SectionCard>
+          {/* First in Preferences because it is the only setting whose
+              result is the screen you are reading. Instant, not on
+              restart -- see lib/accent-styles.ts for what that cost. */}
+          <AccentPicker />
+          <RowDivider />
           {/* The STANDING half of comfort mode. The in-the-moment half lives on
               Today, because being overstimulated is episodic — it is not a
               preference someone sets once, while calm, in anticipation of a bad
