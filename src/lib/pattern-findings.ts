@@ -210,12 +210,18 @@ export function patternEvolutionFindings(evos: PatternEvolution[]): PatternFindi
     const label = factorLabel(evo.domain);
     const totalCheckIns = evo.first_period_count + evo.recent_period_count;
     let sentence: string;
+    // "Since you started tracking" overclaimed: this compares the first 30
+    // days of the selected range against the most recent 30, not the account's
+    // actual tracking history, which can run far longer than whatever period
+    // is currently selected. Naming the real start date keeps the claim
+    // scoped to what was actually compared.
+    const since = fmtShort(evo.first_period_start);
     if (evo.evolution_type === 'baseline_shift') {
-      sentence = `${label} has shifted from around ${evo.first_period_avg.toFixed(1)} to around ${evo.recent_period_avg.toFixed(1)} since you started tracking.`;
+      sentence = `${label} has shifted from around ${evo.first_period_avg.toFixed(1)} to around ${evo.recent_period_avg.toFixed(1)} since ${since}.`;
     } else if (evo.evolution_type === 'volatility_change') {
-      sentence = evo.direction === 'improving' ? `${label} has settled down day to day compared to when you started tracking.` : `${label} has been moving around more day to day compared to when you started tracking.`;
+      sentence = evo.direction === 'improving' ? `${label} has settled down day to day since ${since}.` : `${label} has been moving around more day to day since ${since}.`;
     } else {
-      sentence = evo.direction === 'improving' ? `${label} has become more stable since you started tracking.` : `${label} has become less stable since you started tracking.`;
+      sentence = evo.direction === 'improving' ? `${label} has become more stable since ${since}.` : `${label} has become less stable since ${since}.`;
     }
     return {
       id: `evo-${evo.domain}-${evo.evolution_type}`,
