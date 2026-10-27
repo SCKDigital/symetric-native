@@ -45,8 +45,7 @@ const LOW_DEMAND_SOLID_CEILING = 0.5;
  * me" — but they are weaker evidence than five deliberate movements, and a
  * stretch of them during a genuine flare would read as calm. They still count
  * toward coverage; they just cannot carry a finding to 'solid' on their own.
- * Mind check-ins only: body check-ins have no one-tap path, so callers there
- * pass nothing.
+ * Shared by mind (check_ins.low_demand) and body (body_checkins.low_demand).
  */
 export function checkSustainedDeviationQuality(
   checkInsInPeriod: number,

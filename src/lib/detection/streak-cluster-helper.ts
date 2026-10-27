@@ -20,8 +20,9 @@ export async function upsertStreakCluster(params: {
   today: string;
   checkInsInPeriod: number;
   checkInsPerDay: number;
-  /** How many of checkInsInPeriod came from comfort mode's one-tap. Mind only;
-   *  body check-ins have no one-tap path. Caps confidence at 'partial'. */
+  /** How many of checkInsInPeriod came from comfort mode's one-tap — either
+   *  side, check_ins.low_demand or body_checkins.low_demand. Caps confidence
+   *  at 'partial'. */
   lowDemandInPeriod?: number;
   /** Mind-only sleep-context fields (avg_sleep_during_pattern, improved_with_sleep,
    *  high_despite_poor_sleep); omitted entirely for body-domain clusters. */

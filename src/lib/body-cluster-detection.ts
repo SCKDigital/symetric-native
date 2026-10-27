@@ -180,10 +180,15 @@ async function upsertBodyStreakCluster(
   const streakStart = streak[0].date;
   const streakEnd = streak[streak.length - 1].date;
 
-  const checkInsInPeriod = bodyCheckIns.filter(ci => {
+  const rowsInStreak = bodyCheckIns.filter(ci => {
     const date = ci.entry_date as string;
     return date >= streakStart && date <= streakEnd && dailyBodyValue(ci, domain) !== null;
-  }).length;
+  });
+  const checkInsInPeriod = rowsInStreak.length;
+  // Comfort mode's one-tap (body-check-in-cards.tsx) submits every active
+  // domain at its own rolling baseline with low_demand set — same semantics
+  // and same discount as the mind side's check_ins.low_demand.
+  const lowDemandInPeriod = rowsInStreak.filter(ci => ci.low_demand === true).length;
 
   await upsertStreakCluster({
     userId,
@@ -194,6 +199,7 @@ async function upsertBodyStreakCluster(
     today,
     checkInsInPeriod,
     checkInsPerDay: CHECK_INS_PER_DAY,
+    lowDemandInPeriod,
     logSource: 'Body Cluster Detection',
     onInsertError: err => debug.error('Body Cluster Detection', 'sustained_deviation insert failed:', err),
   });

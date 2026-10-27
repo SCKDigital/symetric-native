@@ -6,12 +6,18 @@ import BodyCheckIn from '@/components/body/body-check-in';
 import MorningBodyCheckIn from '@/components/body/morning-body-check-in';
 import { useAuth } from '@/contexts/auth-context';
 import { supabase } from '@/lib/supabase';
+import type { BodyDomainType } from '@/lib/supabase';
 import { useComfort } from '@/hooks/use-comfort';
 import { type ComfortTokens } from '@/lib/comfort-theme';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { brandTint } from '@/constants/brand';
 import type { AccentTokens } from '@/constants/accents';
 import { makeComfortStyles } from '@/lib/accent-styles';
+import { BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
+import { dailyBodyValue } from '@/lib/detection/body-daily-value';
+import { trackBodyCheckInCompleted } from '@/lib/analytics';
+import { forcePatternDetection } from '@/lib/pattern-detection-scheduler';
 
 // Ports of the web app's BodyCheckInCard.tsx and MorningBodyCheckInCard.tsx —
 // the Today entry points into the body check-in forms. Native already had both
@@ -22,6 +28,22 @@ import { makeComfortStyles } from '@/lib/accent-styles';
 // Both are gated purely on the profile's own body fields and its
 // body_available_from / body_morning_time clock, never on check_in_settings'
 // window — body tracking is deliberately independent of the mind scheduler.
+//
+// BodyCheckInCard also carries comfort mode's one-tap, which the mind cards
+// (check-in-cards.tsx) have always had and this one didn't. Comfort mode
+// already muted the push reminder to log a body check-in (send-notifications'
+// isComfortMuted) but did nothing to make actually logging one easier — which
+// is backwards for who it's for, since body domains (pain, breathlessness,
+// orthostatic, gut, exhaustion) are exactly what's hardest to rate in detail
+// during a bad hour. The evening form already rests every untouched slider at
+// its own rolling baseline (body-check-in.tsx), so submitting untouched
+// already means "typical for me" — this just adds a button that submits that
+// state directly, flagged low_demand, without opening the form.
+//
+// Scoped to the evening card only. The morning form (morning-body-check-in.tsx)
+// doesn't rest its sliders at a baseline the same way — an untouched morning
+// domain saves as null, not a value — so a morning one-tap needs that
+// convention built first rather than reusing this one.
 
 function parseTimeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
@@ -47,13 +69,23 @@ function TickIcon() {
 }
 
 export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
-  const styles = useStyles(useComfort().active);
+  const { active, reducesDemand } = useComfort();
+  const styles = useStyles(active);
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [loggedToday, setLoggedToday] = useState(false);
+  const [loggingAsUsual, setLoggingAsUsual] = useState(false);
 
   const enabled = profile?.body_tracking_enabled ?? false;
   const availableFrom = profile?.body_available_from ?? '17:00';
+
+  // profiles.body_domains_active's DB default/history can still carry the
+  // legacy 'exertion' value — filtering through CHECKIN_BODY_DOMAIN_ORDER
+  // drops it, same defensive pattern body-check-in.tsx and
+  // body-cluster-detection.ts both already use.
+  const activeDomains: BodyDomainType[] = profile?.body_domains_active?.length
+    ? CHECKIN_BODY_DOMAIN_ORDER.filter(d => profile.body_domains_active.includes(d) || BODY_DOMAINS[d].required)
+    : CHECKIN_BODY_DOMAIN_ORDER;
 
   const refreshLoggedState = useCallback(async () => {
     if (!user || !enabled) return;
@@ -69,6 +101,47 @@ export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshLoggedState();
   }, [refreshLoggedState]);
+
+  /**
+   * The one-tap, offered only inside an armed comfort window (reducesDemand),
+   * same restriction as the mind cards. Computes exactly what an untouched
+   * form submission would have saved — each domain's own 90-day rolling
+   * baseline, same window and function body-check-in.tsx's own baseline
+   * effect uses — and inserts directly, flagged low_demand, skipping the
+   * form entirely.
+   */
+  const logAsUsual = async () => {
+    if (!user || loggingAsUsual) return;
+    setLoggingAsUsual(true);
+    try {
+      const today = localDateStr();
+      const from = new Date(Date.now() - 90 * 86_400_000).toLocaleDateString('en-CA');
+      const { data } = await supabase
+        .from('body_checkins').select('*')
+        .eq('user_id', user.id).gte('entry_date', from).lt('entry_date', today)
+        .order('entry_date', { ascending: true });
+      const rows = (data ?? []) as Record<string, unknown>[];
+
+      const payload: Record<string, unknown> = { user_id: user.id, entry_date: today, low_demand: true };
+      for (const d of activeDomains) {
+        const history = rows.map(r => dailyBodyValue(r, d)).filter((v): v is number => v !== null);
+        // Rounded: the slider steps in whole numbers and the columns are
+        // smallint, matching body-check-in.tsx's own rounding.
+        payload[d] = Math.round(rollingBodyBaseline(history));
+      }
+
+      const { error } = await supabase.from('body_checkins').insert(payload);
+      if (error) {
+        console.error('[BodyCheckInCard] one-tap check-in failed:', error);
+        return;
+      }
+      trackBodyCheckInCompleted(activeDomains.length, 0, false);
+      setLoggedToday(true);
+      forcePatternDetection(user.id).catch(e => console.error('[BodyCheckInCard] force detection:', e));
+    } finally {
+      setLoggingAsUsual(false);
+    }
+  };
 
   if (!enabled) return null;
 
@@ -101,6 +174,14 @@ export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
             {loggedToday ? 'Edit' : 'Log body check-in'}
           </Text>
         </Pressable>
+        {reducesDemand && !loggedToday ? (
+          <Pressable
+            onPress={logAsUsual}
+            disabled={loggingAsUsual}
+            style={({ pressed }) => [pressed && styles.pressed]}>
+            <Text style={styles.asUsual}>{loggingAsUsual ? 'Logging…' : 'Nothing unusual today'}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <BodyCheckIn visible={open} onClose={() => { setOpen(false); refreshLoggedState(); }} />
@@ -179,6 +260,11 @@ function makeStyles(t: ComfortTokens, b: AccentTokens) {
   ctaSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: b.border },
   ctaText: { fontSize: t.fs(17), fontWeight: '700', color: t.accentOn },
   ctaTextSecondary: { color: b.textSoft },
+  // Comfort mode's one-tap — same shape as check-in-cards.tsx's AsUsualButton.
+  asUsual: {
+    fontSize: t.fs(15), fontWeight: '600', color: '#cbd5e0', textAlign: 'center',
+    paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: b.border,
+  },
 
   morningCard: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#263045', borderRadius: 16,
