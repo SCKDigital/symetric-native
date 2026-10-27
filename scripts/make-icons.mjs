@@ -117,20 +117,30 @@ function shoot(svg, w, h, outPath, transparent) {
 console.log(`mark + gradient read from symetric-logo.tsx; tile ${FILL} read from accents.ts\n`);
 
 // Universal icon, and the iOS fallback. 22% corner radius matches the mark's own tile.
-shoot(tileSvg(1024, 225.28, 1.41), 1024, 1024, `${OUT}/icon.png`, false);        // 58% of the tile
+shoot(tileSvg(1024, 225.28, 1.41), 1024, 1024, `${OUT}/icon.png`, false);        // 10% margin top/bottom
 // Android adaptive: background is a flat colour, foreground is the mark with
 // the safe-zone margin the platform crops to.
 shoot(solidSvg(512), 512, 512, `${OUT}/android-icon-background.png`, false);
-shoot(markSvg(512, 1.21), 512, 512, `${OUT}/android-icon-foreground.png`, true); // 50%, inside the adaptive safe zone
+shoot(markSvg(512, 1.21), 512, 512, `${OUT}/android-icon-foreground.png`, true); // 16% margin, inside the adaptive safe zone
 shoot(monoSvg(512, 1.21), 512, 512, `${OUT}/android-icon-monochrome.png`, true);
 shoot(tileSvg(48, 10.5, 1.41), 48, 48, `${OUT}/favicon.png`, false);
-// Splash sits on the app's own background, so the mark alone.
-shoot(markSvg(228, 2.14), 228, 228, `${OUT}/splash-icon.png`, true);            // 88%, it is the whole splash
+// Splash sits on the app's own background, so the mark alone. Was scale 2.14,
+// which this geometry (see markSvg/tileSvg's shared transform math: margin% =
+// 50 - 28*scale) puts at -9.9% margin — the glyph's rounded caps were drawn
+// past the canvas edge and lost, not just tightly cropped. 1.4 matches
+// icon.png's own density instead of guessing a new one.
+shoot(markSvg(228, 1.4), 228, 228, `${OUT}/splash-icon.png`, true);             // 10% margin, same as icon.png
 
 // ── iOS .icon bundle ───────────────────────────────────────────────────────
+// Scaled down from icon.png's own 1.41 (1.05, ~21% margin): this is the
+// layer Xcode's Icon Composer renders from for the iOS 18+ Liquid Glass
+// treatment, which adds its own specular/shadow layers and reserves more
+// edge headroom than a flat icon needs — Apple's own guidance is to leave
+// extra margin here specifically, not to fill the frame the way icon.png
+// safely can.
 const ios = `${NATIVE}/assets/expo.icon`;
 mkdirSync(`${ios}/Assets`, { recursive: true });
-writeFileSync(`${ios}/Assets/symetric-mark.svg`, markSvg(1024, 1.41));
+writeFileSync(`${ios}/Assets/symetric-mark.svg`, markSvg(1024, 1.05));
 
 const [r, g, b] = [1, 3, 5].map(i => (parseInt(FILL.slice(i, i + 2), 16) / 255).toFixed(5));
 writeFileSync(`${ios}/icon.json`, JSON.stringify({
