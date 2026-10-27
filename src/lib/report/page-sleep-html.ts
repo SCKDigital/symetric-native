@@ -3,6 +3,7 @@ import type { SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import type { ChartDomain, ChartMarker, SleepConnection } from '@/lib/report/chart-coordinates';
 import { renderHoursSleptSvg, summariseHoursSlept, type HoursSleptPoint } from '@/lib/report/hours-slept-svg';
 import { buildDomainSparklineSectionHtml } from '@/lib/report/page2-findings-html';
+import { SPARKLINE_WIDTH_HALF } from '@/lib/report/sparkline-svg';
 import { DOMAIN_LABELS } from '@/lib/report/theme';
 import type { DetectedCluster } from '@/lib/supabase';
 
@@ -64,6 +65,10 @@ export function buildSleepPageHtml(data: SleepPageData): string {
   const deviationSuffix = deviating ? (sleepCurrent! < sleepBaseline ? ' - below baseline' : ' - above baseline') : '';
 
   // ── Quality ───────────────────────────────────────────────────────────────
+  // Half-width (SPARKLINE_WIDTH_HALF), sitting beside the duration chart
+  // below — both are a single series over the same date range, and the
+  // landscape page has the width to show them side by side instead of
+  // stacked, as they were in portrait.
   const qualityChart = qualityDomain
     ? buildDomainSparklineSectionHtml({
       chartDomains: [qualityDomain],
@@ -74,6 +79,7 @@ export function buildSleepPageHtml(data: SleepPageData): string {
       flaggedClusters,
       dates,
       label: 'Sleep quality, rated 1-5 each morning',
+      width: SPARKLINE_WIDTH_HALF,
     })
     : `<div class="section-gap"><p class="section-label">Sleep quality</p><p class="empty-muted">No sleep quality ratings in this period.</p></div>`;
 
@@ -83,7 +89,7 @@ export function buildSleepPageHtml(data: SleepPageData): string {
 
   // ── Duration ──────────────────────────────────────────────────────────────
   const hoursSummary = summariseHoursSlept(hoursPoints);
-  const hoursSvg = medianHours != null ? renderHoursSleptSvg(hoursPoints, medianHours) : '';
+  const hoursSvg = medianHours != null ? renderHoursSleptSvg(hoursPoints, medianHours, SPARKLINE_WIDTH_HALF) : '';
   const hoursSection = hoursSvg && hoursSummary
     ? `<div class="section-gap">
         <p class="section-label">Hours slept per night</p>
@@ -136,10 +142,15 @@ export function buildSleepPageHtml(data: SleepPageData): string {
     : '';
 
   return `
-    ${qualityChart}
-    ${qualitySummary}
-
-    ${hoursSection}
+    <div class="two-col">
+      <div class="chart-col">
+        ${qualityChart}
+        ${qualitySummary}
+      </div>
+      <div class="chart-col">
+        ${hoursSection}
+      </div>
+    </div>
 
     ${connectionsSection}
     ${lagHtml}

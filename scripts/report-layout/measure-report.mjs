@@ -24,9 +24,9 @@ const BROWSERS = [
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
 ];
 
-// US Letter at 72pt/in, which is what printToFileAsync defaults to, minus the
-// report's own @page margins (48 top, 60 bottom, 54 each side).
-const PAGE_W_PT = 612, PAGE_H_PT = 792;
+// US Letter, landscape, at 72pt/in, which is what printToFileAsync defaults
+// to, minus the report's own @page margins (48 top, 60 bottom, 54 each side).
+const PAGE_W_PT = 792, PAGE_H_PT = 612;
 const MARGIN = { top: 48, bottom: 60, left: 54, right: 54 };
 const CONTENT_W_PT = PAGE_W_PT - MARGIN.left - MARGIN.right;   // 504
 const CONTENT_H_PT = PAGE_H_PT - MARGIN.top - MARGIN.bottom;   // 684

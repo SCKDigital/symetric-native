@@ -16,9 +16,7 @@ function fmtWeekStart(dateStr: string): string {
   return `${fmtD} - ${fmtE}`;
 }
 
-function buildCompletionTableHtml(weeks: WeeklyCompletion[]): string {
-  if (weeks.length === 0) return `<p class="empty-muted">No check-in data for this window.</p>`;
-
+function oneTable(weeks: WeeklyCompletion[]): string {
   const rows = weeks.map(w => {
     const low = w.pct < LOW_COMPLETION_THRESHOLD && w.scheduled > 0;
     return `<tr>
@@ -35,6 +33,20 @@ function buildCompletionTableHtml(weeks: WeeklyCompletion[]): string {
     <thead><tr><th class="col-week">Week</th><th class="col-sched">Scheduled</th><th class="col-comp">Completed</th><th class="col-pct">%</th><th class="col-comp">One-tap</th><th class="col-note"></th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
+}
+
+// Two columns of weeks rather than one long list — the landscape page has
+// the width for it, and a weekly table is naturally splittable (earlier
+// weeks left, later weeks right) in a way a correlation list isn't.
+function buildCompletionTableHtml(weeks: WeeklyCompletion[]): string {
+  if (weeks.length === 0) return `<p class="empty-muted">No check-in data for this window.</p>`;
+  if (weeks.length <= 7) return oneTable(weeks);
+
+  const mid = Math.ceil(weeks.length / 2);
+  return `<div class="two-col">
+    <div class="chart-col">${oneTable(weeks.slice(0, mid))}</div>
+    <div class="chart-col">${oneTable(weeks.slice(mid))}</div>
+  </div>`;
 }
 
 function buildLowCompletionCalloutHtml(weeks: WeeklyCompletion[]): string {

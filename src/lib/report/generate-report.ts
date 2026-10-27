@@ -351,8 +351,26 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     .eq('user_id', userId)
     .gte('window_end', dateFrom)
     .order('strength', { ascending: false });
-  const connectionGrouping: CorrelationGrouping | null = connectionRows && connectionRows.length > 0
-    ? groupConnections(connectionRows as ConnectionRow[])
+
+  // One row per pair, not one per weekly re-detection. domain_connections is
+  // upserted on (user, domain_a, domain_b, window_start), so a pair tracked
+  // across a 90-day report range carries a dozen near-identical rows — the
+  // same two domains, a handful of days apart, over and over. Insights reads
+  // this unfiltered too, but renders one card per pair and never puts them in
+  // a table, so the repeats are invisible there; a group's inner pairs table
+  // on a printed page made every re-detection its own row. Keeping the most
+  // recent (highest window_end) row per pair is the current state of that
+  // relationship, which is what a group's claim should be built from — twelve
+  // weekly confirmations are evidence the finding held, not twelve findings.
+  const latestByPair = new Map<string, NonNullable<typeof connectionRows>[number]>();
+  for (const row of connectionRows ?? []) {
+    const key = row.domain_a < row.domain_b ? `${row.domain_a}|${row.domain_b}` : `${row.domain_b}|${row.domain_a}`;
+    const existing = latestByPair.get(key);
+    if (!existing || row.window_end > existing.window_end) latestByPair.set(key, row);
+  }
+  const dedupedConnectionRows = [...latestByPair.values()];
+  const connectionGrouping: CorrelationGrouping | null = dedupedConnectionRows.length > 0
+    ? groupConnections(dedupedConnectionRows as ConnectionRow[])
     : null;
 
   // ── Body tracking (continued — bodySummary/bodyTrackedDomains/bodyDayScores/

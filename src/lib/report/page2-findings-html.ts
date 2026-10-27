@@ -1,7 +1,7 @@
 import { interventionImpactFindings } from '@/lib/pattern-findings';
 import { patternEvolutionHeadline, patternEvolutionStatLine } from '@/lib/report/chart-utils';
 import type { ChartDomain, ChartMarker } from '@/lib/report/chart-coordinates';
-import { renderSparklineSvg, sparklineMarkerXFraction, SPARKLINE_WIDTH } from '@/lib/report/sparkline-svg';
+import { renderSparklineSvg, sparklineMarkerXFraction, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, SPARKLINE_WIDTH_HALF } from '@/lib/report/sparkline-svg';
 import { DOMAIN_LABELS, LOWER_IS_BETTER, MARKER_TYPE_LABELS, theme } from '@/lib/report/theme';
 import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import type { PatternEvolution } from '@/lib/detection/pattern-evolution';
@@ -90,64 +90,84 @@ export function buildDomainSparklineSectionHtml(params: {
   /** Heading for this block. Continuation pages pass a "(continued)" variant
    *  so a reader can tell a second page of charts from a second set. */
   label?: string;
+  /** 2 lays the domains out as two side-by-side stacks (landscape's chart
+   *  pages: halves the vertical footprint for the same domain count, which
+   *  is the whole point of a wider page). Defaults to 1 — the Sleep page's
+   *  single-domain calls stay a single chart, at `width` or full width. */
+  columns?: 1 | 2;
+  /** Chart width in px, for a columns:1 call sitting beside another chart
+   *  rather than spanning the page (the Sleep page's quality chart, next to
+   *  its hours-slept chart). Ignored when columns is 2, which always uses
+   *  SPARKLINE_WIDTH_HALF for both stacks. */
+  width?: number;
+  /** Chart height in px. Defaults to SPARKLINE_HEIGHT; a chart-page call with
+   *  fewer than a full page of rows passes a taller value — see
+   *  computeSparklineRowHeightPx, below. */
+  height?: number;
 }): string {
   const {
     chartDomains, baselineMap, currentRollingMedians, chartHasEnoughData, chartMarkers, flaggedClusters, dates,
     lineColor = theme.colors.mindLine, isLowerBetterFn = (d: string) => LOWER_IS_BETTER.has(d),
-    label = 'Domain sparklines',
+    label = 'Domain sparklines', columns = 1, width = SPARKLINE_WIDTH, height = SPARKLINE_HEIGHT,
   } = params;
 
   if (!chartHasEnoughData) {
     return `<div class="section-gap"><p class="section-label">${esc(label)}</p><p class="empty-muted">Fewer than 7 days of data - charts omitted.</p></div>`;
   }
 
+  // Stated once at the top of the section too, not just at the foot of each
+  // column — a reader landing on a chart page (every chart shares this one
+  // x-axis) shouldn't have to scan to the bottom of a column to find out what
+  // span they're looking at.
+  const rangeLabel = dates.length > 0 ? `${esc(fmtDay(dates[0] ?? ''))} – ${esc(fmtDay(dates[dates.length - 1] ?? ''))}` : '';
+
   const markerNumberByIndex = computeMarkerDisplayNumbers(flaggedClusters, chartMarkers, dates);
   const numberedMarkers = chartMarkers
     .map((marker, index) => ({ marker, number: markerNumberByIndex.get(index) }))
     .filter((m): m is { marker: ChartMarker; number: number | 'C' } => m.number != null);
 
-  const rows = chartDomains.map(cd => {
-    const current = currentRollingMedians[cd.domain];
-    const baseline = baselineMap[cd.domain];
-    const label = DOMAIN_LABELS[cd.domain] ?? cd.domain;
-    const bVal = baseline != null ? (Math.round(baseline * 10) / 10).toFixed(1) : '-';
-    const cVal = current != null ? (Math.round(current * 10) / 10).toFixed(1) : '-';
-    let arrow = '→';
-    if (current != null && baseline != null && Math.abs(current - baseline) >= 0.3) arrow = current > baseline ? '↑' : '↓';
-    const headerColor = current != null && baseline != null && Math.abs(current - baseline) >= 0.5 ? theme.colors.heading : theme.colors.gray;
-    const isLowerBetter = isLowerBetterFn(cd.domain);
-    const svg = renderSparklineSvg(cd, dates, lineColor, isLowerBetter);
-    // Coverage, stated per domain. A line with readings on 12 of 60 days and
-    // one with 58 are drawn identically, and a gap for "not logged" looks the
-    // same as a flat stretch — so a sparse series reads as an equally solid
-    // trend unless the page says otherwise. This is also the answer to "why
-    // is this one spotty": it is the days, not the chart.
-    const logged = cd.points.filter(p => p.value != null).length;
-    return `<div class="spark-cell">
-      <div class="spark-header"><span style="color:${headerColor}; font-weight:bold;">${esc(label)} ${arrow}</span><span class="spark-meta">base ${bVal} &middot; now ${cVal} &middot; ${logged}/${dates.length} days</span></div>
-      ${svg || `<div class="spark-no-data">Insufficient data</div>`}
-    </div>`;
-  }).join('');
+  const buildStack = (domains: ChartDomain[], width: number): string => {
+    const rows = domains.map(cd => {
+      const current = currentRollingMedians[cd.domain];
+      const baseline = baselineMap[cd.domain];
+      const label = DOMAIN_LABELS[cd.domain] ?? cd.domain;
+      const bVal = baseline != null ? (Math.round(baseline * 10) / 10).toFixed(1) : '-';
+      const cVal = current != null ? (Math.round(current * 10) / 10).toFixed(1) : '-';
+      let arrow = '→';
+      if (current != null && baseline != null && Math.abs(current - baseline) >= 0.3) arrow = current > baseline ? '↑' : '↓';
+      const headerColor = current != null && baseline != null && Math.abs(current - baseline) >= 0.5 ? theme.colors.heading : theme.colors.gray;
+      const isLowerBetter = isLowerBetterFn(cd.domain);
+      const svg = renderSparklineSvg(cd, dates, lineColor, isLowerBetter, width, height);
+      // Coverage, stated per domain. A line with readings on 12 of 60 days and
+      // one with 58 are drawn identically, and a gap for "not logged" looks the
+      // same as a flat stretch — so a sparse series reads as an equally solid
+      // trend unless the page says otherwise. This is also the answer to "why
+      // is this one spotty": it is the days, not the chart.
+      const logged = cd.points.filter(p => p.value != null).length;
+      const noDataHeight = (height * 0.75).toFixed(1); // px -> pt, matching the chart it stands in for
+      return `<div class="spark-cell">
+        <div class="spark-header"><span style="color:${headerColor}; font-weight:bold;">${esc(label)} ${arrow}</span><span class="spark-meta">base ${bVal} &middot; now ${cVal} &middot; ${logged}/${dates.length} days</span></div>
+        ${svg || `<div class="spark-no-data" style="height:${noDataHeight}pt;">Insufficient data</div>`}
+      </div>`;
+    }).join('');
 
-  const markerLines = numberedMarkers.map(({ marker }) => {
-    const left = `${(sparklineMarkerXFraction(marker.dateIndex, dates.length) * 100).toFixed(2)}%`;
-    return `<div class="marker-line" style="left:${left};"></div>`;
-  }).join('');
-  const markerNumbers = numberedMarkers.map(({ marker, number }) => {
-    const left = `${(sparklineMarkerXFraction(marker.dateIndex, dates.length) * 100).toFixed(2)}%`;
-    return `<div class="marker-number" style="left:${left};">${number}</div>`;
-  }).join('');
+    const markerLines = numberedMarkers.map(({ marker }) => {
+      const left = `${(sparklineMarkerXFraction(marker.dateIndex, dates.length, width) * 100).toFixed(2)}%`;
+      return `<div class="marker-line" style="left:${left};"></div>`;
+    }).join('');
+    const markerNumbers = numberedMarkers.map(({ marker, number }) => {
+      const left = `${(sparklineMarkerXFraction(marker.dateIndex, dates.length, width) * 100).toFixed(2)}%`;
+      return `<div class="marker-number" style="left:${left};">${number}</div>`;
+    }).join('');
 
-  return `<div class="section-gap">
-    <p class="section-label">${esc(label)}</p>
-    <!-- px, not pt. SPARKLINE_WIDTH is the <svg width> attribute, which is
-         read as CSS pixels; declaring the container in points made it 590pt
-         against a 442.5pt chart. The marker lines and numbers below are
-         positioned as a percentage of THIS box, so every medication, therapy
-         and cycle marker was drawn a third of the way right of the date it
-         marks — the last ones off the printable area entirely — on a chart a
-         clinician reads dates off. -->
-    <div class="spark-stack" style="width:${SPARKLINE_WIDTH}px;">
+    // px, not pt. `width` is the <svg width> attribute, which is read as CSS
+    // pixels; declaring the container in points made it 590pt against a
+    // 442.5pt chart. The marker lines and numbers below are positioned as a
+    // percentage of THIS box, so every medication, therapy and cycle marker
+    // was drawn a third of the way right of the date it marks — the last
+    // ones off the printable area entirely — on a chart a clinician reads
+    // dates off.
+    return `<div class="spark-stack" style="width:${width}px;">
       ${rows}
       ${markerLines}
       ${markerNumbers}
@@ -156,34 +176,79 @@ export function buildDomainSparklineSectionHtml(params: {
          once beneath it rather than repeated per row. Without it the reader
          has to hunt back to the footer to learn what span they are looking
          at, and marker numbers alone give no sense of when. -->
-    <div class="spark-axis" style="width:${SPARKLINE_WIDTH}px;">
+    <div class="spark-axis" style="width:${width}px;">
       <span>${esc(fmtDay(dates[0] ?? ''))}</span>
       <span>${esc(fmtDay(dates[dates.length - 1] ?? ''))}</span>
+    </div>`;
+  };
+
+  const body = columns === 2 && chartDomains.length > 1
+    ? (() => {
+      const mid = Math.ceil(chartDomains.length / 2);
+      const left = chartDomains.slice(0, mid);
+      const right = chartDomains.slice(mid);
+      return `<div class="two-col">
+        <div class="chart-col">${buildStack(left, SPARKLINE_WIDTH_HALF)}</div>
+        <div class="chart-col">${buildStack(right, SPARKLINE_WIDTH_HALF)}</div>
+      </div>`;
+    })()
+    : buildStack(chartDomains, width);
+
+  return `<div class="section-gap">
+    <div class="section-label-row">
+      <p class="section-label">${esc(label)}</p>
+      <span class="section-label-dates">${rangeLabel}</span>
     </div>
+    ${body}
   </div>`;
 }
 
 // ── Sparkline pagination ────────────────────────────────────────────────────
 
 /**
- * Sparkline rows per page of charts.
+ * Sparkline rows per page of charts, laid out two columns wide (landscape's
+ * extra width goes to a second column rather than a wider single chart —
+ * see buildDomainSparklineSectionHtml's `columns` option) — so this is twice
+ * the domain count a single column of the same row count would hold.
  *
- * Nothing bounded this before, on either the Mind or the Body overview page,
- * and both pages carry several other sections as well. A row is about 83pt
- * (a 9pt header, a 90px = 67.5pt chart, margins), against a usable body
- * height of roughly 616pt once the page header and footer are taken off a
- * US Letter page with this report's margins. Eight tracked domains is 664pt
- * of charts on its own, so those pages silently ran onto a second physical
- * sheet — which carries no header, no footer, and no page number, while the
- * "Page 3 of 5" printed above it goes on claiming otherwise.
- *
- * Five, not six, and no longer a guess: scripts/check-report-layout.mjs
- * renders the real document in Chromium — the engine family Android's print
- * WebView belongs to — and measures it. Six rows came out at 93% of a sheet
- * under the wider of the two platform fonts, which is not enough margin for
- * a domain label that wraps.
+ * Not a guess: scripts/report-layout/measure-report.mjs renders the real
+ * document in Chromium — the engine family Android's print WebView belongs
+ * to — and measures it against both platforms' fonts. Re-run it before
+ * changing this number.
  */
-export const SPARKLINES_PER_PAGE = 5;
+export const SPARKLINES_PER_PAGE = 8;
+
+/**
+ * Per-chart SVG height (px) for a chart page with `rows` rows in its tallest
+ * column. A page with fewer than the maximum 4 rows has vertical room the
+ * fixed SPARKLINE_HEIGHT left empty — a 1- or 2-domain page (the usual case:
+ * SPARKLINES_PER_PAGE's 4-row max is the stress-tested worst case, not the
+ * common one) was printing at under half a sheet.
+ *
+ * Fitted from scripts/report-layout/measure-report.mjs's own output against
+ * this page's actual CSS, at three measured points: 4 rows with no trailing
+ * explainer (450.2pt of a 504pt sheet), 4 rows with one (496.3pt), and 1 row
+ * with one (237.6pt). Those three points pin down a page's fixed overhead
+ * (~105.3pt: section label, axis, margins), its per-row overhead excluding
+ * the chart itself (~18.7pt: header line, cell margin), and the trailing
+ * explainer box's own height (~46.1pt) — solved algebraically, not guessed —
+ * which is what BUDGET_PT/FIXED_OVERHEAD_PT/PER_ROW_OVERHEAD_PT/EXPLAINER_PT
+ * below encode. Re-derive by re-running the check if the surrounding CSS
+ * (section-gap, spark-cell, spark-axis, explainer-box) changes.
+ */
+function computeSparklineRowHeightPx(rows: number, hasTrailingExplainer: boolean): number {
+  const BUDGET_PT = 498; // a few pt under the page's 504pt printable height
+  const FIXED_OVERHEAD_PT = 105.3;
+  const PER_ROW_OVERHEAD_PT = 18.7;
+  const EXPLAINER_PT = 46.1;
+  const MIN_HEIGHT_PX = SPARKLINE_HEIGHT; // the validated 4-row-plus-explainer floor
+  const MAX_HEIGHT_PX = 160; // design cap — taller reads oddly thin for a sparkline
+
+  const available = BUDGET_PT - FIXED_OVERHEAD_PT - (hasTrailingExplainer ? EXPLAINER_PT : 0);
+  const heightPt = available / rows - PER_ROW_OVERHEAD_PT;
+  const heightPx = heightPt / 0.75; // pt -> CSS px, same factor SPARKLINE_WIDTH is declared against
+  return Math.max(MIN_HEIGHT_PX, Math.min(MAX_HEIGHT_PX, Math.floor(heightPx)));
+}
 
 export interface SparklineLayout {
   /** Renders on the parent page: the "fewer than 7 days" note, or nothing
@@ -220,10 +285,15 @@ export function layOutSparklines(
 
   const pages: string[] = [];
   for (let i = 0; i < chartDomains.length; i += SPARKLINES_PER_PAGE) {
+    const slice = chartDomains.slice(i, i + SPARKLINES_PER_PAGE);
+    const isLastPage = i + SPARKLINES_PER_PAGE >= chartDomains.length;
+    const rows = Math.ceil(slice.length / 2); // the taller of the two columns — see buildStack's own split
     pages.push(buildDomainSparklineSectionHtml({
       ...sectionParams,
-      chartDomains: chartDomains.slice(i, i + SPARKLINES_PER_PAGE),
+      chartDomains: slice,
       label: i === 0 ? sectionParams.label : `${sectionParams.label ?? 'Domain sparklines'} (continued)`,
+      columns: 2,
+      height: computeSparklineRowHeightPx(rows, isLastPage && trailingHtml.length > 0),
     }));
   }
   pages[pages.length - 1] += trailingHtml;

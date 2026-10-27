@@ -1,4 +1,5 @@
 import type { ChartDomain } from '@/lib/report/chart-coordinates';
+import { CONTENT_WIDTH } from '@/lib/report/theme';
 
 // Sparkline rendering, scoped-ported from the web app's lib/report/
 // chartImages.ts (renderSparklineImage) — same geometry/thresholds, but
@@ -9,17 +10,30 @@ import type { ChartDomain } from '@/lib/report/chart-coordinates';
 // rasterization step (and no react-native-view-shot dependency) needed at
 // all for this shape of chart.
 
-export const SPARKLINE_WIDTH = 590;
+// <svg width>/<svg height> are read as CSS pixels, not the points
+// CONTENT_WIDTH is declared in — 0.75pt/px is the conversion both ways (see
+// page2-findings-html's own comment on this, where it first mattered).
+export const SPARKLINE_WIDTH = Math.round(CONTENT_WIDTH / 0.75);
+// Half-width variant for the two-column chart-page grid and the Sleep page's
+// side-by-side quality/duration charts. Matches .two-col's actual 12pt gap
+// and CONTENT_WIDTH exactly, so a chart fills its chart-col instead of
+// stopping partway across it — this used to be derived from a leftover
+// portrait-era SPARKLINE_WIDTH (592px, sized for a 504pt-wide page) with a
+// gap constant that didn't match the CSS either, so the chart-col it was
+// meant to fill was wider on both fronts, leaving the right side of every
+// chart's column blank.
+export const CHART_COL_GAP_PT = 12;
+export const SPARKLINE_WIDTH_HALF = Math.round(((CONTENT_WIDTH - CHART_COL_GAP_PT) / 2) / 0.75);
 export const SPARKLINE_HEIGHT = 90;
 const PAD_L = 4;
 const PAD_R = 4;
 const PAD_T = 6;
 const PAD_B = 6;
 
-export function sparklineMarkerXFraction(dateIndex: number, datesLength: number): number {
-  const pw = SPARKLINE_WIDTH - PAD_L - PAD_R;
+export function sparklineMarkerXFraction(dateIndex: number, datesLength: number, width: number = SPARKLINE_WIDTH): number {
+  const pw = width - PAD_L - PAD_R;
   const x = PAD_L + (datesLength <= 1 ? pw / 2 : (dateIndex / (datesLength - 1)) * pw);
-  return x / SPARKLINE_WIDTH;
+  return x / width;
 }
 
 function endpointDeviationColor(lastValue: number, baseline: number, isLowerBetter: boolean): string {
@@ -32,9 +46,9 @@ function endpointDeviationColor(lastValue: number, baseline: number, isLowerBett
 /** Renders one domain's sparkline as an inline <svg> string, or '' when
  *  there's no data at all (caller shows an "Insufficient data" placeholder
  *  instead — same as the web app's imgSrc-undefined fallback). */
-export function renderSparklineSvg(cd: ChartDomain, dates: string[], color: string, isLowerBetter: boolean): string {
-  const W = SPARKLINE_WIDTH;
-  const H = SPARKLINE_HEIGHT;
+export function renderSparklineSvg(cd: ChartDomain, dates: string[], color: string, isLowerBetter: boolean, width: number = SPARKLINE_WIDTH, height: number = SPARKLINE_HEIGHT): string {
+  const W = width;
+  const H = height;
   const pw = W - PAD_L - PAD_R;
   const ph = H - PAD_T - PAD_B;
 

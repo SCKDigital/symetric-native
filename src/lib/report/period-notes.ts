@@ -17,7 +17,7 @@
 // reproduced verbatim, dated, and ordered so the ones attached to something
 // the report already flagged come first.
 
-const MAX_NOTES = 10;
+const MAX_NOTES = 8;
 const MAX_LENGTH = 220;
 
 export interface PeriodNote {
@@ -88,14 +88,29 @@ function fmtDay(d: string): string {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
+function noteRow(n: PeriodNote): string {
+  return `<div class="note-row">
+    <span class="note-date">${esc(fmtDay(n.date))}${n.notable ? ' <strong>&bull;</strong>' : ''}</span>
+    <span class="note-text">${esc(n.text)}</span>
+  </div>`;
+}
+
 export function buildPeriodNotesHtml(result: { notes: PeriodNote[]; total: number }): string {
   if (result.notes.length === 0) return '';
   const hidden = result.total - result.notes.length;
 
-  const rows = result.notes.map(n => `<div class="note-row">
-    <span class="note-date">${esc(fmtDay(n.date))}${n.notable ? ' <strong>&bull;</strong>' : ''}</span>
-    <span class="note-text">${esc(n.text)}</span>
-  </div>`).join('');
+  // Two columns past five notes — the landscape page has the width, and a
+  // notable-first/newest-within-group list reads fine split left-then-right
+  // the same way the weekly completion table does.
+  const rows = result.notes.length > 5
+    ? (() => {
+      const mid = Math.ceil(result.notes.length / 2);
+      return `<div class="two-col">
+        <div class="chart-col">${result.notes.slice(0, mid).map(noteRow).join('')}</div>
+        <div class="chart-col">${result.notes.slice(mid).map(noteRow).join('')}</div>
+      </div>`;
+    })()
+    : result.notes.map(noteRow).join('');
 
   return `<div class="section-gap">
     <p class="section-label">Written at the time</p>

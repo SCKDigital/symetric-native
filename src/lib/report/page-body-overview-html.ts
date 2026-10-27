@@ -162,20 +162,25 @@ export function buildBodyOverviewHtml(data: BodyOverviewData): string {
   return `
     ${sparklinesInline}
 
-    <div class="section-gap">
-      <p class="section-label">Notable body events</p>
-      ${eventTableHtml}
+    <div class="two-col">
+      <div class="chart-col">
+        <div class="section-gap">
+          <p class="section-label">Notable body events</p>
+          ${eventTableHtml}
+        </div>
+
+        <div class="section-gap">
+          <p class="section-label">Pain &amp; instability sites</p>
+          ${siteListHtml}
+        </div>
+      </div>
+      <div class="chart-col">
+        ${buildEpisodeTimelineHtml({ clusters: bodyFlaggedClusters, chartMarkers, dates, interventionImpacts, showMarkerNumbers: true })}
+
+        ${buildEventProximityHtml(eventProximity)}
+
+        ${buildRareEventsSectionHtml(bodyRareEvents, bodyPatternEvolution, BODY_RARE_MAX_ENTRIES)}
+      </div>
     </div>
-
-    <div class="section-gap">
-      <p class="section-label">Pain &amp; instability sites</p>
-      ${siteListHtml}
-    </div>
-
-    ${buildEpisodeTimelineHtml({ clusters: bodyFlaggedClusters, chartMarkers, dates, interventionImpacts, showMarkerNumbers: true })}
-
-    ${buildEventProximityHtml(eventProximity)}
-
-    ${buildRareEventsSectionHtml(bodyRareEvents, bodyPatternEvolution, BODY_RARE_MAX_ENTRIES)}
   `;
 }

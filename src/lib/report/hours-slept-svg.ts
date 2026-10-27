@@ -28,13 +28,11 @@ import { theme } from '@/lib/report/theme';
 // as CSS pixels (590px = 442pt), not as the points CONTENT_WIDTH is measured
 // in — so a chart declared at CONTENT_WIDTH would come out narrower than the
 // sparklines below it and the two date axes would not line up.
-const W = SPARKLINE_WIDTH;
 const H = 104;
 const PAD_L = 22;
 const PAD_R = 4; // was 34, to clear the median label that is no longer drawn
 const PAD_T = 8;
 const PAD_B = 16;
-const PLOT_W = W - PAD_L - PAD_R;
 const PLOT_H = H - PAD_T - PAD_B;
 
 export interface HoursSleptPoint {
@@ -55,9 +53,12 @@ function fmtDay(d: string): string {
  * included: an unlogged night must be a gap in the chart rather than a missing
  * column that silently shortens the timeline.
  */
-export function renderHoursSleptSvg(points: HoursSleptPoint[], medianHours: number): string {
+export function renderHoursSleptSvg(points: HoursSleptPoint[], medianHours: number, width: number = SPARKLINE_WIDTH): string {
   const logged = points.filter(p => p.hours != null) as { date: string; hours: number }[];
   if (logged.length === 0 || points.length === 0) return '';
+
+  const W = width;
+  const PLOT_W = W - PAD_L - PAD_R;
 
   // Axis top: the next even hour above both the longest night and the median,
   // with a floor of 8 so a run of short nights still reads as short rather

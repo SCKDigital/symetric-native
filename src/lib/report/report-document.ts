@@ -56,7 +56,7 @@ export function buildReportDocument(params: {
 <head>
 <meta charset="utf-8" />
 <style>
-  @page { size: letter; margin: ${theme.spacing.page.top}pt ${theme.spacing.page.right}pt ${theme.spacing.page.bottom}pt ${theme.spacing.page.left}pt; }
+  @page { size: letter landscape; margin: ${theme.spacing.page.top}pt ${theme.spacing.page.right}pt ${theme.spacing.page.bottom}pt ${theme.spacing.page.left}pt; }
   * { box-sizing: border-box; }
   /* Android has no Helvetica and no Arial: it falls back to Roboto, whose
      metrics are not Helvetica's, so the same document paginated differently
@@ -87,7 +87,10 @@ export function buildReportDocument(params: {
   .patient-name { font-weight: bold; font-size: ${fontSize.patientName}pt; color: ${colors.heading}; }
   .subtitle { font-size: ${fontSize.label}pt; color: ${colors.muted}; margin: 0 0 8pt; }
   .section-label { font-weight: bold; font-size: ${fontSize.sectionHeading}pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.7pt; padding-bottom: 3pt; margin: 0 0 3pt; border-bottom: 0.5pt solid ${colors.border}; }
-  .section-gap { margin-bottom: 11pt; }
+  .section-label-row { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 3pt; margin: 0 0 3pt; border-bottom: 0.5pt solid ${colors.border}; }
+  .section-label-row .section-label { padding-bottom: 0; margin: 0; border-bottom: none; }
+  .section-label-dates { font-size: ${fontSize.small}pt; font-weight: normal; text-transform: none; letter-spacing: normal; color: ${colors.muted}; }
+  .section-gap { margin-bottom: 9pt; }
   .empty-muted { font-style: italic; font-size: ${fontSize.small}pt; color: ${colors.muted}; margin: 0 0 6pt; }
   .overflow-note { font-style: italic; font-size: ${fontSize.small}pt; color: ${colors.muted}; margin: 1pt 0 4pt; }
   .completion-line { display: flex; justify-content: space-between; padding-bottom: 4pt; margin-bottom: 6pt; border-bottom: 0.5pt solid ${colors.border}; font-size: ${fontSize.small}pt; color: ${colors.muted}; }
@@ -146,11 +149,11 @@ export function buildReportDocument(params: {
   .character-tags { flex: 1; color: ${colors.body}; }
 
   .spark-stack { position: relative; margin-bottom: 2pt; }
-  .spark-cell { margin-bottom: 3pt; }
-  .spark-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2pt; font-size: ${fontSize.label}pt; }
+  .spark-cell { margin-bottom: 2pt; }
+  .spark-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1pt; font-size: ${fontSize.label}pt; }
   .spark-meta { font-size: 7pt; color: ${colors.muted}; }
   .spark-no-data { width: 100%; height: 18pt; background: #F9FAFB; display: flex; align-items: center; justify-content: center; font-style: italic; font-size: 7pt; color: ${colors.muted}; }
-  .spark-axis { display: flex; justify-content: space-between; font-size: 6.5pt; color: ${colors.muted}; margin-top: 10pt; }
+  .spark-axis { display: flex; justify-content: space-between; font-size: 6.5pt; color: ${colors.muted}; margin-top: 8pt; }
   .marker-line { position: absolute; top: 0; bottom: 0; width: 0.75pt; background: ${colors.teal}; opacity: 0.5; }
   .marker-number { position: absolute; bottom: -8pt; width: 11pt; margin-left: -5.5pt; text-align: center; font-weight: bold; font-size: 6.5pt; color: ${colors.teal}; }
 

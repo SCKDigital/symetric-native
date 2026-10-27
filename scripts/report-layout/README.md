@@ -14,8 +14,8 @@ number, while the "Page 3 of 10" printed above it goes on claiming otherwise.
 
 Builds a deliberately maximal report (every list saturated, 8 mind and 9 body
 domains, 90 days) and measures each logical page in a real browser, against
-the printable area `printToFileAsync` produces: 612x792pt less this report's
-own margins, so 504x684pt.
+the printable area `printToFileAsync` produces: US Letter landscape,
+792x612pt less this report's own margins, so 684x504pt.
 
 Chromium is the engine family Android's print WebView belongs to, so this is
 both a regression check and a reasonable proxy for the Android PDF.

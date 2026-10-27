@@ -45,7 +45,7 @@ export const theme = {
     mindLine: '#818cf8',
   },
   spacing: {
-    // US Letter: 612 x 792 pt; 0.75in margins = 54pt
+    // US Letter, landscape: 792 x 612 pt; 0.75in side margins = 54pt
     page: { top: 48, right: 54, bottom: 60, left: 54 },
     sectionGap: 14,
     rowGap: 5,
@@ -61,7 +61,7 @@ export const theme = {
   },
 } as const;
 
-export const CONTENT_WIDTH = 504;
+export const CONTENT_WIDTH = 684;
 
 // Deviates from the web app here: web's own DOMAIN_LABELS stays mind-only
 // and Page3BodyOverview.tsx passes a separate BODY_DOMAIN_LABELS map, but

@@ -34,9 +34,10 @@ export function buildPage2Html(data: Page2Data): string {
   return `
     ${sparklinesInline}
 
-    ${buildEpisodeTimelineHtml({ clusters: flaggedClusters, chartMarkers, dates, interventionImpacts, showMarkerNumbers: true })}
-
-    ${buildRareEventsSectionHtml(rareEvents, patternEvolution)}
+    <div class="two-col">
+      <div class="chart-col">${buildEpisodeTimelineHtml({ clusters: flaggedClusters, chartMarkers, dates, interventionImpacts, showMarkerNumbers: true })}</div>
+      <div class="chart-col">${buildRareEventsSectionHtml(rareEvents, patternEvolution)}</div>
+    </div>
 
     ${notesHtml}
   `;

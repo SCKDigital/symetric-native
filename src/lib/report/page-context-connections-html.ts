@@ -3,7 +3,7 @@ import { CORRELATION_MIN_ABS_R, CORRELATION_MIN_OVERLAP } from '@/lib/detection/
 import { DOMAIN_LABELS } from '@/lib/report/theme';
 import {
   groupClaimLine, groupEvidenceLine, groupHeadline, pairSentence,
-  type CorrelationGroup, type CorrelationGrouping, type CorrelationPair,
+  type CorrelationGroup, type CorrelationGrouping,
 } from '@/lib/correlation-groups';
 import { CONFIDENCE_COPY, factorLabel, isBodyDomain } from '@/lib/pattern-findings';
 import { CYCLE_WINDOW_DAYS, type CycleProximityResult } from '@/lib/detection/cycle-proximity';
@@ -103,16 +103,15 @@ function spansMindAndBody(members: string[]): boolean {
   return members.some(isBodyDomain) && members.some(m => !isBodyDomain(m) && m !== 'sleep');
 }
 
-function pairRow(pair: CorrelationPair): string {
-  const direction = pair.movesTogether ? 'move together' : 'move in opposite directions';
-  return `<tr>
-    <td class="col-pair">${factorHtml(pair.a)} &amp; ${factorHtml(pair.b)}</td>
-    <td class="col-dir">${direction}</td>
-    <td class="col-n">${pair.sampleSize} days</td>
-    <td class="col-n">${esc(CONFIDENCE_COPY[pair.grade].short)}</td>
-  </tr>`;
-}
-
+// No inner pairs table. The app's own card renders the same headline/chips/
+// claim/evidence by default and keeps the pair-by-pair breakdown behind a
+// "show the N pairs behind this" tap — collapsed unless asked for. A printed
+// page can't collapse anything, so showing the table unconditionally meant
+// showing it always: a chain of five domains compared across a 90-day range
+// put thirty-odd rows on the page for a claim the three summary lines above
+// it already make. The individual, ungrouped pairs below (buildContextConnectionsHtml's
+// standaloneHtml) are the report's "each individual pair" tier; a block is
+// the other tier, and states its own claim rather than itemising its edges.
 function groupBlock(group: CorrelationGroup): string {
   const crossSystem = spansMindAndBody(group.members);
   return `<div class="group-block">
@@ -123,10 +122,6 @@ function groupBlock(group: CorrelationGroup): string {
     <p class="group-members">${group.members.map(factorHtml).join(' &middot; ')}</p>
     <p class="group-claim">${esc(groupClaimLine(group))}</p>
     <p class="group-evidence">${esc(groupEvidenceLine(group))}${crossSystem ? ' &middot; <strong>links mind and body</strong>' : ''}</p>
-    <table class="connections-table">
-      <thead><tr><th class="col-pair">Pair</th><th class="col-dir">Direction</th><th class="col-n">Overlap</th><th class="col-n">Confidence</th></tr></thead>
-      <tbody>${group.pairs.map(pairRow).join('')}</tbody>
-    </table>
   </div>`;
 }
 
@@ -193,16 +188,23 @@ export function buildContextConnectionsHtml(data: ContextConnectionsData): strin
   // reached the person the report is written for.
   const hasGrouped = grouping != null && (grouping.groups.length > 0 || grouping.pairs.length > 0);
 
+  const groupBlocksHtml = grouping?.groups.map(groupBlock).join('') ?? '';
+  const standaloneHtml = grouping != null && grouping.pairs.length > 0
+    ? `<p class="group-standalone-label">On their own</p>
+       ${grouping.pairs.slice(0, STANDALONE_MAX_PAIRS).map(pair => `<div class="group-standalone">
+         <span class="standalone-text">${esc(pairSentence(pair))}</span>
+         <span class="standalone-meta">${pair.sampleSize} days &middot; ${esc(CONFIDENCE_COPY[pair.grade].short)}</span>
+       </div>`).join('')}
+       ${grouping.pairs.length > STANDALONE_MAX_PAIRS ? `<p class="overflow-note">${grouping.pairs.length - STANDALONE_MAX_PAIRS} further pair${grouping.pairs.length - STANDALONE_MAX_PAIRS !== 1 ? 's' : ''} not listed.</p>` : ''}`
+    : '';
+
+  // Chains and standalone pairs are two different shapes of the same list —
+  // side by side when both exist, same reasoning as the cycle/checked-not-
+  // found pairing below, rather than one stacked under the other.
   const groupedHtml = hasGrouped
-    ? `${grouping!.groups.map(groupBlock).join('')}
-      ${grouping!.pairs.length > 0
-        ? `<p class="group-standalone-label">On their own</p>
-           ${grouping!.pairs.slice(0, STANDALONE_MAX_PAIRS).map(pair => `<div class="group-standalone">
-             <span class="standalone-text">${esc(pairSentence(pair))}</span>
-             <span class="standalone-meta">${pair.sampleSize} days &middot; ${esc(CONFIDENCE_COPY[pair.grade].short)}</span>
-           </div>`).join('')}
-           ${grouping!.pairs.length > STANDALONE_MAX_PAIRS ? `<p class="overflow-note">${grouping!.pairs.length - STANDALONE_MAX_PAIRS} further pair${grouping!.pairs.length - STANDALONE_MAX_PAIRS !== 1 ? 's' : ''} not listed.</p>` : ''}`
-        : ''}
+    ? `${groupBlocksHtml && standaloneHtml
+        ? `<div class="two-col"><div class="chart-col">${groupBlocksHtml}</div><div class="chart-col">${standaloneHtml}</div></div>`
+        : `${groupBlocksHtml}${standaloneHtml}`}
       <p class="empty-muted chart-note">Body factors in italics. A block is a chain of measured pairs, not a claim that every factor in it was compared with every other &middot; correlation is not causation</p>`
     : '';
 
@@ -222,6 +224,14 @@ export function buildContextConnectionsHtml(data: ContextConnectionsData): strin
 
   const connectionsHtml = hasGrouped ? groupedHtml : fallbackHtml;
 
+  // Cycle proximity and checked-not-found are two independent, individually
+  // short sections — side by side uses the landscape width instead of each
+  // paying for its own section-label and gap in a second stacked block.
+  const cycleHtml = buildCycleHtml(cycleProximity);
+  const bottomHtml = cycleHtml && checkedNotFoundHtml
+    ? `<div class="two-col"><div class="chart-col">${cycleHtml}</div><div class="chart-col">${checkedNotFoundHtml}</div></div>`
+    : `${cycleHtml}${checkedNotFoundHtml}`;
+
   return `
     <div class="section-gap">
       <p class="section-label">Time-based patterns</p>
@@ -233,8 +243,6 @@ export function buildContextConnectionsHtml(data: ContextConnectionsData): strin
       ${connectionsHtml}
     </div>
 
-    ${buildCycleHtml(cycleProximity)}
-
-    ${checkedNotFoundHtml}
+    ${bottomHtml}
   `;
 }
