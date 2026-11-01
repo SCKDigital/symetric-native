@@ -1,22 +1,15 @@
-import { useSyncExternalStore } from 'react';
-import { useColorScheme as useRNColorScheme } from 'react-native';
-
 /**
- * Web variant, used only by an `expo export --platform web` build. Static
- * rendering has no colour scheme to read, so the first paint has to be
- * deterministic and the real value can only be picked up once hydrated.
+ * Web variant, used only by an `expo export --platform web` build (the website
+ * demo). Always dark. On iOS and Android, userInterfaceStyle: "dark" in
+ * app.json pins the scheme, but nothing pins it in a browser, where
+ * react-native's hook reports the visitor's OS preference — so a visitor in
+ * light mode got the placeholder light palette (a white tab bar) on an app
+ * that has no light theme. See the note on Colors in constants/theme.ts.
  *
- * useSyncExternalStore rather than setState in an effect: "have we hydrated
- * yet" is exactly the question it exists to answer. This was the app's one
- * standing lint error, which mattered more than it looks — a permanent error
- * hides every new one behind the same "N problems" summary.
+ * A constant also settles the static-render question the previous version
+ * answered with useSyncExternalStore: the first paint and the hydrated one
+ * now agree by construction.
  */
-const subscribe = () => () => {};
-const getSnapshot = () => true; // client: hydrated
-const getServerSnapshot = () => false; // static render: not yet
-
 export function useColorScheme() {
-  const hasHydrated = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const colorScheme = useRNColorScheme();
-  return hasHydrated ? colorScheme : 'light';
+  return 'dark' as const;
 }

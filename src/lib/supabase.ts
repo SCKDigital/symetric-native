@@ -1,7 +1,14 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
+
+import { createDemoClient } from '@/lib/demo/fake-supabase';
+
+/** The website demo: sample data held in memory, no network, no sign-in.
+ *  Inlined at build time like the variables below, so an App Store build can
+ *  never end up in it. */
+export const IS_DEMO = process.env.EXPO_PUBLIC_DEMO === '1';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -12,7 +19,7 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 // nothing naming the cause. .env is gitignored and eas.json declares no env
 // block, so the values come from EAS environment variables: if a build profile
 // ever stops resolving them, this is the line that says so.
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!IS_DEMO && (!supabaseUrl || !supabaseAnonKey)) {
   throw new Error(
     'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. '
     + 'Locally these come from .env; in a build they come from the EAS '
@@ -20,17 +27,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    // No browser URL to parse a session out of on native — the magic-link
-    // callback instead arrives as a deep link handled by expo-router/expo-linking.
-    detectSessionInUrl: false,
-  },
-  realtime: { enabled: false } as never,
-});
+export const supabase: SupabaseClient = IS_DEMO
+  // Typed as the real client so no call site has to know. The fake covers
+  // only what this app calls; see the note at the top of fake-supabase.ts.
+  ? (createDemoClient() as unknown as SupabaseClient)
+  : createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      // No browser URL to parse a session out of on native — the magic-link
+      // callback instead arrives as a deep link handled by expo-router/expo-linking.
+      detectSessionInUrl: false,
+    },
+    realtime: { enabled: false } as never,
+  });
 
 // Supabase's token auto-refresh timer keeps running in the background unless
 // told otherwise — on native that drains battery and can throw once the app
