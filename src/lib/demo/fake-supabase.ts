@@ -27,25 +27,35 @@ function db(): Tables {
 /** Puts every table back to its seeded state. */
 export function resetDemoData() {
   tables = seedTables();
-  forgetPerUserState();
+  resetPerUserState();
 }
 
-// Per-user state the app keeps in AsyncStorage — which on web is localStorage,
-// and survives a reload when the tables do not. The one that matters most is
-// pattern-detection-scheduler.ts's "last ran" stamps: without clearing them, a
-// visitor returning the same day gets fresh data that detection then declines
-// to look at, and an empty Insights. The rest (bonus check-in cooldown,
-// Prepare's date range) should start over with the data for the same reason.
-// Every such key embeds the user id.
-function forgetPerUserState() {
+// Per-user state the app keeps in AsyncStorage, which on web is localStorage
+// and survives a reload when the tables do not. Every such key embeds the user
+// id. The bonus check-in cooldown, Prepare's date range and the rest start
+// over with the data.
+//
+// Then detection is marked as having run today. The seed already holds what
+// the detectors made of these rows, from the same weekly replay that built
+// the sample report. Letting pattern-detection-scheduler.ts run again on
+// launch, once over the whole history as of now, would rewrite those findings
+// and the demo would stop matching the report. The stamps are in the formats
+// the scheduler writes them. Logging a body check-in still forces a run, as it
+// does in the app, so a visitor's own entries are still picked up.
+function resetPerUserState() {
   try {
     const storage = globalThis.localStorage;
     if (!storage) return; // static render
     for (const key of Object.keys(storage)) {
       if (key.includes(DEMO_USER.id)) storage.removeItem(key);
     }
+    const id = DEMO_USER.id;
+    storage.setItem(`lastPatternDetection_${id}`, new Date().toISOString().split('T')[0]);
+    storage.setItem(`lastConnectionDetection_${id}`, Date.now().toString());
+    storage.setItem(`lastBaselineRecalc_${id}`, Date.now().toString());
   } catch {
-    // Storage blocked: nothing was persisted to forget.
+    // Storage blocked: the scheduler will find no stamps and run detection
+    // itself. The demo still works; it just drifts from the report.
   }
 }
 
@@ -371,34 +381,23 @@ const session = {
 
 const ok = <T,>(data: T) => Promise.resolve({ data, error: null });
 
-// Pattern detection, run once over the seeded data before the visitor is
-// signed in, so the pulse loader covers it and every screen opens on its
-// results. The app runs detection on launch and leaves screens to read
-// whatever is there — fine on a phone, where it has normally run earlier
-// that day, but a demo starts from fresh data on every visit, and Insights
-// opened first would race the detectors and show an empty Sleep section.
-// Imported lazily: the scheduler imports this client through supabase.ts.
-let preparing: Promise<void> | null = null;
-function prepared() {
-  preparing ??= import('@/lib/pattern-detection-scheduler')
-    .then(m => m.runPatternDetectionIfNeeded(DEMO_USER.id))
-    .then(() => undefined)
-    .catch(e => console.error('[demo] pattern detection:', e));
-  return preparing;
-}
-
 export function createDemoClient() {
   return {
     from: (table: string) => new QueryBuilder(table),
     auth: {
-      getSession: () => prepared().then(() => ({ data: { session }, error: null })),
+      // Seeds before anything signed-in runs, so the detection stamps are in
+      // place before the scheduler first looks for them.
+      getSession: () => {
+        db();
+        return ok({ session });
+      },
       getUser: () => ok({ user: DEMO_USER }),
       setSession: () => ok({ session, user: DEMO_USER }),
       // The demo is always signed in. Neither of these can leave it.
       signInWithOtp: () => ok({}),
       signOut: () => Promise.resolve({ error: null }),
       onAuthStateChange: (callback: (event: string, s: typeof session) => void) => {
-        prepared().then(() => callback('INITIAL_SESSION', session));
+        setTimeout(() => callback('INITIAL_SESSION', session), 0);
         return { data: { subscription: { unsubscribe() {} } } };
       },
       startAutoRefresh: () => Promise.resolve(),

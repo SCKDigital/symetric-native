@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { addDays, todayDateString } from '@/lib/date-utils';
+import { IS_DEMO } from '@/lib/supabase';
 
 // Scoped port of the date-range portion of the web app's PrepareScreen.tsx
 // (DatePreset/PrepareRange types, defaultRangeForPreset, loadSavedRange,
@@ -37,7 +38,9 @@ export async function loadSavedRange(userId: string): Promise<PrepareRange> {
   } catch {
     // ignore
   }
-  return defaultRangeForPreset('30', today);
+  // The website demo opens on the 90 days its sample report covers, where the
+  // pattern she flagged for discussion is; it is older than 30 days.
+  return defaultRangeForPreset(IS_DEMO ? '90' : '30', today);
 }
 
 export async function saveRange(userId: string, range: PrepareRange): Promise<void> {

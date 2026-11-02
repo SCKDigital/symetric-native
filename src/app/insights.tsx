@@ -41,7 +41,7 @@ import { buildBodyEventOccurrences, computeBodySiteFrequency, computeBodySummari
 import type { BodyDomainSummary, BodyEventOccurrence, BodyEventSummary, BodySiteFrequency } from '@/lib/report/types';
 import { selectStandoutFindings } from '@/lib/standout-ranking';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
-import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, SleepLog, supabase } from '@/lib/supabase';
+import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, IS_DEMO, SleepLog, supabase } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
@@ -291,7 +291,9 @@ export default function InsightsScreen() {
   const hasLoadedOnce = useRef(false);
   // Range-independent query results, cached per user — see the note in load().
   const fetchCache = useRef<{ userId: string; data: InsightsFetchBundle } | null>(null);
-  const [range, setRange] = useState<RangeDays>(30);
+  // The website demo opens on the 90 days its sample report covers, so the
+  // two show the same findings; its headline flare is older than 30 days.
+  const [range, setRange] = useState<RangeDays>(IS_DEMO ? 90 : 30);
   const [clusters, setClusters] = useState<DetectedCluster[]>([]);
   const [circadianPatterns, setCircadianPatterns] = useState<CircadianPattern[]>([]);
   const [dayOfWeekPatterns, setDayOfWeekPatterns] = useState<DayOfWeekPattern[]>([]);
