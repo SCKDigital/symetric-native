@@ -42,3 +42,6 @@ example
 # generated native folders
 /ios
 /android
+
+# scripts/sample-report scratch (bundle, HTML, a local esbuild)
+.tmp-sample-report/
