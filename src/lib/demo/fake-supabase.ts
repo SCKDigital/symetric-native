@@ -20,13 +20,33 @@ let tables: Tables | null = null;
 function db(): Tables {
   // Seeded lazily, so the dates in the seed are relative to when the visitor
   // opened the page rather than to when the bundle was built.
-  if (!tables) tables = seedTables();
-  return tables;
+  if (!tables) resetDemoData();
+  return tables!;
 }
 
 /** Puts every table back to its seeded state. */
 export function resetDemoData() {
   tables = seedTables();
+  forgetPerUserState();
+}
+
+// Per-user state the app keeps in AsyncStorage — which on web is localStorage,
+// and survives a reload when the tables do not. The one that matters most is
+// pattern-detection-scheduler.ts's "last ran" stamps: without clearing them, a
+// visitor returning the same day gets fresh data that detection then declines
+// to look at, and an empty Insights. The rest (bonus check-in cooldown,
+// Prepare's date range) should start over with the data for the same reason.
+// Every such key embeds the user id.
+function forgetPerUserState() {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return; // static render
+    for (const key of Object.keys(storage)) {
+      if (key.includes(DEMO_USER.id)) storage.removeItem(key);
+    }
+  } catch {
+    // Storage blocked: nothing was persisted to forget.
+  }
 }
 
 function uuid() {
@@ -351,18 +371,34 @@ const session = {
 
 const ok = <T,>(data: T) => Promise.resolve({ data, error: null });
 
+// Pattern detection, run once over the seeded data before the visitor is
+// signed in, so the pulse loader covers it and every screen opens on its
+// results. The app runs detection on launch and leaves screens to read
+// whatever is there — fine on a phone, where it has normally run earlier
+// that day, but a demo starts from fresh data on every visit, and Insights
+// opened first would race the detectors and show an empty Sleep section.
+// Imported lazily: the scheduler imports this client through supabase.ts.
+let preparing: Promise<void> | null = null;
+function prepared() {
+  preparing ??= import('@/lib/pattern-detection-scheduler')
+    .then(m => m.runPatternDetectionIfNeeded(DEMO_USER.id))
+    .then(() => undefined)
+    .catch(e => console.error('[demo] pattern detection:', e));
+  return preparing;
+}
+
 export function createDemoClient() {
   return {
     from: (table: string) => new QueryBuilder(table),
     auth: {
-      getSession: () => ok({ session }),
+      getSession: () => prepared().then(() => ({ data: { session }, error: null })),
       getUser: () => ok({ user: DEMO_USER }),
       setSession: () => ok({ session, user: DEMO_USER }),
       // The demo is always signed in. Neither of these can leave it.
       signInWithOtp: () => ok({}),
       signOut: () => Promise.resolve({ error: null }),
       onAuthStateChange: (callback: (event: string, s: typeof session) => void) => {
-        setTimeout(() => callback('INITIAL_SESSION', session), 0);
+        prepared().then(() => callback('INITIAL_SESSION', session));
         return { data: { subscription: { unsubscribe() {} } } };
       },
       startAutoRefresh: () => Promise.resolve(),
