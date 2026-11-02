@@ -9,6 +9,11 @@ node scripts/sample-report/build.mjs            # writes the site's PDF
 node scripts/sample-report/build.mjs out.pdf    # or anywhere else
 ```
 
+Every run also writes `src/lib/demo/aisha-tables.json`, the website demo's
+starting data: Aisha's rows plus everything detection stored from them. This
+keeps the demo showing what the PDF shows. Commit it whenever you commit a new
+PDF. See `docs/web-demo.md`.
+
 Needs Node and Chrome (or Edge). The first run installs a private copy of
 esbuild into `.tmp-sample-report/`, which is gitignored.
 

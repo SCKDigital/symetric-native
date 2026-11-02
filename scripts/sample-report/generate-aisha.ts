@@ -4,7 +4,7 @@
 // Only the database and the print call are stand-ins. See README.md.
 import * as fs from 'fs';
 
-import { replace, rows, seed } from './fake-supabase';
+import { allTables, replace, rows, seed } from './fake-supabase';
 import { APPOINTMENT_ID, DATE_FROM, DATE_TO, N_DAYS, USER_ID, buildAishaRows, dayDate } from './aisha-data';
 import { recalculateRollingBaseline } from '@/lib/baseline/rolling-baseline-recalc';
 import { forcePatternDetection } from '@/lib/pattern-detection-scheduler';
@@ -33,7 +33,8 @@ function setClock(at: Date | null) {
 
 async function main() {
   const out = process.argv[2];
-  if (!out) throw new Error('usage: node generate-aisha.js <out.html>');
+  const demoOut = process.argv[3];
+  if (!out) throw new Error('usage: node generate-aisha.js <out.html> [demo-tables.json]');
 
   const d = buildAishaRows();
   seed('profiles', [d.profile]);
@@ -109,6 +110,27 @@ async function main() {
   const html = (globalThis as { __reportHtml?: string }).__reportHtml;
   if (!html) throw new Error('generateReport finished without printing anything');
   fs.writeFileSync(out, html);
+
+  // The website demo opens on this same state — her rows and everything
+  // detection stored from them — so the app a visitor clicks through shows
+  // the findings this report prints. Timestamps go out as local wall-clock
+  // time with no zone, and the demo reads them back in the visitor's zone
+  // after moving them to end yesterday: a 9:10am check-in stays at 9:10am
+  // for whoever opens it. See src/lib/demo/seed.ts.
+  if (demoOut) {
+    const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+    const wallClock = (iso: string) => {
+      const t = new Date(iso);
+      return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}T${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+    };
+    const localise = (v: unknown): unknown =>
+      typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T.*(Z|[+-]\d{2}:\d{2})$/.test(v) ? wallClock(v)
+        : Array.isArray(v) ? v.map(localise)
+          : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, localise(x)]))
+            : v;
+    const builtFor = new Date().toLocaleDateString('en-CA');
+    fs.writeFileSync(demoOut, JSON.stringify({ builtFor, tables: localise(allTables()) }) + '\n');
+  }
 
   // What the pipeline found, so a change to the data or the detectors that
   // empties a section is visible here rather than only in the PDF.

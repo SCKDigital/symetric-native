@@ -57,8 +57,11 @@ await build({
   logLevel: 'warning',
 });
 
+// The website demo's starting state is written by the same run, so the demo
+// and this PDF can never disagree. Commit it alongside any change here.
 const html = join(tmp, 'aisha-report.html');
-execFileSync(process.execPath, [bundle, html], { stdio: 'inherit' });
+const demoTables = join(root, 'src', 'lib', 'demo', 'aisha-tables.json');
+execFileSync(process.execPath, [bundle, html, demoTables], { stdio: 'inherit' });
 
 // The app's report has no <title>, so Chrome would name the PDF after this
 // scratch file, and that is what a browser tab shows when the site serves it.

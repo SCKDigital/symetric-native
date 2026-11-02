@@ -26,6 +26,11 @@ export function rows(table: string): Row[] {
   return tables.get(table) ?? [];
 }
 
+/** Every table, for handing the finished state to the website demo. */
+export function allTables(): Record<string, Row[]> {
+  return Object.fromEntries(tables);
+}
+
 function withDefaults(row: Row): Row {
   const now = new Date().toISOString();
   return {
