@@ -53,8 +53,9 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
     setError(null);
     try {
       if (fmt === 'CSV') {
-        // Four files, as on the web. The share sheet can only take one at a
-        // time, so they go one after another rather than as a single archive.
+        // Four files as on the web, plus body files when there is body data.
+        // The share sheet can only take one at a time, so they go one after
+        // another rather than as a single archive.
         for (const file of await buildCsvExport(user.id)) await shareExportFile(file);
       } else {
         await shareExportFile(await buildJsonExport(user.id));
@@ -78,8 +79,8 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
       </View>
       <Text style={styles.hint}>
         {fmt === 'CSV'
-          ? 'Four CSV files — check-ins, sleep logs, patterns and markers. They are shared one after another.'
-          : 'A single JSON file with all your data.'}
+          ? 'CSV files for check-ins, sleep logs, patterns and markers, plus body check-ins and events if you track them. They are shared one after another.'
+          : 'A single JSON file with everything you have recorded, including body tracking and appointments.'}
       </Text>
       {error && <Text style={styles.error}>{error}</Text>}
       <SheetButton label={exporting ? 'Exporting...' : `Export as ${fmt}`} onPress={handleExport} disabled={exporting} />
@@ -137,6 +138,9 @@ export function DeleteRangeSheet({ userId, onClose, onDeleted }: {
         .gte('scheduled_at', new Date(`${fromStr}T00:00:00`).toISOString())
         .lte('scheduled_at', new Date(`${toStr}T23:59:59`).toISOString()),
       supabase.from('sleep_logs').delete().eq('user_id', userId).gte('log_date', fromStr).lte('log_date', toStr),
+      // Pain and event sites cascade from these.
+      supabase.from('body_checkins').delete().eq('user_id', userId).gte('entry_date', fromStr).lte('entry_date', toStr),
+      supabase.from('body_events').delete().eq('user_id', userId).gte('event_date', fromStr).lte('event_date', toStr),
     ]);
     setDeleting(false);
     if (results.some(r => r.error)) {
@@ -152,7 +156,7 @@ export function DeleteRangeSheet({ userId, onClose, onDeleted }: {
     return (
       <SheetShell
         title="Delete this period?"
-        description={`Every check-in and sleep log from ${displayDate(from)} to ${displayDate(to)} will be removed. This cannot be undone.`}
+        description={`Every check-in, body check-in, body event and sleep log from ${displayDate(from)} to ${displayDate(to)} will be removed. This cannot be undone.`}
         onClose={onClose}>
         {error && <Text style={styles.error}>{error}</Text>}
         <SheetButton danger label={deleting ? 'Deleting...' : 'Delete this period'} onPress={handleConfirmDelete} disabled={deleting} />
@@ -184,39 +188,20 @@ export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const isConfirmed = confirmText === 'DELETE';
 
-  // Every result is checked before signing out. None of them were, and
-  // PostgREST returns failures rather than throwing — so a delete blocked by a
-  // missing RLS policy left the rows in place, signed the user out anyway, and
-  // told them their account was gone. That is not a hypothetical here: the
-  // profiles table shipped with RLS enabled and no DELETE policy, which is
-  // exactly this failure, and nothing in the app could report it.
+  // One server-side call that deletes the login itself, and every table
+  // cascades from it. Deleting row by row from here, as before, could only
+  // reach tables keyed to profiles: body tracking, push tokens and the login
+  // (with the email address) survived an account the user was told had gone.
+  // The user is only signed out once the server confirms the delete.
   const handleDeleteAll = async () => {
     if (!user || !isConfirmed) return;
     setDeleting(true);
     setDeleteError(null);
 
-    const results = await Promise.all([
-      supabase.from('check_ins').delete().eq('user_id', user.id),
-      supabase.from('sleep_logs').delete().eq('user_id', user.id),
-      supabase.from('detected_clusters').delete().eq('user_id', user.id),
-      supabase.from('context_tags').delete().eq('user_id', user.id),
-      supabase.from('baselines').delete().eq('user_id', user.id),
-      supabase.from('check_in_settings').delete().eq('user_id', user.id),
-    ]);
-    const failed = results.filter(r => r.error);
-    if (failed.length > 0) {
-      failed.forEach(r => console.error('[DeleteAllSheet] delete failed:', r.error));
-      setDeleteError('Some data could not be deleted, so your account has been left in place. Nothing was signed out. Try again, or contact support.');
-      setDeleting(false);
-      return;
-    }
-
-    // Last, and separately: the remaining tables cascade from this row, so it
-    // failing means data survives that the user was told had gone.
-    const { error: profileError } = await supabase.from('profiles').delete().eq('id', user.id);
-    if (profileError) {
-      console.error('[DeleteAllSheet] profile delete failed:', profileError);
-      setDeleteError('Your data was removed but the account itself could not be deleted. You have not been signed out. Try again, or contact support.');
+    const { error } = await supabase.functions.invoke('delete-account');
+    if (error) {
+      console.error('[DeleteAllSheet] delete-account failed:', error);
+      setDeleteError('Your account could not be deleted, so nothing has been removed and you have not been signed out. Try again, or contact support.');
       setDeleting(false);
       return;
     }
@@ -227,7 +212,7 @@ export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
   return (
     <SheetShell
       title="Delete all data and account"
-      description="Every check-in, sleep log, pattern and baseline is removed, along with your account. This is permanent and cannot be undone."
+      description="Everything you have recorded, mind, body, cycle, markers and appointments, is removed along with your account and sign-in. This is permanent and cannot be undone."
       onClose={onClose}>
       <Text style={styles.fieldLabel}>TYPE DELETE TO CONFIRM</Text>
       <TextInput

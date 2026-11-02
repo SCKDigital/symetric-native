@@ -8,7 +8,7 @@ import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
 import { DeleteAllSheet, DeleteRangeSheet, ExportSheet, ResetBaselineSheet } from '@/components/settings/data-sheets';
 import {
   BellIcon, BellSlashIcon, BodyIcon, BrainIcon, CalendarIcon, ClockIcon, ClockSimpleIcon,
-  CycleIcon, DownloadIcon, LockIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
+  CycleIcon, DocumentIcon, DownloadIcon, LockIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
   EyeIcon,
 } from '@/components/settings/settings-icons';
 import {
@@ -29,6 +29,7 @@ import {
 import { AccentPicker } from '@/components/settings/accent-picker';
 import { useComfort } from '@/hooks/use-comfort';
 import { resolveActiveDomains } from '@/lib/domains';
+import { openPrivacyPolicy, openTermsOfUse } from '@/lib/legal-links';
 import { subscribeToPushNotifications, syncPushToken, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
 import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
 import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
@@ -655,6 +656,17 @@ export default function SettingsScreen() {
             icon={<RefreshIcon />} label="Reset baselines"
             subtitle="Recalculate what's normal for you"
             right={<ChevronRight />} onPress={() => setSheet('resetBaseline')}
+          />
+          <RowDivider />
+          <SettingsRow
+            icon={<DocumentIcon />} label="Privacy policy"
+            subtitle="What we collect, where it's stored, and your rights"
+            right={<ChevronRight />} onPress={openPrivacyPolicy}
+          />
+          <RowDivider />
+          <SettingsRow
+            icon={<DocumentIcon />} label="Terms of use"
+            right={<ChevronRight />} onPress={openTermsOfUse}
           />
         </SectionCard>
 

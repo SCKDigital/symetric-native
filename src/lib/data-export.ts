@@ -90,16 +90,70 @@ function generateMarkersCSV(markers: Row[]): string {
   return arrayToCSV(headers, rows);
 }
 
-/** Four files, matching the four the web version downloads. */
+/** Every column the rows have, minus user_id. Body tables gain columns as
+ *  body tracking grows, and a hand-picked header list would silently drop the
+ *  new ones from a user's export. Arrays are joined, any other object (pain
+ *  descriptors) goes out as JSON. */
+function withoutUserId(row: Row): Row {
+  const { user_id: _userId, ...rest } = row;
+  return rest;
+}
+
+function generateGenericCSV(rows: Row[]): string {
+  const clean = rows.map(withoutUserId);
+  const headers = [...new Set(clean.flatMap(r => Object.keys(r)))];
+  return arrayToCSV(headers, clean.map(r => headers.map(h => {
+    const v = r[h];
+    if (Array.isArray(v)) return e(v.join(', '));
+    if (v !== null && typeof v === 'object') return e(JSON.stringify(v));
+    return e(v ?? '');
+  })));
+}
+
+function describeSite(s: Row): string {
+  const detail = [s.side, s.aspect].filter(Boolean).join(', ');
+  return detail ? `${s.region} (${detail})` : String(s.region);
+}
+
+function sitesBy(sites: Row[], key: string): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  sites.forEach(s => {
+    const id = s[key] as string;
+    if (!map.has(id)) map.set(id, []);
+    map.get(id)!.push(describeSite(s));
+  });
+  return map;
+}
+
+/** Body check-ins and events, each with its sites folded in as a list, so a
+ *  CSV reader gets one file per kind instead of having to join four. */
+async function fetchBodyData(userId: string): Promise<{ checkIns: Row[]; events: Row[] }> {
+  const [checkIns, painSites, events, eventSites] = await Promise.all([
+    supabase.from('body_checkins').select('*').eq('user_id', userId).order('entry_date', { ascending: true }),
+    supabase.from('body_pain_sites').select('*').eq('user_id', userId),
+    supabase.from('body_events').select('*').eq('user_id', userId).order('event_date', { ascending: true }),
+    supabase.from('body_event_sites').select('*').eq('user_id', userId),
+  ]);
+  const painByCheckIn = sitesBy((painSites.data as Row[] | null) ?? [], 'body_checkin_id');
+  const sitesByEvent = sitesBy((eventSites.data as Row[] | null) ?? [], 'body_event_id');
+  return {
+    checkIns: ((checkIns.data as Row[] | null) ?? []).map(c => ({ ...c, pain_sites: painByCheckIn.get(c.id as string) ?? [] })),
+    events: ((events.data as Row[] | null) ?? []).map(ev => ({ ...ev, sites: sitesByEvent.get(ev.id as string) ?? [] })),
+  };
+}
+
+/** The four files the web version downloads, plus a body check-ins and a
+ *  body events file for anyone who has body data. */
 export async function buildCsvExport(userId: string): Promise<ExportFile[]> {
   const exportDate = new Date().toLocaleDateString('en-CA');
 
-  const [checkIns, sleepLogs, clusters, markers, contextTags] = await Promise.all([
+  const [checkIns, sleepLogs, clusters, markers, contextTags, body] = await Promise.all([
     supabase.from('check_ins').select('*').eq('user_id', userId).order('scheduled_at', { ascending: true }),
     supabase.from('sleep_logs').select('*').eq('user_id', userId).order('log_date', { ascending: true }),
     supabase.from('detected_clusters').select('*').eq('user_id', userId).order('start_date', { ascending: true }),
     supabase.from('intervention_markers').select('*').eq('user_id', userId).order('marker_date', { ascending: true }),
     supabase.from('context_tags').select('*').eq('user_id', userId),
+    fetchBodyData(userId),
   ]);
 
   const tagsByCluster = new Map<string, string[]>();
@@ -110,21 +164,32 @@ export async function buildCsvExport(userId: string): Promise<ExportFile[]> {
   });
 
   const csv = 'text/csv';
-  return [
+  const files: ExportFile[] = [
     { name: `symetric_check_ins_${exportDate}.csv`, mimeType: csv, content: generateCheckInsCSV((checkIns.data as Row[]) ?? []) },
     { name: `symetric_sleep_logs_${exportDate}.csv`, mimeType: csv, content: generateSleepLogsCSV((sleepLogs.data as Row[]) ?? []) },
     { name: `symetric_patterns_${exportDate}.csv`, mimeType: csv, content: generateClustersCSV((clusters.data as Row[]) ?? [], tagsByCluster) },
     { name: `symetric_markers_${exportDate}.csv`, mimeType: csv, content: generateMarkersCSV((markers.data as Row[]) ?? []) },
   ];
+  // Skipped when empty: most people don't track body, and each file is
+  // another share sheet to dismiss.
+  if (body.checkIns.length) files.push({ name: `symetric_body_check_ins_${exportDate}.csv`, mimeType: csv, content: generateGenericCSV(body.checkIns) });
+  if (body.events.length) files.push({ name: `symetric_body_events_${exportDate}.csv`, mimeType: csv, content: generateGenericCSV(body.events) });
+  return files;
 }
 
 export async function buildJsonExport(userId: string): Promise<ExportFile> {
-  const [checkIns, sleepLogs, baselines, clusters] = await Promise.all([
+  const [checkIns, sleepLogs, baselines, clusters, markers, appointments, questions, patternReviews, body] = await Promise.all([
     supabase.from('check_ins').select('*').eq('user_id', userId).order('scheduled_at', { ascending: true }),
     supabase.from('sleep_logs').select('*').eq('user_id', userId).order('log_date', { ascending: true }),
     supabase.from('baselines').select('*').eq('user_id', userId).eq('is_current', true),
     supabase.from('detected_clusters').select('*').eq('user_id', userId).order('start_date', { ascending: true }),
+    supabase.from('intervention_markers').select('*').eq('user_id', userId).order('marker_date', { ascending: true }),
+    supabase.from('appointments').select('*').eq('user_id', userId),
+    supabase.from('prepare_questions').select('*').eq('user_id', userId),
+    supabase.from('prepare_pattern_reviews').select('*').eq('user_id', userId),
+    fetchBodyData(userId),
   ]);
+  const rowsOf = (r: { data: unknown }) => ((r.data as Row[] | null) ?? []).map(withoutUserId);
 
   const baselineMap: Record<string, number> = {};
   ((baselines.data as Row[] | null) ?? []).forEach(b => { baselineMap[b.domain as string] = b.baseline_score as number; });
@@ -171,6 +236,15 @@ export async function buildJsonExport(userId: string): Promise<ExportFile> {
       data_quality: c.data_quality ?? null,
       user_notes: c.user_notes ?? null,
     })),
+    // Everything below is whole rows rather than a hand-picked shape, so the
+    // export keeps up as these tables gain columns. Markers include cycle
+    // Day 1 entries.
+    markers: rowsOf(markers),
+    body_check_ins: body.checkIns.map(withoutUserId),
+    body_events: body.events.map(withoutUserId),
+    appointments: rowsOf(appointments),
+    appointment_questions: rowsOf(questions),
+    appointment_pattern_reviews: rowsOf(patternReviews),
   };
 
   return {

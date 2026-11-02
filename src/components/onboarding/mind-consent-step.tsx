@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingBackButton, OnboardingCheckbox, OnboardingPrimaryButton } from '@/components/onboarding/onboarding-controls';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { openPrivacyPolicy, openTermsOfUse } from '@/lib/legal-links';
 
 interface MindConsentStepProps {
   mindNotHealthServiceAck: boolean;
@@ -13,10 +14,8 @@ interface MindConsentStepProps {
 }
 
 // Ported from the web app's MindConsentStep.tsx — straight layout/primitive
-// port, no native-only mechanics involved. The Privacy Policy / Terms links
-// are non-functional on the web version too (href="#" + preventDefault) —
-// carried over as-is rather than inventing a URL; wire both up for real once
-// those pages exist.
+// port, no native-only mechanics involved, except that the Privacy Policy and
+// Terms links now open the published pages (they were dead on the web).
 export default function MindConsentStep({
   mindNotHealthServiceAck,
   mindDataConsent,
@@ -47,8 +46,9 @@ export default function MindConsentStep({
         </View>
 
         <Text style={styles.legal}>
-          By continuing, you agree to our <Text style={styles.legalLink}>Privacy Policy</Text> and{' '}
-          <Text style={styles.legalLink}>Terms of Use</Text>.
+          By continuing, you agree to our{' '}
+          <Text style={styles.legalLink} onPress={openPrivacyPolicy} accessibilityRole="link">Privacy Policy</Text> and{' '}
+          <Text style={styles.legalLink} onPress={openTermsOfUse} accessibilityRole="link">Terms of Use</Text>.
         </Text>
 
         <View style={styles.buttonRow}>
