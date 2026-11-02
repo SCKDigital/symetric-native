@@ -7,3 +7,13 @@
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
 }
+
+/* Score numbers ask for 'DM Mono' (domain-slider.tsx, pattern-detail-screen.tsx),
+   which the app never loads. On iOS that falls back to the system font; in a
+   browser it falls back to the default serif. Point the name at whatever
+   monospace the visitor already has, rather than fetching a webfont. */
+@font-face {
+  font-family: 'DM Mono';
+  src: local('DM Mono'), local('SF Mono'), local('Menlo'), local('Consolas'), local('Roboto Mono'),
+    local('DejaVu Sans Mono'), local('Courier New');
+}

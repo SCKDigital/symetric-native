@@ -1,0 +1,202 @@
+<!doctype html>
+<!--
+  The page the website embeds for the interactive demo. Copied to the root of
+  a web export (EXPO_PUBLIC_DEMO=1 npx expo export -p web) along with the app
+  itself, which this loads in an iframe at ./ — so the demo has to be served
+  from a domain root, which Expo's absolute /_expo/ asset paths need anyway.
+
+  Embed it with something like:
+    <iframe src="https://demo.example.com/demo.html" style="width:100%;height:920px;border:0"
+            title="Try the Symetric app"></iframe>
+
+  What it adds around the app:
+  - a phone frame on wide screens, and the full viewport on phones
+  - a start screen, so the app's ~3.5 MB bundle only loads when asked for
+  - a "sample data" label and a reset button. The app keeps its data in
+    memory, so reloading it is the reset.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Symetric Demo</title>
+  <meta name="description" content="Try the Symetric app with sample data. Nothing you enter leaves your browser.">
+  <style>
+    :root {
+      --bg: #0a0c12;
+      --bezel: #1b1f2a;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --accent: #e5e0d8;
+      --on-accent: #0a0c12;
+      --phone-w: 390px;
+      --phone-h: 844px;
+      --frame: 12px;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      /* Transparent so the frame sits on whatever section of the website
+         embeds it. The pill and the phone carry their own backgrounds. */
+      background: transparent;
+      font-family: 'Spline Sans', Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    /* The phone is laid out at true size and scaled to fit the height, so the
+       app inside always gets a 390x844 viewport whatever the embed's size. */
+    .phone {
+      position: relative;
+      width: calc(var(--phone-w) + var(--frame) * 2);
+      height: calc(var(--phone-h) + var(--frame) * 2);
+      padding: var(--frame);
+      border-radius: 56px;
+      background: var(--bezel);
+      box-shadow: 0 0 0 1px #2a2f3d inset, 0 30px 80px rgba(0, 0, 0, 0.45);
+      transform-origin: top center;
+      flex: none;
+    }
+    .screen {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 44px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
+
+    .start {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 32px;
+      text-align: center;
+      background: radial-gradient(120% 70% at 50% 30%, #161b29 0%, var(--bg) 70%);
+    }
+    .wordmark { font-size: 34px; font-weight: 600; letter-spacing: -0.02em; }
+    .start p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.5; max-width: 280px; }
+    .start button {
+      font: inherit;
+      font-size: 17px;
+      font-weight: 700;
+      padding: 16px 32px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--accent);
+      color: var(--on-accent);
+      cursor: pointer;
+    }
+    .start button:focus-visible, .bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .start small { color: var(--muted); font-size: 13px; }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 8px 8px 16px;
+      border-radius: 999px;
+      background: rgba(16, 19, 28, 0.92);
+      border: 1px solid #1e2533;
+      font-size: 13px;
+      color: var(--muted);
+      flex: none;
+    }
+    .bar button {
+      font: inherit;
+      font-weight: 600;
+      color: var(--text);
+      background: #1e2533;
+      border: 0;
+      border-radius: 999px;
+      padding: 6px 14px;
+      cursor: pointer;
+    }
+    .bar button[hidden] { display: none; }
+
+    /* Phones: no frame. The app takes the whole viewport, with the bar on top. */
+    @media (max-width: 520px) {
+      body { padding: 0; gap: 0; justify-content: flex-start; }
+      .phone {
+        width: 100%;
+        height: auto;
+        flex: 1;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+        background: var(--bg);
+        transform: none !important;
+        order: 2;
+      }
+      .screen { border-radius: 0; }
+      .bar { order: 1; width: 100%; border-radius: 0; border-width: 0 0 1px; justify-content: space-between; }
+    }
+  </style>
+</head>
+<body>
+  <div class="phone" id="phone">
+    <div class="screen" id="screen">
+      <div class="start" id="start">
+        <div class="wordmark">symetric</div>
+        <p>Track how you feel, spot the patterns, and walk into appointments prepared.</p>
+        <button type="button" id="go">Try the app</button>
+        <small>Sample data. Nothing you enter leaves your browser.</small>
+      </div>
+    </div>
+  </div>
+  <div class="bar">
+    <span>Demo with sample data</span>
+    <button type="button" id="reset" hidden>Reset</button>
+  </div>
+
+  <script>
+    const phone = document.getElementById('phone');
+    const screen = document.getElementById('screen');
+    const start = document.getElementById('start');
+    const reset = document.getElementById('reset');
+    let frame = null;
+
+    function fit() {
+      if (matchMedia('(max-width: 520px)').matches) {
+        phone.style.transform = '';
+        phone.style.marginBottom = '';
+        return;
+      }
+      const bar = 16 + 46; // gap + bar height
+      const available = window.innerHeight - 32 - bar;
+      const scale = Math.min(1, available / phone.offsetHeight, (window.innerWidth - 32) / phone.offsetWidth);
+      phone.style.transform = `scale(${scale})`;
+      // transform doesn't change layout size, so pull the bar up to meet it.
+      phone.style.marginBottom = `${-(1 - scale) * phone.offsetHeight}px`;
+    }
+    addEventListener('resize', fit);
+    fit();
+
+    document.getElementById('go').addEventListener('click', () => {
+      frame = document.createElement('iframe');
+      frame.title = 'Symetric app demo';
+      frame.src = './';
+      screen.appendChild(frame);
+      frame.addEventListener('load', () => start.remove(), { once: true });
+      reset.hidden = false;
+    });
+
+    // The app's data lives in memory, so a fresh load is a fresh start.
+    reset.addEventListener('click', () => {
+      if (frame) frame.contentWindow.location.replace(frame.src);
+    });
+  </script>
+</body>
+</html>

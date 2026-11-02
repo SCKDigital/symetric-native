@@ -3,16 +3,19 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthScreen } from '@/components/auth/auth-screen';
 import AppTabs from '@/components/app-tabs';
+import { DemoTour } from '@/components/demo/demo-tour';
 import AppLockScreen from '@/components/lock/app-lock-screen';
 import Onboarding from '@/components/onboarding/onboarding';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { AccentProvider } from '@/contexts/accent-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
+import { IS_DEMO } from '@/lib/supabase';
 import { useAppLock } from '@/hooks/use-app-lock';
 import { usePushTokenSync } from '@/hooks/use-push-token-sync';
 
@@ -94,6 +97,15 @@ function AuthGate() {
 
   if (locked && profile.app_lock_pin_hash && profile.app_lock_pin_salt) {
     return <AppLockScreen pinHash={profile.app_lock_pin_hash} pinSalt={profile.app_lock_pin_salt} onUnlock={unlock} />;
+  }
+
+  if (IS_DEMO) {
+    return (
+      <View style={{ flex: 1 }}>
+        <AppTabs />
+        <DemoTour />
+      </View>
+    );
   }
 
   return <AppTabs />;

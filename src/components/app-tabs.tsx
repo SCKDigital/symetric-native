@@ -1,14 +1,19 @@
 import { Tabs } from 'expo-router';
+import { Platform } from 'react-native';
 
 import { HistoryIcon, InsightsIcon, PrepareIcon, SettingsIcon, TodayIcon } from '@/components/nav-icons';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAccent } from '@/contexts/accent-context';
+import { IS_DEMO } from '@/lib/supabase';
 
 // Nav chrome is matched to the web app's <nav> in App.tsx rather than to the
 // theme: indigo active, slate inactive, 10px labels that bold when selected.
 // The app tint stays the body-domain accent for everything else.
 const NAV_INACTIVE = '#4a5568';
+
+/** The demo tour floats just above this — see ABOVE_TAB_BAR in demo-tour.tsx. */
+const TAB_BAR_HEIGHT_WEB = 60;
 
 // Standard expo-router Tabs rather than the (still-unstable) NativeTabs API —
 // five screens matching the web app's Screen union in App.tsx (today / history
@@ -30,6 +35,9 @@ export default function AppTabs() {
         tabBarStyle: {
           backgroundColor: colors.background,
           borderTopColor: colors.border,
+          // The default height clips the labels' descenders on web, where
+          // there is no safe-area inset to add room underneath.
+          ...(Platform.OS === 'web' && { height: TAB_BAR_HEIGHT_WEB, paddingBottom: 8 }),
         },
       }}>
       <Tabs.Screen
@@ -64,6 +72,9 @@ export default function AppTabs() {
         name="settings"
         options={{
           title: 'Settings',
+          // Hidden in the website demo: account, notifications, app lock and
+          // data export are all things a sample account can't meaningfully do.
+          href: IS_DEMO ? null : undefined,
           tabBarIcon: ({ color }) => <SettingsIcon color={color} />,
         }}
       />
