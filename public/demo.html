@@ -1,12 +1,13 @@
 <!doctype html>
 <!--
   The page the website embeds for the interactive demo. Copied to the root of
-  a web export (EXPO_PUBLIC_DEMO=1 npx expo export -p web) along with the app
-  itself, which this loads in an iframe at ./ — so the demo has to be served
-  from a domain root, which Expo's absolute /_expo/ asset paths need anyway.
+  the web export (npm run build:demo) along with the app itself, which this
+  loads in an iframe at ./ — so the demo has to be served from a domain root,
+  which Expo's absolute /_expo/ asset paths need anyway. Deployed to Vercel
+  by vercel.json, where cleanUrls serves this page at /demo.
 
   Embed it with something like:
-    <iframe src="https://demo.example.com/demo.html" style="width:100%;height:920px;border:0"
+    <iframe src="https://demo.example.com/demo" style="width:100%;height:920px;border:0"
             title="Try the Symetric app"></iframe>
 
   What it adds around the app:
