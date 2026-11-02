@@ -20,3 +20,12 @@ start a second migration history in this repo.
 The four production pg_cron jobs are hand-managed and described by no
 migration. See `mosaic-app/supabase/CRON.md`; never infer the schedule from
 the migration files.
+
+# The website demo is this app, built for web
+
+`npm run build:demo` builds an interactive copy of the app for the marketing
+site, on Aisha's sample data in memory (`EXPO_PUBLIC_DEMO=1`, deployed by
+`vercel.json`). Its data comes from the sample-report build, so rebuilding
+the report changes `src/lib/demo/aisha-tables.json`. Commit the two together.
+Before touching `src/lib/demo/`, `IS_DEMO`, or the detection scheduler's
+AsyncStorage keys, read `docs/web-demo.md`.
