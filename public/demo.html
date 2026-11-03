@@ -15,6 +15,9 @@
   - a start screen, so the app's ~3.5 MB bundle only loads when asked for
   - a "sample data" label and a reset button. The app keeps its data in
     memory, so reloading it is the reset.
+  - when it is the whole page rather than embedded (the website sends phones
+    here), a link back to the website. ?start skips the start screen, for a
+    visitor who already pressed a start button to get here.
 -->
 <html lang="en">
 <head>
@@ -125,7 +128,9 @@
       padding: 6px 14px;
       cursor: pointer;
     }
-    .bar button[hidden] { display: none; }
+    .bar button[hidden], .bar a[hidden] { display: none; }
+    .bar a { color: var(--text); font-weight: 600; text-decoration: none; padding: 6px 4px; }
+    .bar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
 
     /* Phones: no frame. The app takes the whole viewport, with the bar on top. */
     @media (max-width: 520px) {
@@ -158,6 +163,7 @@
     </div>
   </div>
   <div class="bar">
+    <a id="back" href="https://symetric.app/#demo" hidden>&larr; Back</a>
     <span>Demo with sample data</span>
     <button type="button" id="reset" hidden>Reset</button>
   </div>
@@ -185,14 +191,33 @@
     addEventListener('resize', fit);
     fit();
 
-    document.getElementById('go').addEventListener('click', () => {
+    function begin() {
+      if (frame) return;
       frame = document.createElement('iframe');
       frame.title = 'Symetric app demo';
       frame.src = './';
       screen.appendChild(frame);
       frame.addEventListener('load', () => start.remove(), { once: true });
       reset.hidden = false;
-    });
+    }
+    document.getElementById('go').addEventListener('click', begin);
+    if (new URLSearchParams(location.search).has('start')) begin();
+
+    // Embedded, the website is all around it already. As the whole page,
+    // going back returns the visitor to where they were on the site; the
+    // link's own address is for anyone who arrived some other way.
+    const back = document.getElementById('back');
+    if (window.top === window) {
+      back.hidden = false;
+      back.addEventListener('click', (e) => {
+        let cameFromSite = false;
+        try { cameFromSite = new URL(document.referrer).hostname.endsWith(new URL(back.href).hostname); } catch {}
+        if (cameFromSite && history.length > 1) {
+          e.preventDefault();
+          history.back();
+        }
+      });
+    }
 
     // The app's data lives in memory, so a fresh load is a fresh start.
     reset.addEventListener('click', () => {
