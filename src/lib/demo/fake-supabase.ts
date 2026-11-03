@@ -393,10 +393,14 @@ export function createDemoClient() {
       },
       getUser: () => ok({ user: DEMO_USER }),
       setSession: () => ok({ session, user: DEMO_USER }),
+      exchangeCodeForSession: () => ok({ session, user: DEMO_USER }),
       // The demo is always signed in. Neither of these can leave it.
       signInWithOtp: () => ok({}),
       signOut: () => Promise.resolve({ error: null }),
       onAuthStateChange: (callback: (event: string, s: typeof session) => void) => {
+        // The auth context subscribes rather than calling getSession, so the
+        // seeding has to happen here too, still before anything signed-in runs.
+        db();
         setTimeout(() => callback('INITIAL_SESSION', session), 0);
         return { data: { subscription: { unsubscribe() {} } } };
       },

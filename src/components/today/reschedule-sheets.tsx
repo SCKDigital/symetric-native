@@ -1,12 +1,13 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { ChevronRight, SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { localTimeToUTC, timeOfDayInTZ } from '@/lib/scheduler';
 import type { CheckIn, CheckInSettings } from '@/lib/supabase';
 import { formatTime, formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { dateToTimeString, timeStringToDate } from '@/lib/date-utils';
 
 // Ports of the web app's RescheduleListSheet and RescheduleTimePickerSheet
 // from today/TodayCards.tsx. Today's next-check-in block has always shown a
@@ -23,13 +24,6 @@ function minutesToHHMM(totalMinutes: number): string {
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-function timeStringToDate(t: string): Date {
-  const [h, m] = t.split(':').map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d;
 }
 
 // ── Step 1: which check-in ───────────────────────────────────────────────────
@@ -96,12 +90,6 @@ export function RescheduleTimePickerSheet({ checkIn, settings, allCheckIns, time
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const handleTimeChange = (event: DateTimePickerEvent, selected?: Date) => {
-    if (Platform.OS !== 'ios') setPicking(false);
-    if (event.type === 'dismissed' || !selected) return;
-    setTimeValue(`${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`);
-  };
-
   const handleConfirm = async () => {
     setError('');
     const [hours, minutes] = timeValue.split(':').map(Number);
@@ -156,15 +144,13 @@ export function RescheduleTimePickerSheet({ checkIn, settings, allCheckIns, time
         <Text style={styles.timeInputText}>{formatWindowTime(timeValue, timeFormat)}</Text>
       </Pressable>
       {picking && (
-        <DateTimePicker
-          value={timeStringToDate(timeValue)}
+        <PlatformPicker
+          variant="plain"
           mode="time"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={handleTimeChange}
+          value={timeStringToDate(timeValue)}
+          onPick={selected => setTimeValue(dateToTimeString(selected))}
+          onClose={() => setPicking(false)}
         />
-      )}
-      {picking && Platform.OS === 'ios' && (
-        <Pressable onPress={() => setPicking(false)}><Text style={styles.done}>Done</Text></Pressable>
       )}
 
       {error !== '' && <Text style={styles.error}>{error}</Text>}
@@ -196,6 +182,5 @@ const useStyles = makeAccentStyles(b => ({
     paddingVertical: 14, paddingHorizontal: 16, marginBottom: 16,
   },
   timeInputText: { fontSize: 20, fontWeight: '600', color: '#e2e8f0' },
-  done: { fontSize: 14, color: b.text, textAlign: 'center', paddingVertical: 8 },
   error: { fontSize: 12, color: '#f87171', marginBottom: 12 },
 }));

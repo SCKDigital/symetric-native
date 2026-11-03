@@ -1,8 +1,8 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { CheckIcon } from '@/components/marker-icons';
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { addDays, dateToString, parseDateString, todayDateString } from '@/lib/date-utils';
 import type { Appointment, AppointmentFocusCategory } from '@/lib/supabase';
 import { brandTint } from '@/constants/brand';
@@ -69,14 +69,6 @@ export default function AppointmentModal({ appointment, onSave, onClose }: Props
     }
   }
 
-  function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-      if (event.type === 'dismissed') return;
-    }
-    if (selectedDate) setDate(dateToString(selectedDate));
-  }
-
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
@@ -96,21 +88,14 @@ export default function AppointmentModal({ appointment, onSave, onClose }: Props
                 <Text style={styles.dateInputText}>{date}</Text>
               </Pressable>
               {showDatePicker && (
-                <View style={styles.pickerWrap}>
-                  <DateTimePicker
-                    value={parseDateString(date)}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    minimumDate={parseDateString(today)}
-                    themeVariant="dark"
-                    onChange={handleDateChange}
-                  />
-                  {Platform.OS === 'ios' && (
-                    <Pressable onPress={() => setShowDatePicker(false)} style={styles.pickerDone}>
-                      <Text style={styles.pickerDoneText}>Done</Text>
-                    </Pressable>
-                  )}
-                </View>
+                <PlatformPicker
+                  style={styles.pickerWrap}
+                  mode="date"
+                  value={parseDateString(date)}
+                  minimumDate={parseDateString(today)}
+                  onPick={selected => setDate(dateToString(selected))}
+                  onClose={() => setShowDatePicker(false)}
+                />
               )}
             </View>
 
@@ -165,9 +150,7 @@ const useStyles = makeAccentStyles(b => ({
   fieldLabel: { fontSize: 13, fontWeight: '500', color: '#8892a4', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   dateInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10, padding: 12, paddingHorizontal: 14 },
   dateInputText: { fontSize: 15, color: '#e2e8f0' },
-  pickerWrap: { marginTop: 10, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
-  pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
+  pickerWrap: { marginTop: 10 },
   bubbleRow: { flexDirection: 'row', gap: 8 },
   bubble: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1.5, borderColor: '#2d3748' },
   bubbleActive: { borderColor: b.text, backgroundColor: brandTint(b.text, 0.15) },

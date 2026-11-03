@@ -25,6 +25,7 @@ import { median, round2, stddevPop } from '@/lib/baseline-stats';
 import { debug } from '@/lib/debug';
 import { resolveActiveDomains } from '@/lib/domains';
 import { supabase } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 const WINDOW_DAYS = 30;
 const MIN_DAYS = 14;    // minimum distinct scheduled_dates in the window
@@ -64,7 +65,7 @@ export async function recalculateRollingBaseline(userId: string): Promise<Recalc
     .select('scheduled_date, mood, energy, anxiety, concentration, irritability, social_battery, sensory_sensitivity, motivation')
     .eq('user_id', userId)
     .eq('status', 'completed')
-    .gte('scheduled_date', windowStart.toLocaleDateString('en-CA'));
+    .gte('scheduled_date', dateToString(windowStart));
 
   if (checkInsError || !checkIns) {
     debug.error('Rolling Baseline', 'Failed to fetch check-ins:', checkInsError);

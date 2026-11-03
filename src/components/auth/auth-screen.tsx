@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SymetricLogo } from '@/components/symetric-logo';
@@ -98,7 +98,10 @@ export function AuthScreen() {
     <SafeAreaView style={styles.formRoot} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.formRoot}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        // 'padding' on Android too: the app draws edge-to-edge there, so the
+        // window no longer resizes for the keyboard. The padding only covers
+        // actual overlap, so it is a no-op wherever the window does resize.
+        behavior="padding">
         <View style={styles.formPadding}>
           <FormLogoHeader />
 

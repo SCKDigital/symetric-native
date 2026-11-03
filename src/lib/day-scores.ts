@@ -1,5 +1,6 @@
 import { DOMAIN_ORDER } from '@/lib/domains';
 import { CheckIn, DomainType, SleepLog } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 export interface DayScores {
   date: string;
@@ -16,7 +17,7 @@ export function buildDayScores(checkIns: CheckIn[] | null, sleepLogs: SleepLog[]
   const dayMap = new Map<string, Partial<Record<DomainType | 'sleep', number[]>>>();
 
   checkIns?.forEach(ci => {
-    const date = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+    const date = dateToString(new Date(ci.scheduled_at));
     if (!dayMap.has(date)) dayMap.set(date, {});
     const entry = dayMap.get(date)!;
     DOMAIN_ORDER.forEach(d => {

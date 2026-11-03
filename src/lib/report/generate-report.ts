@@ -13,6 +13,7 @@ import type { CircadianPattern } from '@/lib/circadian-detection';
 import { BODY_DOMAINS, MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
 import { BODY_COLOR, resolveActiveDomains } from '@/lib/domains';
 import { median } from '@/lib/baseline-stats';
+import { localDayEndISO, localDayStartISO } from '@/lib/date-utils';
 import { calculateSortWeight } from '@/lib/priority-scoring';
 import { isBodyDomain } from '@/lib/pattern-findings';
 import { fetchQuestionsForAppointment } from '@/lib/api/questions';
@@ -190,14 +191,14 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     { data: bodyEventsRaw },
   ] = await Promise.all([
     supabase.from('check_ins').select('*').eq('user_id', userId).eq('status', 'completed')
-      .gte('scheduled_at', dateFrom + 'T00:00:00Z').lte('scheduled_at', dateTo + 'T23:59:59Z')
+      .gte('scheduled_at', localDayStartISO(dateFrom)).lte('scheduled_at', localDayEndISO(dateTo))
       .order('scheduled_at', { ascending: true }),
     // Unfiltered by status (unlike checkIns above) — the weekly-completion
     // table on the Data Quality page needs to know how many were scheduled
     // vs. actually completed, which a status='completed'-only fetch can't
     // tell it.
     supabase.from('check_ins').select('*').eq('user_id', userId)
-      .gte('scheduled_at', dateFrom + 'T00:00:00Z').lte('scheduled_at', dateTo + 'T23:59:59Z')
+      .gte('scheduled_at', localDayStartISO(dateFrom)).lte('scheduled_at', localDayEndISO(dateTo))
       .order('scheduled_at', { ascending: true }),
     supabase.from('sleep_logs').select('*').eq('user_id', userId)
       .gte('log_date', dateFrom).lte('log_date', dateTo).order('log_date', { ascending: true }),

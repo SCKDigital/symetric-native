@@ -4,7 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
-import { formatShortDate, parseDateString } from '@/lib/date-utils';
+import { dateToString, formatShortDate, parseDateString } from '@/lib/date-utils';
 import { DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
 import { supabase } from '@/lib/supabase';
 import type { ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
@@ -30,11 +30,11 @@ interface DayScores {
 function offsetDate(dateStr: string, days: number): string {
   const d = parseDateString(dateStr);
   d.setDate(d.getDate() + days);
-  return d.toLocaleDateString('en-CA');
+  return dateToString(d);
 }
 
 function today(): string {
-  return new Date().toLocaleDateString('en-CA');
+  return dateToString(new Date());
 }
 
 const fmtDate = formatShortDate;
@@ -123,7 +123,7 @@ export default function PatternDetailScreen({
 
       const dayMap = new Map<string, Partial<Record<DomainType, number[]>>>();
       checkIns?.forEach((ci: Record<string, unknown>) => {
-        const date = new Date(ci.scheduled_at as string).toLocaleDateString('en-CA');
+        const date = dateToString(new Date(ci.scheduled_at as string));
         if (!dayMap.has(date)) dayMap.set(date, {});
         const entry = dayMap.get(date)!;
         DOMAIN_ORDER.forEach(d => {

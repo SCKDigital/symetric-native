@@ -7,6 +7,7 @@ import { BODY_DOMAIN_ORDER } from '@/lib/body/constants';
 import { calculateSortWeight } from '@/lib/priority-scoring';
 import { debug } from '@/lib/debug';
 import { BodyDomainType, supabase } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 /**
  * Body-domain sustained deviation + flare/remission cycling — the body
@@ -35,8 +36,8 @@ interface DailyBodyScore {
 export async function runBodyClusterDetection(userId: string): Promise<void> {
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const from = ninetyDaysAgo.toLocaleDateString('en-CA');
-  const today = new Date().toLocaleDateString('en-CA');
+  const from = dateToString(ninetyDaysAgo);
+  const today = dateToString(new Date());
 
   const [{ data: profile }, { data: bodyCheckIns }, { data: allClusters }] = await Promise.all([
     supabase.from('profiles').select('body_tracking_enabled, body_domains_active').eq('id', userId).maybeSingle(),

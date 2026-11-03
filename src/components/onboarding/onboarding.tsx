@@ -4,7 +4,7 @@ import AgeVerificationStep from '@/components/onboarding/age-verification-step';
 import BodyCycleConsentStep from '@/components/onboarding/body-cycle-consent-step';
 import MindConsentStep from '@/components/onboarding/mind-consent-step';
 import { useAuth } from '@/contexts/auth-context';
-import { trackOnboardingAbandoned, trackOnboardingStarted, trackOnboardingStepCompleted } from '@/lib/analytics';
+import { trackOnboardingAbandoned, trackOnboardingCompleted, trackOnboardingStarted, trackOnboardingStepCompleted } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 
 export type OnboardingData = {
@@ -50,6 +50,7 @@ export default function Onboarding() {
     cycleConsent: false,
   });
   const { user, refreshProfile } = useAuth();
+  const [startedAt] = useState(() => Date.now());
 
   const completedRef = useRef(false);
   const currentStepRef = useRef(currentStep);
@@ -114,6 +115,7 @@ export default function Onboarding() {
 
     completedRef.current = true;
     trackOnboardingStepCompleted(3, STEP_NAMES[3]);
+    trackOnboardingCompleted(Math.round((Date.now() - startedAt) / 1000));
 
     await refreshProfile();
   };

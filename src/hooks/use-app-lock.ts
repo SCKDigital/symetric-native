@@ -6,7 +6,7 @@ import { AUTO_RELOCK_MS } from '@/lib/app-lock';
 // Ported from the web app's src/hooks/useAppLock.ts. Mechanic swap: no
 // sessionStorage equivalent on native — web deliberately used
 // sessionStorage (not localStorage) so the unlock survives backgrounding
-// but not closing the tab. On native, an in-memory ref called from this
+// but not closing the tab. On native, in-memory state held by this
 // hook's owner (the root layout's AuthGate, which stays mounted for the
 // whole app lifetime) already has exactly that lifetime: it survives
 // backgrounding and screen navigation, and resets on its own the moment the
@@ -19,19 +19,23 @@ import { AUTO_RELOCK_MS } from '@/lib/app-lock';
 // state (both iOS's transient 'inactive' and 'background') counts as
 // hidden, closest match to the web version's document.hidden boolean.
 export function useAppLock(userId: string | undefined, enabled: boolean) {
-  const [locked, setLocked] = useState(enabled);
   const hiddenAtRef = useRef<number | null>(null);
-  const unlockedUserIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const shouldBeLocked = enabled && !!userId && unlockedUserIdRef.current !== userId;
-    setLocked(shouldBeLocked);
-  }, [enabled, userId]);
+  // State rather than a ref, so `locked` can be derived during render. It
+  // used to be set from an effect, which runs after the commit: the render
+  // in which the profile arrived drew the tab shell (and started its
+  // fetches) for a frame before the lock screen replaced it.
+  const [unlockedUserId, setUnlockedUserId] = useState<string | null>(null);
+  const locked = enabled && !!userId && unlockedUserId !== userId;
+  // Away from the foreground. With the lock on, the app's contents are
+  // covered while it is, so iOS's app-switcher snapshot doesn't show the
+  // health data the PIN is there to keep private.
+  const [away, setAway] = useState(false);
 
   useEffect(() => {
     if (!enabled || !userId) return;
 
     const subscription = AppState.addEventListener('change', nextState => {
+      setAway(nextState !== 'active');
       if (nextState !== 'active') {
         hiddenAtRef.current = Date.now();
         return;
@@ -39,20 +43,15 @@ export function useAppLock(userId: string | undefined, enabled: boolean) {
       if (hiddenAtRef.current === null) return;
       const elapsed = Date.now() - hiddenAtRef.current;
       hiddenAtRef.current = null;
-      if (elapsed > AUTO_RELOCK_MS) {
-        unlockedUserIdRef.current = null;
-        setLocked(true);
-      }
+      if (elapsed > AUTO_RELOCK_MS) setUnlockedUserId(null);
     });
 
     return () => subscription.remove();
   }, [enabled, userId]);
 
   const unlock = useCallback(() => {
-    if (!userId) return;
-    unlockedUserIdRef.current = userId;
-    setLocked(false);
+    if (userId) setUnlockedUserId(userId);
   }, [userId]);
 
-  return { locked, unlock };
+  return { locked, unlock, obscured: enabled && !!userId && away };
 }

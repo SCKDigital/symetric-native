@@ -1,6 +1,7 @@
 import { debug } from '@/lib/debug';
 import { checkCircadianQuality } from '@/lib/detection/data-quality-checks';
 import { supabase } from '@/lib/supabase';
+import { dateToString, todayDateString } from '@/lib/date-utils';
 
 // Ported from the web app's src/lib/circadianDetection.ts, unchanged — pure
 // logic + Supabase reads/writes, no DOM dependency. This closes the gap
@@ -84,7 +85,7 @@ export async function detectCircadianPatterns(userId: string): Promise<void> {
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'completed')
-    .gte('scheduled_date', thirtyDaysAgo.toISOString().split('T')[0])
+    .gte('scheduled_date', dateToString(thirtyDaysAgo))
     .order('scheduled_at', { ascending: true });
 
   if (!checkIns || checkIns.length === 0) return;
@@ -105,8 +106,8 @@ export async function detectCircadianPatterns(userId: string): Promise<void> {
     });
   });
 
-  const windowEnd = new Date().toISOString().split('T')[0];
-  const windowStart = thirtyDaysAgo.toISOString().split('T')[0];
+  const windowEnd = todayDateString();
+  const windowStart = dateToString(thirtyDaysAgo);
 
   const patterns: Omit<CircadianPattern, 'id' | 'created_at' | 'updated_at'>[] = [];
 
@@ -227,27 +228,4 @@ export function formatCircadianPattern(pattern: CircadianPattern): {
   const blocks = allBlocks.filter((b): b is { name: string; avg: number; count: number } => b.avg !== null);
 
   return { domain, blocks, totalCheckins: pattern.total_checkins, range: pattern.range };
-}
-
-/**
- * Check if circadian_available milestone conditions are met:
- *   - At least 1 domain in circadian_patterns with range ≥ 2.0
- *   - At least 30 completed check-ins total
- * Inserts the milestone record if newly achieved. Returns true if milestone should be shown.
- */
-export async function check30DayMilestone(userId: string): Promise<boolean> {
-  const { data: existing } = await supabase.from('milestones_achieved').select('id').eq('user_id', userId).eq('milestone_type', 'circadian_available').maybeSingle();
-
-  if (existing) return false;
-
-  const { data: circadianData } = await supabase.from('circadian_patterns').select('domain').eq('user_id', userId).gte('range', 2.0).limit(1).maybeSingle();
-
-  if (!circadianData) return false;
-
-  const { count } = await supabase.from('check_ins').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'completed');
-
-  if ((count ?? 0) < 30) return false;
-
-  await supabase.from('milestones_achieved').insert({ user_id: userId, milestone_type: 'circadian_available' });
-  return true;
 }

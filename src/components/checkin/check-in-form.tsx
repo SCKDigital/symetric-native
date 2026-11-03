@@ -1,6 +1,6 @@
 import { brandTint } from '@/constants/brand';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import DomainSlider from '@/components/checkin/domain-slider';
@@ -128,7 +128,8 @@ export default function CheckInForm({
   }
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    // 'padding' on Android too — see auth-screen.tsx.
+    <KeyboardAvoidingView style={styles.root} behavior="padding">
       <ScrollView contentContainerStyle={styles.content} scrollEnabled={scrollEnabled}>
         <View style={styles.card}>
           <Text style={styles.cardHeader}>{quickCheckInMode ? 'Quick mind check-in' : 'Now · Mind check-in'}</Text>

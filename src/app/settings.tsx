@@ -48,8 +48,8 @@ import { makeAccentStyles } from '@/lib/accent-styles';
 // missing.
 //
 // The Markers section is gone rather than ported: the web app has never had
-// one here, and marker CRUD already lives on Prepare's notable-changes-section
-// (and Today's "+ Add an event") natively, so nothing is lost by matching.
+// one here, and markers are added from Today's "+ Add an event" and edited
+// from History natively, so nothing is lost by matching.
 //
 // Not ported: the domain suggestion cards (an additive prompt, not a control),
 // haptic feedback (needs expo-haptics, which this app doesn't depend on yet),

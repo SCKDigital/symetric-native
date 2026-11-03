@@ -1,9 +1,9 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingCheckbox, OnboardingPrimaryButton } from '@/components/onboarding/onboarding-controls';
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { calculateAge, dateToString, parseDateString } from '@/lib/date-utils';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
@@ -30,14 +30,6 @@ export default function AgeVerificationStep({ dateOfBirth, ageConfirmed, onUpdat
   const isUnder18 = age !== null && age < 18 && !isFutureOrInvalid;
   const canProceed = !!dateOfBirth && ageConfirmed && age !== null && age >= 18 && !isFutureOrInvalid && !isTooOld;
 
-  const handleChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowPicker(false);
-      if (event.type === 'dismissed') return;
-    }
-    if (selectedDate) onUpdate({ dateOfBirth: dateToString(selectedDate) });
-  };
-
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.content}>
@@ -51,21 +43,14 @@ export default function AgeVerificationStep({ dateOfBirth, ageConfirmed, onUpdat
         </Pressable>
 
         {showPicker && (
-          <View style={styles.pickerWrap}>
-            <DateTimePicker
-              value={dateOfBirth ? parseDateString(dateOfBirth) : new Date(2000, 0, 1)}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              maximumDate={new Date()}
-              themeVariant="dark"
-              onChange={handleChange}
-            />
-            {Platform.OS === 'ios' && (
-              <Pressable onPress={() => setShowPicker(false)} style={styles.pickerDone}>
-                <Text style={styles.pickerDoneText}>Done</Text>
-              </Pressable>
-            )}
-          </View>
+          <PlatformPicker
+            style={styles.pickerWrap}
+            mode="date"
+            value={dateOfBirth ? parseDateString(dateOfBirth) : new Date(2000, 0, 1)}
+            maximumDate={new Date()}
+            onPick={selected => onUpdate({ dateOfBirth: dateToString(selected) })}
+            onClose={() => setShowPicker(false)}
+          />
         )}
 
         {isUnder18 && <Text style={styles.errorText}>You must be 18 or older to use Symetric.</Text>}
@@ -91,9 +76,7 @@ const useStyles = makeAccentStyles(b => ({
   dateInput: { padding: 14, backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10, marginBottom: 16 },
   dateInputText: { fontSize: 15, color: '#e2e8f0' },
   dateInputPlaceholder: { fontSize: 15, color: '#4a5568' },
-  pickerWrap: { marginBottom: 16, backgroundColor: '#141820', borderRadius: 10, overflow: 'hidden' },
-  pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
+  pickerWrap: { marginBottom: 16, backgroundColor: '#141820' },
   errorText: { fontSize: 13, color: '#f87171', marginBottom: 16, lineHeight: 19 },
   checkboxSpacing: { marginBottom: 28 },
 }));

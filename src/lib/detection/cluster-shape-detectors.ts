@@ -1,6 +1,6 @@
 // Ported from the web app's src/lib/detection/clusterShapeDetectors.ts, unchanged.
 
-import { parseDateString } from '@/lib/date-utils';
+import { dateToString, parseDateString } from '@/lib/date-utils';
 import { CheckIn, DomainType } from '@/lib/supabase';
 
 // ── Intraday volatility detection ─────────────────────────────────────────────
@@ -12,7 +12,7 @@ export function detectIntradayVolatility(checkIns: CheckIn[], domain: DomainType
   checkIns.forEach(ci => {
     const val = ci[domain];
     if (val === null || val === undefined) return;
-    const date = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+    const date = dateToString(new Date(ci.scheduled_at));
     if (!byDate.has(date)) byDate.set(date, []);
     byDate.get(date)!.push(val as number);
   });
@@ -44,7 +44,7 @@ export function detectWeeklyOscillations(
     const windowStart = sorted[i].date;
     const windowEndDate = parseDateString(windowStart);
     windowEndDate.setDate(windowEndDate.getDate() + 6);
-    const windowEndStr = windowEndDate.toLocaleDateString('en-CA');
+    const windowEndStr = dateToString(windowEndDate);
 
     const window = sorted.filter(d => d.date >= windowStart && d.date <= windowEndStr);
     if (window.length < 4) continue;

@@ -11,8 +11,8 @@ import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
 // resolution failed and the router rendered its "Unmatched Route" screen over
 // the app — the session was actually established underneath, but sign-in
 // looked broken. This route exists to be that match: it re-runs
-// trySetSessionFromUrl (idempotent — setSession with the same tokens is a
-// no-op, and a URL carrying no tokens returns false rather than throwing)
+// trySetSessionFromUrl (idempotent — repeat calls for one code share a single
+// exchange, and a URL carrying no code returns false rather than throwing)
 // purely so the flow still completes if the listener missed the URL, then
 // sends the user to the tab shell. AuthGate decides what actually renders
 // there; this screen never gates anything itself.

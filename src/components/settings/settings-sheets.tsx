@@ -1,11 +1,12 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { dateToTimeString, timeStringToDate } from '@/lib/date-utils';
 
 // The scheduling and preference sheets, ported from the web app's
 // ActiveWindowSheet.tsx, FrequencySheet.tsx and sheets/SettingsSheets.tsx.
@@ -18,28 +19,12 @@ function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
-function timeStringToDate(t: string): Date {
-  const [h, m] = t.split(':').map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-
-function dateToTimeString(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
 /** A tappable time value that opens the platform time picker. */
 function TimeField({ label, value, timeFormat, onChange }: {
   label: string; value: string; timeFormat: TimeFormat; onChange: (v: string) => void;
 }) {
   const styles = useStyles();
   const [picking, setPicking] = useState(false);
-  const handleChange = (event: DateTimePickerEvent, selected?: Date) => {
-    if (Platform.OS !== 'ios') setPicking(false);
-    if (event.type === 'dismissed' || !selected) return;
-    onChange(dateToTimeString(selected));
-  };
   return (
     <View style={styles.timeField}>
       <Text style={styles.timeFieldLabel}>{label.toUpperCase()}</Text>
@@ -47,17 +32,13 @@ function TimeField({ label, value, timeFormat, onChange }: {
         <Text style={styles.timeInputText}>{formatWindowTime(value, timeFormat)}</Text>
       </Pressable>
       {picking && (
-        <DateTimePicker
-          value={timeStringToDate(value)}
+        <PlatformPicker
+          variant="plain"
           mode="time"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={handleChange}
+          value={timeStringToDate(value)}
+          onPick={selected => onChange(dateToTimeString(selected))}
+          onClose={() => setPicking(false)}
         />
-      )}
-      {picking && Platform.OS === 'ios' && (
-        <Pressable onPress={() => setPicking(false)}>
-          <Text style={styles.timeDone}>Done</Text>
-        </Pressable>
       )}
     </View>
   );
@@ -256,7 +237,6 @@ const useStyles = makeAccentStyles(b => ({
     paddingVertical: 11, paddingHorizontal: 14,
   },
   timeInputText: { fontSize: 15, color: '#e2e8f0' },
-  timeDone: { fontSize: 14, color: b.text, textAlign: 'center', paddingVertical: 8 },
 
   segmented: {
     flexDirection: 'row', backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533',

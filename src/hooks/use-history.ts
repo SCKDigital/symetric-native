@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth } from '@/contexts/auth-context';
-import { ensureUTC } from '@/lib/date-utils';
+import { dateToString, ensureUTC } from '@/lib/date-utils';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { CheckIn, SleepLog, supabase } from '@/lib/supabase';
 import type { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite } from '@/lib/supabase';
@@ -40,12 +40,12 @@ export function useHistory() {
     if (!user) return;
     setState(prev => ({ ...prev, loading: true }));
 
-    const todayStr = new Date().toLocaleDateString('en-CA');
+    const todayStr = dateToString(new Date());
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const fromStr = ninetyDaysAgo.toLocaleDateString('en-CA');
+    const fromStr = dateToString(ninetyDaysAgo);
 
     const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
 
@@ -103,7 +103,7 @@ export function useHistory() {
     dayMap.set(todayStr, emptyDay(todayStr));
 
     checkIns?.forEach(ci => {
-      const date = ensureUTC(ci.scheduled_at).toLocaleDateString('en-CA');
+      const date = dateToString(ensureUTC(ci.scheduled_at));
       if (!dayMap.has(date)) dayMap.set(date, emptyDay(date));
       dayMap.get(date)!.checkIns.push(ci);
     });
@@ -120,7 +120,7 @@ export function useHistory() {
     });
 
     const sorted = Array.from(dayMap.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const thirtyDaysAgoStr = thirtyDaysAgo.toLocaleDateString('en-CA');
+    const thirtyDaysAgoStr = dateToString(thirtyDaysAgo);
     const hasDataBeyond30Days = sorted.some(d => d.date < thirtyDaysAgoStr);
 
     setState({ loading: false, days: hasDataBeyond30Days ? sorted : sorted.filter(d => d.date >= thirtyDaysAgoStr) });

@@ -3,6 +3,7 @@ import { Session, User } from '@supabase/supabase-js';
 
 import { identifyUser, resetUser } from '@/lib/analytics';
 import { buildEmailRedirectUrl } from '@/lib/auth-deep-link';
+import { removeThisDevicePushToken } from '@/lib/push-notifications';
 import { Profile, supabase } from '@/lib/supabase';
 
 interface AuthContextType {
@@ -72,49 +73,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const timeout = setTimeout(() => setLoading(false), 8000);
+    // Whose session is currently held. A token refresh, or a repeat SIGNED_IN
+    // for the same account, is not a change of identity.
+    let currentUserId: string | null = null;
 
-    supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        (async () => {
-          const gen = ++fetchGenRef.current;
-          setSession(session);
-          setUser(session?.user ?? null);
-
-          if (session?.user) {
-            const profileData = await fetchProfileWithRetry(session.user.id);
-            if (gen !== fetchGenRef.current) return;
-            setProfile(profileData ?? null);
-          } else {
-            setProfile(null);
-          }
-
-          clearTimeout(timeout);
-          setLoading(false);
-        })();
-      })
-      .catch(() => {
-        clearTimeout(timeout);
-        setLoading(false);
-      });
-
+    // No separate getSession() call: subscribing fires INITIAL_SESSION with
+    // the stored session, and handling both meant every launch fetched the
+    // profile twice.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
-        setSession(session);
-        setUser(session?.user ?? null);
+        const nextUserId = session?.user?.id ?? null;
+        const identityChanged = nextUserId !== currentUserId;
+        currentUserId = nextUserId;
 
-        // A silent token refresh doesn't change who's signed in — only
-        // re-fetch the profile (and flash the loading screen via
-        // `profile === undefined`) on events that represent an actual
-        // identity change.
+        setSession(session);
+        // Keep the same User object while the account is unchanged. A token
+        // refresh hands back a fresh object for the same person, and two dozen
+        // effects are keyed on `user`: each refresh refetched every screen and
+        // sent Today through its loading state, which unmounted a check-in the
+        // user was halfway through.
+        setUser(prev => (prev?.id === nextUserId ? prev : session?.user ?? null));
+
         if (_event === 'TOKEN_REFRESHED') return;
 
         if (session?.user) {
           identifyUser(session.user.id);
           const gen = ++fetchGenRef.current;
-          setProfile(undefined);
+          // Only a new identity goes back through the loading screen; the
+          // same account just gets its profile re-read in place.
+          if (identityChanged) setProfile(undefined);
           let profileData = await fetchProfileWithRetry(session.user.id);
           if (gen !== fetchGenRef.current) return;
           if (profileData && !profileData.timezone) {
@@ -126,11 +115,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
         }
+        clearTimeout(timeout);
         setLoading(false);
-      })();
+      })().catch(e => {
+        console.error('[auth] state change handling failed:', e);
+        clearTimeout(timeout);
+        setLoading(false);
+      });
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signInWithMagicLink = async (email: string) => {
@@ -145,8 +142,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Before the session goes: the row is only deletable while signed in.
+    // Left behind, it kept delivering this account's reminders to a device
+    // someone else may now be using.
+    await removeThisDevicePushToken();
     const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    if (error) {
+      // Offline, or the server rejected the revoke. Signing out of this
+      // device must still work; the server-side session expires on its own.
+      console.error('[auth] sign-out failed, clearing the local session:', error);
+      await supabase.auth.signOut({ scope: 'local' });
+    }
     resetUser();
   };
 

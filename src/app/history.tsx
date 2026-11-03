@@ -9,16 +9,17 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { DayData, useHistory } from '@/hooks/use-history';
 import { resolveBodyColumnMode } from '@/lib/history/day-card-helpers';
-import { parseDateString } from '@/lib/date-utils';
+import { addDays, parseDateString, todayDateString } from '@/lib/date-utils';
 import { deleteMarker, updateMarker } from '@/lib/queries/markers';
 import type { InterventionMarker } from '@/types/marker';
 
-const todayStr = new Date().toLocaleDateString('en-CA');
-const yesterdayStr = new Date(Date.now() - 86400000).toLocaleDateString('en-CA');
-
 function formatDayLabel(dateStr: string): string {
-  if (dateStr === todayStr) return 'Today';
-  if (dateStr === yesterdayStr) return 'Yesterday';
+  // Read per call, not once at module load: a module-level "today" went stale
+  // the first midnight the app stayed open, and every label shifted by a day.
+  // Yesterday by calendar, not 24 hours back, which misses on DST changeovers.
+  const today = todayDateString();
+  if (dateStr === today) return 'Today';
+  if (dateStr === addDays(today, -1)) return 'Yesterday';
   return parseDateString(dateStr).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 

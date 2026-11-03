@@ -54,14 +54,6 @@ export function NoteIcon({ size = 14, color = '#8892a4' }: IconProps) {
   );
 }
 
-export function DotIcon({ size = 14, color = '#8892a4' }: IconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx={12} cy={12} r={9} />
-    </Svg>
-  );
-}
-
 export function CheckIcon({ size = 14, color = '#8892a4' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">

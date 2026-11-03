@@ -4,7 +4,6 @@ import { Platform } from 'react-native';
 
 import { HistoryIcon, InsightsIcon, PrepareIcon, SettingsIcon, TodayIcon } from '@/components/nav-icons';
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAccent } from '@/contexts/accent-context';
 import { trackScreen } from '@/lib/analytics';
 import { IS_DEMO } from '@/lib/supabase';
@@ -23,8 +22,9 @@ const TAB_BAR_HEIGHT_WEB = 60;
 // report, not as its own tab — see BODY_TRACKING_AS_TAB / cycle feature notes
 // on the web side.
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  // Dark only, on every platform. Reading the system scheme gave a web
+  // visitor in light mode a white tab bar on an app with no light theme.
+  const colors = Colors.dark;
   const accent = useAccent();
 
   // Which tab is open: the path only (no query string), and every route is

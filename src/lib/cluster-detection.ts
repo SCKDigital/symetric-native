@@ -7,6 +7,7 @@ import { median } from '@/lib/baseline-stats';
 import { calculateSortWeight } from '@/lib/priority-scoring';
 import { resolveActiveDomains } from '@/lib/domains';
 import { CheckIn, DomainType, supabase } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 /**
  * Cluster detection — multi-day sustained or cycling deviations from personal
@@ -41,9 +42,9 @@ export async function runClusterDetection(userId: string): Promise<void> {
 
   const [{ data: checkIns }, { data: sleepLogs }, { data: baselines }, { data: allClusters }, { data: settings }] = await Promise.all([
     supabase.from('check_ins').select('*').eq('user_id', userId).eq('status', 'completed').gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: true }),
-    supabase.from('sleep_logs').select('*').eq('user_id', userId).eq('skipped', false).gte('log_date', ninetyDaysAgo.toLocaleDateString('en-CA')).order('log_date', { ascending: true }),
+    supabase.from('sleep_logs').select('*').eq('user_id', userId).eq('skipped', false).gte('log_date', dateToString(ninetyDaysAgo)).order('log_date', { ascending: true }),
     supabase.from('baselines').select('*').eq('user_id', userId).eq('is_current', true),
-    supabase.from('detected_clusters').select('*').eq('user_id', userId).gte('start_date', ninetyDaysAgo.toLocaleDateString('en-CA')),
+    supabase.from('detected_clusters').select('*').eq('user_id', userId).gte('start_date', dateToString(ninetyDaysAgo)),
     supabase.from('check_in_settings').select('active_domains, quick_checkin_domains, check_ins_per_day').eq('user_id', userId).single(),
   ]);
 
@@ -63,7 +64,7 @@ export async function runClusterDetection(userId: string): Promise<void> {
   const dayMap = new Map<string, { domainSums: Partial<Record<DomainType | 'sleep', number[]>> }>();
 
   checkIns.forEach(ci => {
-    const date = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+    const date = dateToString(new Date(ci.scheduled_at));
     if (!dayMap.has(date)) dayMap.set(date, { domainSums: {} });
     const entry = dayMap.get(date)!;
     activeDomains.forEach(d => {
@@ -121,7 +122,7 @@ export async function runClusterDetection(userId: string): Promise<void> {
   });
 
   const allDomains: (DomainType | 'sleep')[] = [...activeDomains, 'sleep'];
-  const today = new Date().toLocaleDateString('en-CA');
+  const today = dateToString(new Date());
 
   const streakUpsertPromises: Promise<void>[] = [];
 
@@ -157,7 +158,7 @@ export async function runClusterDetection(userId: string): Promise<void> {
     for (const { date, swingMagnitude } of volatilityPatterns) {
       const existing = (allClusters ?? []).find(c => c.cluster_type === 'intraday_volatility' && c.start_date === date && Array.isArray(c.domains_involved) && c.domains_involved.includes(domain) && c.domains_involved.length === 1);
       const checkInsOnDay = (checkIns ?? []).filter(ci => {
-        const ciDate = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+        const ciDate = dateToString(new Date(ci.scheduled_at));
         return ciDate === date && ci[domain] !== null && ci[domain] !== undefined;
       }).length;
 
@@ -302,7 +303,7 @@ async function upsertCluster(userId: string, domain: DomainType | 'sleep', direc
   const streakEnd = streak[streak.length - 1].date;
 
   const checkInsForDomain = checkIns.filter(ci => {
-    const ciDate = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+    const ciDate = dateToString(new Date(ci.scheduled_at));
     return ciDate >= streakStart && ciDate <= streakEnd && (domain === 'sleep' ? true : ci[domain] !== null && ci[domain] !== undefined);
   });
   const checkInsInPeriod = checkInsForDomain.length;
@@ -324,11 +325,11 @@ async function upsertCluster(userId: string, domain: DomainType | 'sleep', direc
 
     if (domain !== 'sleep') {
       const poorSleepDays = checkIns.filter(ci => {
-        const ciDate = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+        const ciDate = dateToString(new Date(ci.scheduled_at));
         return ciDate >= streakStart && ciDate <= streakEnd && ci[domain] !== null && (sleepByDate.get(ciDate) ?? 10) <= 4;
       });
       const goodSleepDays = checkIns.filter(ci => {
-        const ciDate = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+        const ciDate = dateToString(new Date(ci.scheduled_at));
         return ciDate >= streakStart && ciDate <= streakEnd && ci[domain] !== null && (sleepByDate.get(ciDate) ?? 0) >= 7;
       });
 
@@ -340,7 +341,7 @@ async function upsertCluster(userId: string, domain: DomainType | 'sleep', direc
 
       if (domain === 'energy' && direction === 'elevated') {
         const highEnergyPoorSleepDays = checkIns.filter(ci => {
-          const ciDate = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+          const ciDate = dateToString(new Date(ci.scheduled_at));
           return ciDate >= streakStart && ciDate <= streakEnd && ci.energy != null && ci.energy >= 8 && (sleepByDate.get(ciDate) ?? 10) <= 4;
         }).length;
         highDespitePoorSleep = highEnergyPoorSleepDays >= 3;

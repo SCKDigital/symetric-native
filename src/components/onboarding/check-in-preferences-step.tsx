@@ -1,11 +1,12 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Toggle } from '@/components/settings/settings-primitives';
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { dateToTimeString, timeStringToDate } from '@/lib/date-utils';
 
 export interface CheckInPreferencesUpdate {
   checkInsPerDay?: number;
@@ -35,17 +36,6 @@ type PickerField = 'start' | 'end' | 'dndStart' | 'dndEnd';
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
-}
-
-function timeStringToDate(t: string): Date {
-  const [h, m] = t.split(':').map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-
-function dateToTimeString(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 // Ported from the web app's CheckInPreferencesStep.tsx — same copy, same
@@ -89,12 +79,7 @@ export default function CheckInPreferencesStep({
     return field === 'dndStart' ? dndStart : dndEnd;
   };
 
-  const handleTimeChange = (field: PickerField) => (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setActivePicker(null);
-      if (event.type === 'dismissed') return;
-    }
-    if (!selectedDate) return;
+  const handleTimePick = (field: PickerField) => (selectedDate: Date) => {
     const value = dateToTimeString(selectedDate);
     if (field === 'start') onUpdate({ windowStart: value });
     else if (field === 'end') onUpdate({ windowEnd: value });
@@ -103,20 +88,14 @@ export default function CheckInPreferencesStep({
   };
 
   const timePicker = (field: PickerField) => activePicker === field && (
-    <View style={styles.pickerWrap}>
-      <DateTimePicker
-        value={timeStringToDate(pickerValueFor(field))}
-        mode="time"
-        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-        themeVariant="dark"
-        onChange={handleTimeChange(field)}
-      />
-      {Platform.OS === 'ios' && (
-        <Pressable onPress={() => setActivePicker(null)} style={styles.pickerDone}>
-          <Text style={styles.pickerDoneText}>Done</Text>
-        </Pressable>
-      )}
-    </View>
+    <PlatformPicker
+      style={styles.pickerWrap}
+      dividerColor="#334155"
+      mode="time"
+      value={timeStringToDate(pickerValueFor(field))}
+      onPick={handleTimePick(field)}
+      onClose={() => setActivePicker(null)}
+    />
   );
 
   return (
@@ -243,9 +222,7 @@ const useStyles = makeAccentStyles(b => ({
   sublabelSpaced: { marginTop: 16 },
   timeInput: { paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#1a1d28', borderWidth: 1, borderColor: '#334155', borderRadius: 10 },
   timeInputText: { fontSize: 15, color: '#e2e8f0' },
-  pickerWrap: { marginTop: 12, backgroundColor: '#1a1d28', borderRadius: 10, overflow: 'hidden' },
-  pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#334155' },
-  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
+  pickerWrap: { marginTop: 12, backgroundColor: '#1a1d28' },
   errorText: { fontSize: 13, color: '#f87171', marginTop: 12, lineHeight: 19 },
   buttonRow: { flexDirection: 'row', gap: 16, alignItems: 'center' },
   backButton: { paddingVertical: 12, paddingHorizontal: 24 },

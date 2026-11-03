@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/contexts/auth-context';
-import { parseDateString } from '@/lib/date-utils';
+import { trackReportGenerated } from '@/lib/analytics';
+import { localDayEndISO, localDayStartISO, parseDateString } from '@/lib/date-utils';
 import { generateReport } from '@/lib/report/generate-report';
 import { supabase } from '@/lib/supabase';
 import type { DetectedCluster } from '@/lib/supabase';
@@ -50,8 +51,8 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('status', 'completed')
-      .gte('scheduled_at', fromDate + 'T00:00:00Z')
-      .lte('scheduled_at', toDate + 'T23:59:59Z')
+      .gte('scheduled_at', localDayStartISO(fromDate))
+      .lte('scheduled_at', localDayEndISO(toDate))
       .then(({ count }) => setCheckInCount(count ?? 0));
   }, [user, fromDate, toDate]);
 
@@ -68,6 +69,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
         await supabase.from('profiles').update({ report_display_name: trimmed || null }).eq('id', user.id);
       }
 
+      const startedAt = Date.now();
       const { uri } = await generateReport({
         userId: user.id,
         userName: trimmed || profile.display_name || profile.email,
@@ -80,6 +82,13 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
         includeBody,
         includeCycle,
       });
+      // Counts and timing only, per analytics.ts's rule.
+      trackReportGenerated(
+        Math.round((parseDateString(toDate).getTime() - parseDateString(fromDate).getTime()) / 86_400_000) + 1,
+        clusters.length,
+        clusters.filter(c => c.flagged_for_report).length,
+        { generationTimeMs: Date.now() - startedAt },
+      );
       const Sharing = await import('expo-sharing');
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });

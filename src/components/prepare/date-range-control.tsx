@@ -1,7 +1,7 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { addDays, dateToString, parseDateString, todayDateString } from '@/lib/date-utils';
 import { defaultRangeForPreset, weeksBetween, type PrepareRange } from '@/lib/prepare-range';
 import type { InterventionMarker } from '@/types/marker';
@@ -50,9 +50,8 @@ export default function DateRangeControl({ range, onChange, lastVisitDate, mostR
     onChange({ preset: 'custom', start: clampedStart, end: clampedEnd });
   }
 
-  function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
-    if (Platform.OS === 'android') setEditingField(null);
-    if (event.type === 'dismissed' || !selectedDate || !editingField) return;
+  function handleDatePick(selectedDate: Date) {
+    if (!editingField) return;
     const value = dateToString(selectedDate);
     if (editingField === 'start') applyCustom(value, range.end);
     else applyCustom(range.start, value);
@@ -102,21 +101,14 @@ export default function DateRangeControl({ range, onChange, lastVisitDate, mostR
       )}
 
       {editingField && (
-        <View style={styles.pickerWrap}>
-          <DateTimePicker
-            value={parseDateString(editingField === 'start' ? range.start : range.end)}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            maximumDate={parseDateString(today)}
-            themeVariant="dark"
-            onChange={handleDateChange}
-          />
-          {Platform.OS === 'ios' && (
-            <Pressable onPress={() => setEditingField(null)} style={styles.pickerDone}>
-              <Text style={styles.pickerDoneText}>Done</Text>
-            </Pressable>
-          )}
-        </View>
+        <PlatformPicker
+          style={styles.pickerWrap}
+          mode="date"
+          value={parseDateString(editingField === 'start' ? range.start : range.end)}
+          maximumDate={parseDateString(today)}
+          onPick={handleDatePick}
+          onClose={() => setEditingField(null)}
+        />
       )}
 
       <Text style={styles.summary}>{fmtLabel(range.start)} to {fmtLabel(range.end)} · {weeksBetween(range.start, range.end)} weeks</Text>
@@ -138,8 +130,6 @@ const useStyles = makeAccentStyles(b => ({
   customInput: { backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#2d3748', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 10 },
   customInputText: { fontSize: 13, color: '#c8d0e0' },
   customDash: { color: '#4a5568', marginBottom: 8 },
-  pickerWrap: { marginBottom: 10, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
-  pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
+  pickerWrap: { marginBottom: 10 },
   summary: { fontSize: 12, color: '#4a5568' },
 }));

@@ -1,5 +1,5 @@
 import { median } from '@/lib/baseline-stats';
-import { getDatesInRange } from '@/lib/date-utils';
+import { dateToString, getDatesInRange } from '@/lib/date-utils';
 import { computeRawConnection } from '@/lib/detection/compute-connection';
 import { DOMAIN_ORDER } from '@/lib/domains';
 import type { CheckIn, SleepLog } from '@/lib/supabase';
@@ -62,7 +62,7 @@ function buildDailyMeans(checkIns: CheckIn[], sleepLogs: SleepLog[], dates: stri
 
   const byDate: Record<string, CheckIn[]> = {};
   checkIns.forEach(ci => {
-    const date = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+    const date = dateToString(new Date(ci.scheduled_at));
     if (!byDate[date]) byDate[date] = [];
     byDate[date].push(ci);
   });

@@ -9,6 +9,7 @@
 // of the week.
 
 import type { BodyDomainType } from '@/lib/supabase';
+import { mean } from '@/lib/baseline-stats';
 
 export interface BodyTimeOfDayPattern {
   domain: BodyDomainType;
@@ -30,10 +31,6 @@ const MIN_DAYS = 10;
 const MIN_DIFFERENCE = 1.5;
 const SOLID_DIFFERENCE = 2.5;
 const SOLID_DAYS = 20;
-
-function mean(arr: number[]): number {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
 
 function quality(diff: number, days: number): 'solid' | 'partial' | 'limited' {
   if (diff >= SOLID_DIFFERENCE && days >= SOLID_DAYS) return 'solid';

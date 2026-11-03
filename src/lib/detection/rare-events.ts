@@ -1,5 +1,6 @@
 import { debug } from '@/lib/debug';
 import { BodyDomainType, DomainType } from '@/lib/supabase';
+import { mean } from '@/lib/baseline-stats';
 
 /**
  * Rare-event detection — statistically infrequent day-shapes, not clinical
@@ -39,10 +40,6 @@ const MAX_RESULTS = 3;
 
 function isRare(count: number, spanDays: number): boolean {
   return spanDays >= 60 ? count <= 6 : count <= 3;
-}
-
-function mean(arr: number[]): number {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
 interface ScoredEvent {

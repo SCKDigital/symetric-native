@@ -1,4 +1,5 @@
 import type { CheckIn } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 export interface WeeklyCompletion {
   weekStart: string; // ISO YYYY-MM-DD, the Monday of the week
@@ -20,12 +21,12 @@ export function computeWeeklyCompletion(checkIns: CheckIn[], dateFrom: string, d
     const daysToMon = day === 0 ? -6 : 1 - day;
     const mon = new Date(d);
     mon.setDate(d.getDate() + daysToMon);
-    return mon.toISOString().slice(0, 10);
+    return dateToString(mon);
   }
 
   const byWeek: Record<string, { scheduled: number; completed: number; oneTap: number }> = {};
   for (const ci of checkIns) {
-    const date = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+    const date = dateToString(new Date(ci.scheduled_at));
     if (date < dateFrom || date > dateTo) continue;
     const ws = getWeekStart(date);
     if (!byWeek[ws]) byWeek[ws] = { scheduled: 0, completed: 0, oneTap: 0 };

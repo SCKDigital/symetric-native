@@ -20,23 +20,14 @@ import { BODY_DOMAIN_ORDER } from '@/lib/body/constants';
 import { resolveActiveDomains } from '@/lib/domains';
 import { debug } from '@/lib/debug';
 import { BodyDomainType, supabase } from '@/lib/supabase';
+import { addDays, dateToString, todayDateString } from '@/lib/date-utils';
 
 const WINDOW_DAYS = 30;
 const MIN_OVERLAP = 14;
 
-function todayStr(): string {
-  return new Date().toLocaleDateString('en-CA');
-}
-
-function nDaysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toLocaleDateString('en-CA');
-}
-
 export async function detectBodyMindConnections(userId: string): Promise<void> {
-  const windowEnd = todayStr();
-  const windowStart = nDaysAgoStr(WINDOW_DAYS);
+  const windowEnd = todayDateString();
+  const windowStart = addDays(todayDateString(), -WINDOW_DAYS);
 
   const [{ data: profile }, { data: settings }, { data: checkIns }, { data: sleepLogs }, { data: bodyCheckIns }] =
     await Promise.all([
@@ -72,7 +63,7 @@ export async function detectBodyMindConnections(userId: string): Promise<void> {
   const dayMap = new Map<string, Partial<Record<string, number[]>>>();
 
   for (const ci of (checkIns ?? []) as Record<string, unknown>[]) {
-    const date = new Date(ci.scheduled_at as string).toLocaleDateString('en-CA');
+    const date = dateToString(new Date(ci.scheduled_at as string));
     if (!dayMap.has(date)) dayMap.set(date, {});
     const entry = dayMap.get(date)!;
     for (const d of mindDomains) {

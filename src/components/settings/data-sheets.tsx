@@ -1,12 +1,13 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { File, Paths } from 'expo-file-system';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { useAuth } from '@/contexts/auth-context';
 import { median, round2, stddevPop } from '@/lib/baseline-stats';
 import { buildCsvExport, buildJsonExport, type ExportFile } from '@/lib/data-export';
+import { dateToString } from '@/lib/date-utils';
 import { resolveActiveDomains } from '@/lib/domains';
 import { supabase } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
@@ -16,9 +17,9 @@ import { makeAccentStyles } from '@/lib/accent-styles';
 // DeleteAllSheet.tsx and ResetBaselineSheet.tsx. The queries are unchanged;
 // what differs is how a file reaches the user and how a date is picked.
 
-function fmtDate(d: Date): string {
-  return d.toLocaleDateString('en-CA');
-}
+// The range a delete covers: built from local date fields, not Intl's en-CA
+// pattern, so what gets deleted can't depend on the device's locale data.
+const fmtDate = dateToString;
 
 function displayDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -94,11 +95,6 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
 function DateField({ label, value, onChange }: { label: string; value: Date | null; onChange: (d: Date) => void }) {
   const styles = useStyles();
   const [picking, setPicking] = useState(false);
-  const handleChange = (event: DateTimePickerEvent, selected?: Date) => {
-    if (Platform.OS !== 'ios') setPicking(false);
-    if (event.type === 'dismissed' || !selected) return;
-    onChange(selected);
-  };
   return (
     <View style={styles.dateField}>
       <Text style={styles.fieldLabel}>{label.toUpperCase()}</Text>
@@ -106,10 +102,14 @@ function DateField({ label, value, onChange }: { label: string; value: Date | nu
         <Text style={[styles.inputText, !value && styles.inputPlaceholder]}>{value ? displayDate(value) : 'Choose a date'}</Text>
       </Pressable>
       {picking && (
-        <DateTimePicker value={value ?? new Date()} mode="date" maximumDate={new Date()} onChange={handleChange} />
-      )}
-      {picking && Platform.OS === 'ios' && (
-        <Pressable onPress={() => setPicking(false)}><Text style={styles.done}>Done</Text></Pressable>
+        <PlatformPicker
+          variant="plain"
+          mode="date"
+          value={value ?? new Date()}
+          maximumDate={new Date()}
+          onPick={onChange}
+          onClose={() => setPicking(false)}
+        />
       )}
     </View>
   );
@@ -327,7 +327,6 @@ const useStyles = makeAccentStyles(b => ({
   error: { fontSize: 12, color: '#f87171', marginBottom: 12, lineHeight: 18 },
   hint: { fontSize: 12, color: '#8b90a4', lineHeight: 18, marginBottom: 12 },
   fieldLabel: { fontSize: 11, color: '#4a5568', letterSpacing: 0.6, marginBottom: 6 },
-  done: { fontSize: 14, color: b.text, textAlign: 'center', paddingVertical: 8 },
 
   segmented: {
     flexDirection: 'row', backgroundColor: '#0f1117', borderWidth: 1, borderColor: '#252b3b',

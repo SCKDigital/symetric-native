@@ -111,8 +111,7 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   useEffect(() => {
     if (!user || !visible) return;
     let cancelled = false;
-    const from = new Date(parseDateString(selectedDate).getTime() - 90 * 86_400_000)
-      .toLocaleDateString('en-CA');
+    const from = addDays(selectedDate, -90);
     supabase
       .from('body_checkins').select('*')
       .eq('user_id', user.id)

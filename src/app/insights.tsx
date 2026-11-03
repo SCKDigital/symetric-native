@@ -17,7 +17,7 @@ import { BODY_DOMAIN_ORDER, MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/con
 import { CircadianPattern, fetchCircadianPatterns } from '@/lib/circadian-detection';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { buildDayScores, DayScores, mergeDays } from '@/lib/day-scores';
-import { parseDateString } from '@/lib/date-utils';
+import { dateToString, parseDateString } from '@/lib/date-utils';
 import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
 import { dailyBodyValue } from '@/lib/detection/body-daily-value';
 import { detectBodyEventFrequency, BodyEventFrequencyPattern } from '@/lib/detection/body-event-frequency';
@@ -347,15 +347,15 @@ export default function InsightsScreen() {
     // switching range look like the app had hung and gone back to a splash.
     setLoading(prev => prev || !hasLoadedOnce.current);
 
-    const to = new Date().toLocaleDateString('en-CA');
+    const to = dateToString(new Date());
     const fromRange = (() => {
       const d = new Date();
       d.setDate(d.getDate() - range + 1);
-      return d.toLocaleDateString('en-CA');
+      return dateToString(d);
     })();
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const from90 = ninetyDaysAgo.toLocaleDateString('en-CA');
+    const from90 = dateToString(ninetyDaysAgo);
 
     // Everything below covers a fixed 90 days and doesn't depend on the range,
     // so it's fetched once per user and reused. Changing the range used to
@@ -634,7 +634,7 @@ export default function InsightsScreen() {
     setTooRecentLabel(impacts.length === 0 && mostRecentUnread ? `${mostRecentUnread.label} was ${daysSinceMostRecent} day${daysSinceMostRecent !== 1 ? 's' : ''} ago, too early to read` : null);
 
     const rangeCheckIns = ((checkIns90d ?? []) as CheckIn[])
-      .filter(c => new Date(c.scheduled_at).toLocaleDateString('en-CA') >= fromRange);
+      .filter(c => dateToString(new Date(c.scheduled_at)) >= fromRange);
     const rangeSleepLogs = ((sleepLogs90d ?? []) as SleepLog[])
       .filter(l => l.log_date >= fromRange);
     const daysRange = buildDayScores(rangeCheckIns, rangeSleepLogs);

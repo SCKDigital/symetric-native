@@ -8,6 +8,7 @@ import { detectDomainConnections } from '@/lib/detection/domain-connections';
 import { detectSleepConnections } from '@/lib/detection/sleep-connections';
 import { debug } from '@/lib/debug';
 import { supabase } from '@/lib/supabase';
+import { todayDateString } from '@/lib/date-utils';
 
 /**
  * Scoped port of the web app's src/lib/patternDetectionScheduler.ts — the
@@ -34,10 +35,6 @@ const lastPatternDetectionKey = (userId: string) => `lastPatternDetection_${user
 const lastConnectionDetectionKey = (userId: string) => `lastConnectionDetection_${userId}`;
 const lastBaselineRecalcKey = (userId: string) => `lastBaselineRecalc_${userId}`;
 
-function todayStr(): string {
-  return new Date().toISOString().split('T')[0];
-}
-
 /**
  * Run cluster detection only if it hasn't already run today for this user.
  * Also runs connection detection and the baseline recalc weekly. Returns true if cluster
@@ -52,13 +49,13 @@ export async function runPatternDetectionIfNeeded(userId: string): Promise<boole
   if (!count) return false;
 
   const last = await AsyncStorage.getItem(lastPatternDetectionKey(userId));
-  const ranClusters = last !== todayStr();
+  const ranClusters = last !== todayDateString();
   if (ranClusters) {
     await Promise.all([
       runClusterDetection(userId),
       runBodyClusterDetection(userId).catch(e => debug.error('Pattern Detection', 'body cluster detection failed:', e)),
     ]);
-    await AsyncStorage.setItem(lastPatternDetectionKey(userId), todayStr());
+    await AsyncStorage.setItem(lastPatternDetectionKey(userId), todayDateString());
   }
 
   const lastConnectionTs = await AsyncStorage.getItem(lastConnectionDetectionKey(userId));
@@ -102,7 +99,7 @@ export async function forcePatternDetection(userId: string): Promise<void> {
     runClusterDetection(userId),
     runBodyClusterDetection(userId).catch(e => debug.error('Pattern Detection', 'body cluster detection failed:', e)),
   ]);
-  await AsyncStorage.setItem(lastPatternDetectionKey(userId), todayStr());
+  await AsyncStorage.setItem(lastPatternDetectionKey(userId), todayDateString());
 
   await detectDomainConnections(userId).catch(e => debug.error('Pattern Detection', 'domain connection detection failed:', e));
   await detectSleepConnections(userId).catch(e => debug.error('Pattern Detection', 'sleep connection detection failed:', e));

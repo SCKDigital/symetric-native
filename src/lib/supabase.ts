@@ -39,6 +39,9 @@ export const supabase: SupabaseClient = IS_DEMO
       // No browser URL to parse a session out of on native — the magic-link
       // callback instead arrives as a deep link handled by expo-router/expo-linking.
       detectSessionInUrl: false,
+      // The link carries a one-time code that only this device can exchange,
+      // not the session tokens themselves. See lib/auth-deep-link.ts.
+      flowType: 'pkce',
     },
     realtime: { enabled: false } as never,
   });
@@ -165,20 +168,6 @@ export interface Profile {
   app_lock_enabled: boolean; // opt-in, off by default — requires PIN before showing the app
   app_lock_pin_hash?: string | null; // SHA-256(salt:pin) hex digest, verified client-side
   app_lock_pin_salt?: string | null;
-}
-
-// ── WP2: Pinned connections ────────────────────────────────────────────────────
-
-export interface PinnedConnection {
-  id: string;
-  user_id: string;
-  factor_a: string;       // domain column name or 'sleep'
-  factor_b: string;
-  lag: 'same_day' | 'next_day';
-  created_at: string;
-  last_evaluated_at: string | null;
-  last_direction: 'together' | 'inverse' | 'none' | null;
-  last_sufficient: boolean | null;
 }
 
 export interface Baseline {

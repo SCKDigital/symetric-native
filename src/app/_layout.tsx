@@ -3,7 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthScreen } from '@/components/auth/auth-screen';
@@ -71,7 +71,7 @@ export default function RootLayout() {
 // trySetSessionFromUrl.
 function AuthGate() {
   const { session, profile, loading, user, refreshProfile } = useAuth();
-  const { locked, unlock } = useAppLock(user?.id, profile?.app_lock_enabled ?? false);
+  const { locked, unlock, obscured } = useAppLock(user?.id, profile?.app_lock_enabled ?? false);
   usePushTokenSync(user?.id, profile?.push_enabled ?? false, refreshProfile);
 
   useEffect(() => {
@@ -108,5 +108,15 @@ function AuthGate() {
     );
   }
 
-  return <AppTabs />;
+  // Covered rather than unmounted, so nothing in progress is lost.
+  return (
+    <View style={{ flex: 1 }}>
+      <AppTabs />
+      {obscured && (
+        <View style={StyleSheet.absoluteFill}>
+          <PulseLoadingScreen />
+        </View>
+      )}
+    </View>
+  );
 }

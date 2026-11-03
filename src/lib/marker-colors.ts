@@ -15,7 +15,3 @@ export const markerTypeLabels: Record<MarkerType, string> = {
   life_event: 'Life event',
   cycle_phase: 'Cycle',
 };
-
-export function getMarkerColor(markerType: string): string {
-  return markerColors[markerType as MarkerType] ?? '#6b7280';
-}

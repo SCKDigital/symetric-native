@@ -1,5 +1,6 @@
 import { debug } from '@/lib/debug';
 import { BodyDomainType, DomainType } from '@/lib/supabase';
+import { mean } from '@/lib/baseline-stats';
 
 // Ported from the web app's src/lib/detection/dayOfWeekPatterns.ts. Widened
 // to cover body domains too (mind+body day-score merge pass, insights.tsx
@@ -49,10 +50,6 @@ function isoWeekKey(dateStr: string): string {
 
 function distinctWeeks(dates: string[]): number {
   return new Set(dates.map(isoWeekKey)).size;
-}
-
-function mean(arr: number[]): number {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
 function quality(diff: number, weeks: number): 'solid' | 'partial' | 'limited' {

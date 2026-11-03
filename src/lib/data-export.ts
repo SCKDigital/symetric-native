@@ -1,4 +1,5 @@
 import { DomainType, supabase } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 // Port of the web app's src/lib/dataExport.ts. Same queries, same columns,
 // same JSON shape — the difference is the delivery mechanic. The web version
@@ -37,7 +38,7 @@ function generateCheckInsCSV(checkIns: Row[]): string {
     'notes', 'edited_at', 'edit_count',
   ];
   const rows = checkIns.map(ci => [
-    e(ci.scheduled_at ? new Date(ci.scheduled_at as string).toLocaleDateString('en-CA') : ''),
+    e(ci.scheduled_at ? dateToString(new Date(ci.scheduled_at as string)) : ''),
     e(ci.scheduled_at ?? ''),
     e(ci.completed_at ?? ''),
     e(ci.status ?? ''),
@@ -145,7 +146,7 @@ async function fetchBodyData(userId: string): Promise<{ checkIns: Row[]; events:
 /** The four files the web version downloads, plus a body check-ins and a
  *  body events file for anyone who has body data. */
 export async function buildCsvExport(userId: string): Promise<ExportFile[]> {
-  const exportDate = new Date().toLocaleDateString('en-CA');
+  const exportDate = dateToString(new Date());
 
   const [checkIns, sleepLogs, clusters, markers, contextTags, body] = await Promise.all([
     supabase.from('check_ins').select('*').eq('user_id', userId).order('scheduled_at', { ascending: true }),
@@ -194,14 +195,14 @@ export async function buildJsonExport(userId: string): Promise<ExportFile> {
   const baselineMap: Record<string, number> = {};
   ((baselines.data as Row[] | null) ?? []).forEach(b => { baselineMap[b.domain as string] = b.baseline_score as number; });
 
-  const formatDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA');
+  const formatDate = (iso: string) => dateToString(new Date(iso));
   const formatTimeOfDay = (iso: string) => {
     const d = new Date(iso);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
 
   const rows = (checkIns.data as Row[] | null) ?? [];
-  const to = new Date().toLocaleDateString('en-CA');
+  const to = dateToString(new Date());
   const from = rows.length ? formatDate(rows[0].scheduled_at as string) : to;
 
   const output = {

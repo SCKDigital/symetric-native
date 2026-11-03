@@ -82,8 +82,10 @@ export const trackOnboardingStepCompleted = (step: number, stepName: string) =>
   capture('onboarding_step_completed', { step, step_name: stepName });
 export const trackOnboardingAbandoned = (step: number, stepName: string) =>
   capture('onboarding_abandoned', { step, step_name: stepName });
-export const trackOnboardingCompleted = (durationSeconds: number, domainCount: number) =>
-  capture('onboarding_completed', { duration_seconds: durationSeconds, domain_count: domainCount });
+// No domain_count: onboarding no longer picks domains; the setup cards on
+// Today ask for them afterwards.
+export const trackOnboardingCompleted = (durationSeconds: number) =>
+  capture('onboarding_completed', { duration_seconds: durationSeconds });
 
 export const trackCheckInCompleted = (domainCount: number) =>
   capture('check_in_completed', { domain_count: domainCount });
@@ -92,8 +94,6 @@ export const trackSleepLogged = () => capture('sleep_logged');
 export const trackPrepareTabOpened = () => capture('prepare_tab_opened');
 export const trackAppointmentCreated = (daysUntil: number) =>
   capture('appointment_created', { days_until: daysUntil });
-export const trackPatternMarkedForDiscussion = () => capture('pattern_marked_for_discussion');
-export const trackPatternNoteAdded = () => capture('pattern_note_added');
 // 'cycle_draft' would say the person tracks a cycle, so it's reported as 'auto'.
 export const trackQuestionAdded = (source: 'manual' | 'auto' | 'cycle_draft') =>
   capture('question_added', { source: source === 'manual' ? 'manual' : 'auto' });

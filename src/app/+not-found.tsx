@@ -8,7 +8,7 @@ import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
 /**
  * Replaces expo-router's built-in "Unmatched Route" screen.
  *
- * The magic-link deep link (`symetric://auth/callback#access_token=…`) was
+ * The magic-link deep link (`symetric://auth/callback?code=…`) was
  * landing on that screen in production, and adding src/app/auth/callback.tsx
  * did not stop it — verified the route compiles into the shipped bundle, that
  * extractExactPathFromURL resolves the URL to exactly `auth/callback`, and
@@ -22,7 +22,7 @@ import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
  * Rather than keep guessing at that, this takes the one thing that is known
  * for certain: the unmatched screen *does* render. So this catches whatever
  * URL failed to match, hands it to trySetSessionFromUrl (idempotent, and a
- * no-op for a URL carrying no tokens), and sends the user to the tab shell —
+ * no-op for a URL carrying no sign-in code), and sends the user to the tab shell —
  * where AuthGate decides what they actually see. A user tapping their magic
  * link now gets signed in instead of a dead end, whatever the routing did.
  *

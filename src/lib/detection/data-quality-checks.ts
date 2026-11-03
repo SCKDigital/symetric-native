@@ -10,6 +10,7 @@
 // never surfaced as a raw label or percentage to the user.
 
 import { debug } from '@/lib/debug';
+import { dateToString } from '@/lib/date-utils';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -140,7 +141,7 @@ export function checkCircadianQuality(domainCheckIns: unknown[], blockData: Reco
   const uniqueDates = new Set(
     domainCheckIns.map(c => {
       const row = c as { scheduled_date?: string; scheduled_at: string };
-      return row.scheduled_date ?? new Date(row.scheduled_at).toLocaleDateString('en-CA');
+      return row.scheduled_date ?? dateToString(new Date(row.scheduled_at));
     }),
   );
 

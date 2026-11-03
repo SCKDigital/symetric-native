@@ -78,7 +78,10 @@ export async function subscribeToPushNotifications(userId: string): Promise<Push
 
   const existing = await Notifications.getPermissionsAsync();
 
-  if (existing.status === 'denied') {
+  // canAskAgain, not status alone: Android reports 'denied' after a single
+  // "Don't allow" yet still lets the app show the prompt again. Only when the
+  // OS won't ask any more is device Settings the user's only way back.
+  if (existing.status === 'denied' && !existing.canAskAgain) {
     return {
       success: false,
       reason: 'blocked',
@@ -188,17 +191,27 @@ export async function syncPushToken(userId: string): Promise<PushTokenSyncResult
   }
 }
 
-export async function unsubscribeFromPushNotifications(userId: string): Promise<void> {
+/**
+ * Deletes this device's row from expo_push_tokens. Best-effort and bounded:
+ * fetching the token needs the network, and sign-out must not hang on it.
+ * If it fails the row is orphaned; the send path drops tokens Expo reports
+ * as invalid.
+ */
+export async function removeThisDevicePushToken(): Promise<void> {
+  const projectId = getProjectId();
+  if (!projectId || !Device.isDevice) return;
   try {
-    const projectId = getProjectId();
-    if (projectId && Device.isDevice) {
-      const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-      await supabase.from('expo_push_tokens').delete().eq('token', token);
-    }
+    const token = await Promise.race([
+      Notifications.getExpoPushTokenAsync({ projectId }).then(t => t.data),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 4000)),
+    ]);
+    if (token) await supabase.from('expo_push_tokens').delete().eq('token', token);
   } catch {
-    // Best-effort — the row is orphaned but harmless (the send path skips
-    // tokens Expo's receipt API reports as invalid) if this fails.
+    // See above.
   }
+}
 
+export async function unsubscribeFromPushNotifications(userId: string): Promise<void> {
+  await removeThisDevicePushToken();
   await supabase.from('profiles').update({ push_enabled: false }).eq('id', userId);
 }

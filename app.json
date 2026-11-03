@@ -40,7 +40,6 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-sharing",
       [

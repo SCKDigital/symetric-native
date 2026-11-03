@@ -75,10 +75,17 @@ export function useTodayCheckIns() {
   const [state, setState] = useState<State>(EMPTY);
   const scheduledForDay = useRef<string | null>(null);
   const lastLoadFoundNothing = useRef(false);
+  /** Bumped per load(), so a slower earlier load can't overwrite a newer one. */
+  const loadGen = useRef(0);
 
   const load = useCallback(async () => {
     if (!user) return;
-    setState(prev => ({ ...prev, loading: true }));
+    // No `loading: true` here. Only the very first load shows the loading
+    // screen (EMPTY starts with it); a refresh keeps the current day on
+    // screen. Setting it on every refresh made Today return its loading
+    // screen ahead of the check-in form, so resuming the app, or the clock
+    // passing the next check-in time, unmounted a half-answered check-in.
+    const gen = ++loadGen.current;
 
     const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -199,6 +206,7 @@ export function useTodayCheckIns() {
 
     const completedCount = todaysCheckIns.filter(c => c.status === 'completed').length;
     const totalCount = todaysCheckIns.length;
+    if (gen !== loadGen.current) return;
     lastLoadFoundNothing.current = totalCount === 0;
 
     setState({
@@ -228,14 +236,6 @@ export function useTodayCheckIns() {
   }, [user, profile?.timezone]);
 
   useEffect(() => {
-    // load() is an async function that only calls setState after its
-    // internal awaits resolve — genuinely deferred, not synchronous-in-effect
-    // — but the linter traces into local function references and can't
-    // prove that itself, unlike an opaque `.then()` callback elsewhere in
-    // this codebase (see auth-context.tsx). This is the standard "fetch
-    // data on mount" effect, not the redundant-state pattern the rule
-    // targets — see https://react.dev/learn/you-might-not-need-an-effect.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 

@@ -1,4 +1,11 @@
-// Ported from the web app's src/lib/baseline/stats.ts, unchanged.
+// Ported from the web app's src/lib/baseline/stats.ts, plus `mean`.
+
+/** Arithmetic mean. NaN for an empty array, deliberately: the detectors that
+ *  use it check their minimum sample sizes first, and a NaN that slips past
+ *  shows up instead of passing as a plausible 0. */
+export function mean(values: number[]): number {
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
 
 export function median(values: number[]): number {
   if (values.length === 0) return 0;

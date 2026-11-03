@@ -2,6 +2,7 @@
 // Direct port of the web app's src/lib/queries/sleepConnections.ts.
 
 import { supabase } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 export interface SleepSymptomConnection {
   id: string;
@@ -35,7 +36,7 @@ export async function fetchLatestSleepConnections(
   const cutoff = from ?? (() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
-    return d.toLocaleDateString('en-CA');
+    return dateToString(d);
   })();
 
   const { data: latest } = await supabase

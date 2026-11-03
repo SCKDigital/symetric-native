@@ -2,7 +2,7 @@ import { Pressable, Text, View, ViewStyle } from 'react-native';
 import Svg, { Polygon } from 'react-native-svg';
 
 import { useAuth } from '@/contexts/auth-context';
-import { formatShortDate, parseDateString } from '@/lib/date-utils';
+import { dateToString, formatShortDate, parseDateString } from '@/lib/date-utils';
 import { DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
 import type { CheckIn, ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
 import { FACTOR_LABELS, factorLabel } from '@/lib/pattern-findings';
@@ -155,7 +155,7 @@ export function ClusterCard({
   const periodNotes = checkIns
     .filter(ci => {
       if (!ci.notes?.trim()) return false;
-      const date = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+      const date = dateToString(new Date(ci.scheduled_at));
       return date >= cluster.start_date && (!cluster.end_date || date <= cluster.end_date);
     })
     .map(ci => ({

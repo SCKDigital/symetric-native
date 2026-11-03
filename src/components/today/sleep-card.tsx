@@ -13,6 +13,7 @@ import { type ComfortTokens } from '@/lib/comfort-theme';
 import type { AccentTokens } from '@/constants/accents';
 import { makeComfortStyles } from '@/lib/accent-styles';
 import { useAccent } from '@/contexts/accent-context';
+import { dateToString } from '@/lib/date-utils';
 
 // Port of the web app's SleepCard.tsx — the Today-screen sleep row, in its
 // three states: a CTA when nothing is logged, the expanded question when
@@ -42,7 +43,7 @@ export default function SleepCard({ onLogged }: Props) {
 
   useEffect(() => {
     if (!user) return;
-    const today = new Date().toLocaleDateString('en-CA');
+    const today = dateToString(new Date());
     supabase
       .from('sleep_logs')
       .select('*')
@@ -62,7 +63,7 @@ export default function SleepCard({ onLogged }: Props) {
   // created_at, so the card has to hold the real row after a write.
   const saveSleepLog = async (score: number | null, skipped = false, hoursSlept: number | null = null): Promise<SleepLog | null> => {
     if (!user) return null;
-    const today = new Date().toLocaleDateString('en-CA');
+    const today = dateToString(new Date());
     // limit(1) rather than maybeSingle() — avoids PGRST116 if stale duplicate rows exist.
     const { data: rows, error: selectError } = await supabase
       .from('sleep_logs').select('id').eq('user_id', user.id).eq('log_date', today).limit(1);

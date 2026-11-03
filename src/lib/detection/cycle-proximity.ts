@@ -1,3 +1,6 @@
+import { addDays } from '@/lib/date-utils';
+import { mean } from '@/lib/baseline-stats';
+
 // Symptoms around cycle day 1.
 //
 // The app records Day 1 as an intervention marker and draws it on the charts
@@ -44,16 +47,6 @@ const MIN_NEAR_DAYS = 6;
 const MIN_OTHER_DAYS = 10;
 /** Report a domain only when the gap is big enough to matter on a 0-10 scale. */
 const MIN_DIFFERENCE = 0.5;
-
-function addDays(date: string, days: number): string {
-  const d = new Date(date + 'T12:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function mean(xs: number[]): number {
-  return xs.reduce((a, b) => a + b, 0) / xs.length;
-}
 
 /**
  * Compares each domain's readings near a recorded cycle day 1 against the

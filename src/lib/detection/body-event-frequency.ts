@@ -8,6 +8,7 @@
 // personal rate comparison, recent window vs. historical baseline rate.
 
 import type { BodyEventType } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 export interface BodyEventFrequencyPattern {
   eventType: BodyEventType;
@@ -50,7 +51,7 @@ export function detectBodyEventFrequency(events: BodyEventInput[], today: string
 
   const recentStart = new Date(today + 'T12:00:00Z');
   recentStart.setUTCDate(recentStart.getUTCDate() - (RECENT_WINDOW_DAYS - 1));
-  const recentStartStr = recentStart.toLocaleDateString('en-CA');
+  const recentStartStr = dateToString(recentStart);
 
   const byType = new Map<BodyEventType, { recent: number; historical: number }>();
   for (const e of sorted) {

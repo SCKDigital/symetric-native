@@ -21,16 +21,7 @@ import { computeRawConnection } from '@/lib/detection/compute-connection';
 import { debug } from '@/lib/debug';
 import { resolveActiveDomains } from '@/lib/domains';
 import { supabase } from '@/lib/supabase';
-
-function todayStr(): string {
-  return new Date().toLocaleDateString('en-CA');
-}
-
-function nDaysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toLocaleDateString('en-CA');
-}
+import { addDays, todayDateString } from '@/lib/date-utils';
 
 /** All k-combinations of an array. */
 function combinations<T>(arr: T[], k: number): T[][] {
@@ -61,8 +52,8 @@ const DOMAIN_COLUMNS = [
  * domain_connections. Runs weekly — do not call on every screen mount.
  */
 export async function detectDomainConnections(userId: string): Promise<void> {
-  const windowEnd = todayStr();
-  const windowStart = nDaysAgoStr(WINDOW_DAYS);
+  const windowEnd = todayDateString();
+  const windowStart = addDays(todayDateString(), -WINDOW_DAYS);
 
   debug.log('Domain Connections', `Detecting for user ${userId} — window: ${windowStart} → ${windowEnd}`);
 
@@ -166,8 +157,8 @@ async function checkConsistency(
     .eq('user_id', userId)
     .eq('domain_a', domainA)
     .eq('domain_b', domainB)
-    .gte('window_start', nDaysAgoStr(WINDOW_DAYS * 2))
-    .lt('window_start', nDaysAgoStr(WINDOW_DAYS))
+    .gte('window_start', addDays(todayDateString(), -(WINDOW_DAYS * 2)))
+    .lt('window_start', addDays(todayDateString(), -WINDOW_DAYS))
     .order('window_start', { ascending: false })
     .limit(1)
     .maybeSingle();

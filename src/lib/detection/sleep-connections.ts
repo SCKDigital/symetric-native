@@ -23,6 +23,7 @@ import { dailyBodyValue } from '@/lib/detection/body-daily-value';
 import { debug } from '@/lib/debug';
 import { supabase } from '@/lib/supabase';
 import type { BodyDomainType } from '@/lib/supabase';
+import { dateToString } from '@/lib/date-utils';
 
 const WINDOW_DAYS = 30;
 const MIN_SLEEP_LOGS = 21;
@@ -35,8 +36,8 @@ export async function detectSleepConnections(userId: string): Promise<void> {
 
   const windowEnd = new Date();
   const windowStart = new Date(windowEnd.getTime() - WINDOW_DAYS * 86_400_000);
-  const startStr = windowStart.toLocaleDateString('en-CA');
-  const endStr = windowEnd.toLocaleDateString('en-CA');
+  const startStr = dateToString(windowStart);
+  const endStr = dateToString(windowEnd);
 
   const { data: sleepLogs } = await supabase
     .from('sleep_logs')

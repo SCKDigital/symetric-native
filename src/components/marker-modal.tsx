@@ -1,7 +1,7 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { dateToString, parseDateString } from '@/lib/date-utils';
 import { markerColors, markerTypeLabels, MarkerType } from '@/lib/marker-colors';
 import type { CreateMarkerInput, InterventionMarker, MedicationAction } from '@/types/marker';
@@ -143,15 +143,9 @@ export default function MarkerModal({ marker, defaultDate, onSave, onDelete, onC
     }
   };
 
-  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-      if (event.type === 'dismissed') return;
-    }
-    if (selectedDate) {
-      setMarkerDate(dateToString(selectedDate));
-      setDateError(null);
-    }
+  const handleDatePick = (selectedDate: Date) => {
+    setMarkerDate(dateToString(selectedDate));
+    setDateError(null);
   };
 
   if (confirmDelete) {
@@ -289,14 +283,14 @@ export default function MarkerModal({ marker, defaultDate, onSave, onDelete, onC
                 <Text style={styles.dateInputText}>{markerDate}</Text>
               </Pressable>
               {showDatePicker && (
-                <View style={styles.pickerWrap}>
-                  <DateTimePicker value={parseDateString(markerDate)} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} maximumDate={new Date()} themeVariant="dark" onChange={handleDateChange} />
-                  {Platform.OS === 'ios' && (
-                    <Pressable onPress={() => setShowDatePicker(false)} style={styles.pickerDone}>
-                      <Text style={styles.pickerDoneText}>Done</Text>
-                    </Pressable>
-                  )}
-                </View>
+                <PlatformPicker
+                  style={styles.pickerWrap}
+                  mode="date"
+                  value={parseDateString(markerDate)}
+                  maximumDate={new Date()}
+                  onPick={handleDatePick}
+                  onClose={() => setShowDatePicker(false)}
+                />
               )}
               {dateError && <Text style={styles.errorText}>{dateError}</Text>}
             </View>
@@ -366,9 +360,7 @@ const useStyles = makeAccentStyles(b => ({
   dateInput: { padding: 11, paddingHorizontal: 14, backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10 },
   dateInputError: { borderColor: '#f87171' },
   dateInputText: { fontSize: 15, color: '#e2e8f0' },
-  pickerWrap: { marginTop: 10, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
-  pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
+  pickerWrap: { marginTop: 10 },
   textInput: { padding: 11, paddingHorizontal: 14, backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10, color: '#e2e8f0', fontSize: 15 },
   charCount: { fontSize: 12, color: '#4a5568', marginTop: 4, textAlign: 'right' },
   charCountWarn: { color: '#f87171' },

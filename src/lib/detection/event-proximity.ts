@@ -1,3 +1,5 @@
+import { addDays } from '@/lib/date-utils';
+
 // Body events around an intervention.
 //
 // The report already asks what a medication change did to the scored domains
@@ -47,11 +49,6 @@ const MIN_TOTAL_EVENTS = 3;
 /** And the two sides have to actually differ. */
 const MIN_CHANGE = 2;
 
-function addDays(date: string, days: number): string {
-  const d = new Date(date + 'T12:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 /**
  * Counts each event type in the window before and after each medication or

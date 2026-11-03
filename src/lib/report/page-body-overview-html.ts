@@ -8,6 +8,7 @@ import { MARKER_TYPE_LABELS } from '@/lib/report/theme';
 import type { EventProximityResult } from '@/lib/detection/event-proximity';
 import type { BodyEventOccurrence, BodySiteFrequency } from '@/lib/report/types';
 import type { DetectedCluster } from '@/lib/supabase';
+import { addDays } from '@/lib/date-utils';
 
 interface BodyOverviewData {
   bodyEventOccurrences: BodyEventOccurrence[];
@@ -51,11 +52,6 @@ const BODY_RARE_MAX_ENTRIES = 2;
  *  the measured layout check puts this page closest to its sheet. */
 const PROXIMITY_MAX_ENTRIES = 2;
 
-function addDays(date: string, days: number): string {
-  const d = new Date(date + 'T12:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 /**
  * Events counted either side of a medication or therapy change.

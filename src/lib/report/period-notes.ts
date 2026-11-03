@@ -1,3 +1,5 @@
+import { dateToString } from '@/lib/date-utils';
+
 // What she wrote at the time.
 //
 // Every mind check-in offers 200 characters of context ("What's affecting
@@ -61,7 +63,7 @@ export function buildPeriodNotes(input: PeriodNotesInput): { notes: PeriodNote[]
     if (ci.status != null && ci.status !== 'completed') continue;
     const text = clean(ci.notes);
     if (!text) continue;
-    const date = new Date(ci.scheduled_at).toLocaleDateString('en-CA');
+    const date = dateToString(new Date(ci.scheduled_at));
     collected.push({ date, source: 'mind', text, notable: notable.has(date) });
   }
 

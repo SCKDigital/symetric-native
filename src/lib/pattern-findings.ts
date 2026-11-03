@@ -21,7 +21,7 @@ import { RareEvent } from '@/lib/detection/rare-events';
 import { BodyTimeOfDayPattern } from '@/lib/detection/body-time-of-day';
 import { BodyEventFrequencyPattern } from '@/lib/detection/body-event-frequency';
 import { BodyEventMindImpact } from '@/lib/detection/body-event-impact';
-import { parseDateString } from '@/lib/date-utils';
+import { dateToString, parseDateString } from '@/lib/date-utils';
 import { DOMAIN_COPY } from '@/lib/domains';
 import { BODY_DOMAINS, BODY_EVENTS } from '@/lib/body/constants';
 import { movesTogetherForReader } from '@/lib/domain-polarity';
@@ -65,7 +65,7 @@ export const CONFIDENCE_COPY: Record<Grade, { short: string; full: string; barFr
 };
 
 function today(): string {
-  return new Date().toLocaleDateString('en-CA');
+  return dateToString(new Date());
 }
 
 function fmtShort(d: string): string {

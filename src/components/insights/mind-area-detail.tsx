@@ -17,7 +17,7 @@ import type { CircadianPattern } from '@/lib/circadian-detection';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
 import type { RareEvent } from '@/lib/detection/rare-events';
-import { formatShortDate } from '@/lib/date-utils';
+import { dateToString, formatShortDate } from '@/lib/date-utils';
 import { getDomainColorFromProfile } from '@/lib/domains';
 import { aggregateVolatilityGroups, VolatilityGroup } from '@/lib/volatility-aggregation';
 import type { CheckIn, ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
@@ -46,7 +46,7 @@ export interface DayScores {
 
 function patternSummaryLine(cluster: DetectedCluster): string {
   const fmt = formatShortDate;
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayStr = dateToString(new Date());
   const n = clusterDurationDays(cluster, todayStr);
   const s = fmt(cluster.start_date);
   const e = cluster.ongoing ? 'now' : cluster.end_date ? fmt(cluster.end_date) : s;

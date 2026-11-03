@@ -24,15 +24,10 @@ import { makeAccentStyles } from '@/lib/accent-styles';
 import { useAccent } from '@/contexts/accent-context';
 
 
-// Chunk 6 of the Prepare tab port — every sub-component is now wired,
-// including PDF report generation (chunk 1 of that sub-feature's own
-// multi-chunk port: Page 1/Executive Summary only so far, see
-// generate-report.ts's header comment for what's deferred to later report
-// chunks). Findings passed to PatternReviewSection are cluster-only — the
-// web app's PrepareScreen also mixes in sleepConnectionFindings, but that
-// detector (sleep_symptom_connections weekly cadence) isn't ported to
-// native yet, same deferral noted in pattern-findings.ts since Insights
-// chunk 1.
+// The Prepare tab: appointment, date range, questions, report and
+// post-appointment notes. The web app's pattern review and notable-changes
+// sections are deliberately absent (9152075): the report decides what it
+// includes, and markers are edited from History.
 export default function PrepareScreen() {
   const styles = useStyles();
   const accent = useAccent();

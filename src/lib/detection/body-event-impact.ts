@@ -9,6 +9,8 @@
 // event occurrences to pool than there are medication changes.
 
 import type { DomainType, BodyEventType } from '@/lib/supabase';
+import { mean } from '@/lib/baseline-stats';
+import { dateToString } from '@/lib/date-utils';
 
 export interface BodyEventMindImpact {
   eventType: BodyEventType;
@@ -44,14 +46,10 @@ const SOLID_DAYS = 5;
 const MIN_OCCURRENCES = 2;
 const MAX_RESULTS = 3;
 
-function mean(arr: number[]): number {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
-
 function addDaysStr(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z');
   d.setUTCDate(d.getUTCDate() + n);
-  return d.toLocaleDateString('en-CA');
+  return dateToString(d);
 }
 
 /**

@@ -2,6 +2,7 @@ import { addDays } from '@/lib/date-utils';
 import { debug } from '@/lib/debug';
 import { BodyDomainType, DomainType } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
+import { mean } from '@/lib/baseline-stats';
 
 // Ported from the web app's src/lib/detection/interventionImpact.ts.
 // Widened to cover body domains too (mind+body day-score merge pass) —
@@ -61,10 +62,6 @@ const MIN_CHANGE = 1.5;
 const SOLID_DAYS = 10;
 const MAX_RESULTS = 3;
 const WINDOWS: (7 | 14 | 21)[] = [14, 7, 21];
-
-function mean(arr: number[]): number {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
 
 export function detectInterventionImpacts(markers: InterventionMarker[], days: DayScores[], activeDomains: TrackedFactor[]): InterventionImpact[] {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));

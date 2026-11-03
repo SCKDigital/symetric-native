@@ -18,6 +18,7 @@ import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
 import { dailyBodyValue } from '@/lib/detection/body-daily-value';
 import { trackBodyCheckInCompleted } from '@/lib/analytics';
 import { forcePatternDetection } from '@/lib/pattern-detection-scheduler';
+import { dateToString, todayDateString } from '@/lib/date-utils';
 
 // Ports of the web app's BodyCheckInCard.tsx and MorningBodyCheckInCard.tsx —
 // the Today entry points into the body check-in forms. Native already had both
@@ -48,10 +49,6 @@ import { forcePatternDetection } from '@/lib/pattern-detection-scheduler';
 function parseTimeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + (m || 0);
-}
-
-function localDateStr(): string {
-  return new Date().toLocaleDateString('en-CA');
 }
 
 function nowMinutes(): number {
@@ -91,7 +88,7 @@ export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
     if (!user || !enabled) return;
     const { data } = await supabase
       .from('body_checkins').select('id')
-      .eq('user_id', user.id).eq('entry_date', localDateStr()).maybeSingle();
+      .eq('user_id', user.id).eq('entry_date', todayDateString()).maybeSingle();
     setLoggedToday(!!data);
   }, [user, enabled]);
 
@@ -114,8 +111,8 @@ export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
     if (!user || loggingAsUsual) return;
     setLoggingAsUsual(true);
     try {
-      const today = localDateStr();
-      const from = new Date(Date.now() - 90 * 86_400_000).toLocaleDateString('en-CA');
+      const today = todayDateString();
+      const from = dateToString(new Date(Date.now() - 90 * 86_400_000));
       const { data } = await supabase
         .from('body_checkins').select('*')
         .eq('user_id', user.id).gte('entry_date', from).lt('entry_date', today)
@@ -157,7 +154,6 @@ export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
       </View>
     );
   }
-
 
   return (
     <>
@@ -203,7 +199,7 @@ export function MorningBodyCheckInCard() {
     if (!user || !enabled) return;
     const { data } = await supabase
       .from('body_checkins').select('morning_fatigue')
-      .eq('user_id', user.id).eq('entry_date', localDateStr()).maybeSingle();
+      .eq('user_id', user.id).eq('entry_date', todayDateString()).maybeSingle();
     setLoggedToday(data?.morning_fatigue != null);
   }, [user, enabled]);
 

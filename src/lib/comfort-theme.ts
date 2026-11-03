@@ -79,12 +79,11 @@ export function comfortTokens(accent: AccentTokens): ComfortTokens {
 }
 
 /**
- * The DEFAULT accent's sets, for the few places that need a comfort token
+ * The DEFAULT accent's comfort set, for the few places that need a comfort token
  * outside the React tree and so cannot read the context.
  *
- * A component should use `makeComfortStyles` or `useAccent()` instead. These
- * two are porcelain's, and will be the wrong colour for anyone who has chosen
+ * A component should use `makeComfortStyles` or `useAccent()` instead. This
+ * is porcelain's, and will be the wrong colour for anyone who has chosen
  * teal or plum.
  */
-export const NORMAL_TOKENS: ComfortTokens = normalTokens(ACCENTS[DEFAULT_ACCENT]);
 export const COMFORT_TOKENS: ComfortTokens = comfortTokens(ACCENTS[DEFAULT_ACCENT]);

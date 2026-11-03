@@ -1,27 +1,17 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 
+import { PlatformPicker } from '@/components/shared/platform-picker';
 import { BODY_DOMAIN_ORDER, BODY_DOMAINS } from '@/lib/body/constants';
 import type { BodyDomainType } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
 import { useAccent } from '@/contexts/accent-context';
+import { dateToTimeString, timeStringToDate } from '@/lib/date-utils';
 
 // Settings chrome uses the app's default indigo, not the body-tracking
 // amber accent — that accent is reserved for the capture screens
 // themselves (BodyCheckIn, BodyMap, History) so it reads as a distinct
 // experience there. Matches the web app's own b.textFlat convention.
-
-function timeStringToDate(t: string): Date {
-  const [h, m] = t.split(':').map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-
-function dateToTimeString(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 interface Props {
   activeDomains: BodyDomainType[];
@@ -37,10 +27,8 @@ interface Props {
 type ActivePicker = 'available' | 'reminder' | 'morning' | null;
 
 // Ported from the web app's BodyTrackingSheet.tsx. Mechanic swap: three
-// <input type="time"> fields -> one shared @react-native-community/
-// datetimepicker (mode="time", same module + timeStringToDate/
-// dateToTimeString helper pattern as onboarding's check-in-preferences-step.tsx),
-// tracked by which field is currently being edited. Conditionally mounted
+// <input type="time"> fields -> one shared PlatformPicker, tracked by which
+// field is currently being edited. Conditionally mounted
 // by its parent (settings.tsx) rather than an always-mounted `visible`
 // prop, matching this app's established modal convention.
 export default function BodyTrackingSheet({
@@ -75,12 +63,7 @@ export default function BodyTrackingSheet({
     }
   };
 
-  const handleTimeChange = (field: Exclude<ActivePicker, null>) => (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setActivePicker(null);
-      if (event.type === 'dismissed') return;
-    }
-    if (!selectedDate) return;
+  const handleTimePick = (field: Exclude<ActivePicker, null>) => (selectedDate: Date) => {
     const value = dateToTimeString(selectedDate);
     if (field === 'available') setAvailableFrom(value);
     else if (field === 'reminder') setReminderTime(value);
@@ -156,20 +139,13 @@ export default function BodyTrackingSheet({
             )}
 
             {activePicker && (
-              <View style={styles.pickerWrap}>
-                <DateTimePicker
-                  value={timeStringToDate(pickerValue)}
-                  mode="time"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  themeVariant="dark"
-                  onChange={handleTimeChange(activePicker)}
-                />
-                {Platform.OS === 'ios' && (
-                  <Pressable onPress={() => setActivePicker(null)} style={styles.pickerDone}>
-                    <Text style={styles.pickerDoneText}>Done</Text>
-                  </Pressable>
-                )}
-              </View>
+              <PlatformPicker
+                style={styles.pickerWrap}
+                mode="time"
+                value={timeStringToDate(pickerValue)}
+                onPick={handleTimePick(activePicker)}
+                onClose={() => setActivePicker(null)}
+              />
             )}
 
             {saveError && <Text style={styles.errorText}>{saveError}</Text>}
@@ -209,9 +185,7 @@ const useStyles = makeAccentStyles(b => ({
   morningTitle: { fontSize: 13, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
   morningSubtitle: { fontSize: 11.5, color: '#4a5568', lineHeight: 16 },
   morningTimeBlock: { marginBottom: 20 },
-  pickerWrap: { marginBottom: 20, backgroundColor: '#0a0c12', borderRadius: 10, overflow: 'hidden' },
-  pickerDone: { padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#1e2533' },
-  pickerDoneText: { color: b.text, fontSize: 14, fontWeight: '600' },
+  pickerWrap: { marginBottom: 20 },
   errorText: { fontSize: 12, color: '#f87171', marginBottom: 16 },
   saveButton: { padding: 14, borderRadius: 12, backgroundColor: b.fill, alignItems: 'center' },
   saveButtonDisabled: { backgroundColor: '#1e2533' },
