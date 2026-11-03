@@ -150,7 +150,7 @@ const pages = [
       chartMarkers, flaggedClusters: clusters,
       hoursPoints: dates.map((date, i) => ({ date, hours: i % 6 === 0 ? null : 6 + (i % 5) })),
       medianHours: 8,
-      persistedConnections: MIND.slice(0, 5).map((domain, i) => ({
+      persistedConnections: [...MIND, ...BODY].map((domain, i) => ({
         id: `s${i}`, user_id: 'u', domain, affected_by_sleep: true,
         avg_after_good_sleep: 6.2, avg_after_poor_sleep: 4.1, difference: 2.1,
         sample_size: 40, good_sleep_count: 22, poor_sleep_count: 18,

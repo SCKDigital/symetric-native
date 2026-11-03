@@ -7,6 +7,11 @@ import { SPARKLINE_WIDTH_HALF } from '@/lib/report/sparkline-svg';
 import { DOMAIN_LABELS } from '@/lib/report/theme';
 import type { DetectedCluster } from '@/lib/supabase';
 
+/** Rows in "What follows a poor night" before the rest are summarised in a
+ *  note. Ten keeps the page inside a sheet under the wider Android-like font,
+ *  measured with scripts/report-layout. */
+const SLEEP_TABLE_MAX_ROWS = 10;
+
 // Sleep's own page.
 //
 // It used to be four text rows at the top of Mind Overview: an average score,
@@ -105,6 +110,13 @@ export function buildSleepPageHtml(data: SleepPageData): string {
   // good nights against poor ones on a stated sample, which a clinician can
   // weigh. The in-report fallback is a bare mean split with no sample size,
   // worth showing only when the detector has not run over this range.
+  //
+  // Capped, because it lists every tracked domain: someone with 5 mind and 9
+  // body domains measured at 104% of a sheet here, spilling onto an unnumbered
+  // blank page. Rows arrive largest difference first, so the cap drops the
+  // ones closest to no difference at all.
+  const shownConnections = persistedConnections.slice(0, SLEEP_TABLE_MAX_ROWS);
+  const hiddenConnections = persistedConnections.length - shownConnections.length;
   const connectionsSection = persistedConnections.length > 0
     ? `<div class="section-gap">
         <p class="section-label">What follows a poor night</p>
@@ -117,7 +129,7 @@ export function buildSleepPageHtml(data: SleepPageData): string {
             <th class="center">Nights</th>
           </tr></thead>
           <tbody>
-            ${persistedConnections.map(c => `<tr>
+            ${shownConnections.map(c => `<tr>
               <td>${esc(label(c.domain))}</td>
               <td class="center">${fmtVal(c.avg_after_good_sleep)}</td>
               <td class="center">${fmtVal(c.avg_after_poor_sleep)}</td>
@@ -126,6 +138,7 @@ export function buildSleepPageHtml(data: SleepPageData): string {
             </tr>`).join('')}
           </tbody>
         </table>
+        ${hiddenConnections > 0 ? `<p class="overflow-note">${hiddenConnections} further domain${hiddenConnections !== 1 ? 's' : ''} with a smaller difference not listed.</p>` : ''}
         <p class="sleep-chart-caption">Nights column is good/poor nights compared. A difference is a mean gap, not a test of cause.</p>
       </div>`
     : fallbackConnections.length > 0
