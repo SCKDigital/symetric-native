@@ -2,24 +2,29 @@
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
 
-# The database and edge functions are NOT in this repo
+# The database and edge functions are in `supabase/`
 
-This app talks to Supabase project `ovfnewvetuimfqitswdk`, but the schema lives
-next door in `mosaic-app/supabase/`:
+This app talks to Supabase project `ovfnewvetuimfqitswdk`. Its backend moved
+here on 2026-11-03 from the old web app's repo (now archived, never pushed):
 
-- migrations — `mosaic-app/supabase/migrations/` (76+ files, in date order)
-- edge functions — `mosaic-app/supabase/functions/` (`send-notifications`,
-  `schedule-daily-checkins`, `send-push`, `email-report`, `record-consent`)
-- the Supabase CLI is linked from that directory, not this one
-- detection methodology — `mosaic-app/docs/methodology.md`
-
-`mosaic-app` started as the web app, which is now obsolete. Treat it as the
-Supabase repo. **Adding a column means writing a migration there** — do not
-start a second migration history in this repo.
+- migrations — `supabase/migrations/` (in date order). **Adding a column means
+  writing a migration here.**
+- edge functions — `supabase/functions/` (`send-notifications`, `send-push`,
+  `schedule-daily-checkins`, `send-test-notification`, `record-consent`,
+  `delete-account`, `site-forms`). Committing doesn't ship them:
+  `supabase functions deploy <name>` does.
+- the Supabase CLI is linked from this directory (`supabase/.temp`, gitignored)
+- detection methodology — `docs/methodology.md`, written against the old web
+  app's `src/lib/`, which this app's detectors were ported from
 
 The four production pg_cron jobs are hand-managed and described by no
-migration. See `mosaic-app/supabase/CRON.md`; never infer the schedule from
-the migration files.
+migration. See `supabase/CRON.md`; never infer the schedule from the
+migration files.
+
+# Store listings are in `store/`
+
+App Store screenshots (`store/app-store-screenshots/`, built by
+`build-artboards.mjs` from this app's screens) and the Play Store copy.
 
 # The website demo is this app, built for web
 

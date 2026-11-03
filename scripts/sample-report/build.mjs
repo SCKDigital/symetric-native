@@ -26,7 +26,7 @@ if (!existsSync(join(tmp, 'node_modules', 'esbuild'))) {
 }
 const { build } = createRequire(join(tmp, 'noop.js'))('esbuild');
 
-const outPdf = resolve(process.argv[2] ?? join(root, '../mositric-marketing/public/symetric-sample-report.pdf'));
+const outPdf = resolve(process.argv[2] ?? join(root, '../symetric-marketing/public/symetric-sample-report.pdf'));
 
 const stubs = {
   '@/lib/supabase': join(here, 'fake-supabase.ts'),

@@ -3,7 +3,7 @@
 // finding. Every pattern the report shows is whatever the app's own detectors
 // make of these rows, which is the point of building it this way.
 //
-// The persona and narrative are from mosaic-app/docs/demo-profile-aisha.md:
+// The persona and narrative are from docs/demo-profile-aisha.md:
 // 29, generalised anxiety (diagnosed, medicated), and ADHD, POTS and
 // hypermobile EDS all suspected and waiting on referrals. Read that before
 // changing the story. The report must stay descriptive; nothing here should

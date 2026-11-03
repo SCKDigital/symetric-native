@@ -297,7 +297,7 @@ Two rules the product itself depends on:
   typical for them, not "fine".
 
 Fuller positioning, and the Aisha persona this is written for, in
-`mosaic-app/.agents/product-marketing.md`. The voice section there is marked
+`symetric-marketing/.agents/product-marketing.md` (the website repo). The voice section there is marked
 as inferred from in-product copy and still wants confirming.
 
 ---
@@ -338,7 +338,7 @@ carries a tick, not only a ring.
 ## Not settled
 
 - **No brand typeface.** The largest open question here.
-- **Store screenshots** (`mosaic-app/marketing/app-store-screenshots/`, 17
+- **Store screenshots** (`store/app-store-screenshots/`, 17
   artboards) show the indigo accent and the placeholder icon — two brands out
   of date now, not one.
 - **The card radii are not a scale**, and the guide now says so rather than

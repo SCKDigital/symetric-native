@@ -1,0 +1,14 @@
+[functions.send-test-notification]
+verify_jwt = false
+
+[functions.send-notifications]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false
+
+[functions.schedule-daily-checkins]
+verify_jwt = false
+
+[functions.site-forms]
+verify_jwt = false

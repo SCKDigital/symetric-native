@@ -1,5 +1,5 @@
 // The demo's starting data: Aisha, the persona behind the website's sample
-// report (mosaic-app/docs/demo-profile-aisha.md), already through onboarding
+// report (docs/demo-profile-aisha.md), already through onboarding
 // and every Today setup card, so a visitor lands straight on Today.
 //
 // Her 90 days are not generated here. aisha-tables.json is written by the

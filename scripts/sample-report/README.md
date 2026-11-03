@@ -2,7 +2,7 @@
 
 Builds the sample PDF the marketing site offers as "read a real report before
 you install anything", at
-`mositric-marketing/public/symetric-sample-report.pdf`.
+`symetric-marketing/public/symetric-sample-report.pdf`.
 
 ```
 node scripts/sample-report/build.mjs            # writes the site's PDF
@@ -44,7 +44,7 @@ the PDF.
 
 ## Changing Aisha
 
-The persona and story are specified in `mosaic-app/docs/demo-profile-aisha.md`.
+The persona and story are specified in `docs/demo-profile-aisha.md`.
 Two rules from it matter most: she tracks a curated five mind domains, not all
 eight, and nothing may read as the report pointing toward a diagnosis.
 

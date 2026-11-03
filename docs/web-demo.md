@@ -30,7 +30,7 @@ disagree, the code is right and this file is stale.
   `EXPO_PUBLIC_DEMO=1` from a Node script. The inline form,
   `EXPO_PUBLIC_DEMO=1 npx expo ...`, only works in bash.
 - **The sample-report build writes the website's PDF by default**, to
-  `../mositric-marketing/public/symetric-sample-report.pdf`. To check a change
+  `../symetric-marketing/public/symetric-sample-report.pdf`. To check a change
   without touching that file, pass a different output path as the first argument.
 
 ## Hosting (Vercel)
@@ -101,7 +101,7 @@ Auth always reports a signed-in demo user, and `functions.invoke` does nothing.
 
 ### The data: Aisha, shared with the sample report
 
-- **Persona and story:** `mosaic-app/docs/demo-profile-aisha.md`. Read it
+- **Persona and story:** `docs/demo-profile-aisha.md`. Read it
   before changing anything. She tracks a curated five mind domains, and nothing
   may read as pointing toward a diagnosis.
 - **Raw rows:** `scripts/sample-report/aisha-data.ts`.

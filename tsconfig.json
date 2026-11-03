@@ -12,7 +12,8 @@
     }
   },
   "exclude": [
-    "scripts"
+    "scripts",
+    "supabase"
   ],
   "include": [
     "**/*.ts",

@@ -45,3 +45,10 @@ example
 
 # scripts/sample-report scratch (bundle, HTML, a local esbuild)
 .tmp-sample-report/
+
+# Supabase CLI link state, local only
+supabase/.temp/
+supabase/.branches/
+
+# stray local web builds
+dist-web/
