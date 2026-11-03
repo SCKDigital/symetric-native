@@ -65,6 +65,10 @@ export function DocumentIcon() {
   );
 }
 
+export function ChartIcon() {
+  return <Frame><Path d="M2 14h12" /><Path d="M4.5 11V8" /><Path d="M8 11V4" /><Path d="M11.5 11V6.5" /></Frame>;
+}
+
 export function CalendarIcon() {
   return (
     <Frame>

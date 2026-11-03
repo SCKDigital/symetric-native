@@ -1,10 +1,12 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
+import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import { HistoryIcon, InsightsIcon, PrepareIcon, SettingsIcon, TodayIcon } from '@/components/nav-icons';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAccent } from '@/contexts/accent-context';
+import { trackScreen } from '@/lib/analytics';
 import { IS_DEMO } from '@/lib/supabase';
 
 // Nav chrome is matched to the web app's <nav> in App.tsx rather than to the
@@ -24,6 +26,13 @@ export default function AppTabs() {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
   const accent = useAccent();
+
+  // Which tab is open: the path only (no query string), and every route is
+  // static, so nothing about what's on screen goes with it.
+  const pathname = usePathname();
+  useEffect(() => {
+    trackScreen(pathname);
+  }, [pathname]);
 
   return (
     <Tabs

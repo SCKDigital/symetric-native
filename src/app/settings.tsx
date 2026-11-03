@@ -7,7 +7,7 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
 import { DeleteAllSheet, DeleteRangeSheet, ExportSheet, ResetBaselineSheet } from '@/components/settings/data-sheets';
 import {
-  BellIcon, BellSlashIcon, BodyIcon, BrainIcon, CalendarIcon, ClockIcon, ClockSimpleIcon,
+  BellIcon, BellSlashIcon, BodyIcon, BrainIcon, CalendarIcon, ChartIcon, ClockIcon, ClockSimpleIcon,
   CycleIcon, DocumentIcon, DownloadIcon, LockIcon, PaperPlaneIcon, RefreshIcon, XDangerIcon,
   EyeIcon,
 } from '@/components/settings/settings-icons';
@@ -28,6 +28,7 @@ import {
 } from '@/lib/body/constants';
 import { AccentPicker } from '@/components/settings/accent-picker';
 import { useComfort } from '@/hooks/use-comfort';
+import { analyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled } from '@/lib/analytics';
 import { resolveActiveDomains } from '@/lib/domains';
 import { openPrivacyPolicy, openTermsOfUse } from '@/lib/legal-links';
 import { subscribeToPushNotifications, syncPushToken, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
@@ -191,6 +192,12 @@ export default function SettingsScreen() {
   const [showMoreExpanded, setShowMoreExpanded] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
   const [testPushResult, setTestPushResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Device-local, like PostHog's own opt-out it mirrors.
+  const [analyticsOn, setAnalyticsOn] = useState(true);
+  useEffect(() => {
+    isAnalyticsEnabled().then(setAnalyticsOn);
+  }, []);
 
   const {
     bodyDomainsActive, bodyAvailableFrom, bodyReminderTime, bodyMorningEnabled, bodyMorningTime,
@@ -657,6 +664,26 @@ export default function SettingsScreen() {
             subtitle="Recalculate what's normal for you"
             right={<ChevronRight />} onPress={() => setSheet('resetBaseline')}
           />
+          {/* Promised by the privacy policy (§14). Counts how the app is used,
+              never what's logged — see src/lib/analytics.ts. Hidden where
+              nothing is sent anyway (no key, or the website demo). */}
+          {analyticsAvailable && (
+            <>
+              <RowDivider />
+              <SettingsRow
+                icon={<ChartIcon />}
+                label="Share usage analytics"
+                subtitle="Which features get used, never what you log"
+                right={<Toggle
+                  value={analyticsOn}
+                  onValueChange={on => {
+                    setAnalyticsOn(on);
+                    setAnalyticsEnabled(on);
+                  }}
+                />}
+              />
+            </>
+          )}
           <RowDivider />
           <SettingsRow
             icon={<DocumentIcon />} label="Privacy policy"
