@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const NATIVE = 'C:/Users/Sam/symetric-native';
+const NATIVE = 'C:/Users/Sam/Symetric/symetric-native';
 const OUT = `${NATIVE}/assets/images`;
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 
@@ -121,8 +121,14 @@ shoot(tileSvg(1024, 225.28, 1.41), 1024, 1024, `${OUT}/icon.png`, false);       
 // Android adaptive: background is a flat colour, foreground is the mark with
 // the safe-zone margin the platform crops to.
 shoot(solidSvg(512), 512, 512, `${OUT}/android-icon-background.png`, false);
-shoot(markSvg(512, 1.21), 512, 512, `${OUT}/android-icon-foreground.png`, true); // 16% margin, inside the adaptive safe zone
-shoot(monoSvg(512, 1.21), 512, 512, `${OUT}/android-icon-monochrome.png`, true);
+// The safe zone is a CIRCLE of diameter 66/108 (radius 30.6% of the canvas),
+// not a square inset: launchers mask to a circle or squircle, and anything
+// outside it can be cut. Was 1.21 (16% square margin), which put the S's
+// rounded top and bottom at 34.3% radius, and Android cropped both. 1.04
+// puts the furthest pixel at ~29.5%, inside the circle with headroom.
+const ADAPTIVE_SCALE = 1.04;
+shoot(markSvg(512, ADAPTIVE_SCALE), 512, 512, `${OUT}/android-icon-foreground.png`, true);
+shoot(monoSvg(512, ADAPTIVE_SCALE), 512, 512, `${OUT}/android-icon-monochrome.png`, true);
 shoot(tileSvg(48, 10.5, 1.41), 48, 48, `${OUT}/favicon.png`, false);
 // Splash sits on the app's own background, so the mark alone. Was scale 2.14,
 // which this geometry (see markSvg/tileSvg's shared transform math: margin% =
