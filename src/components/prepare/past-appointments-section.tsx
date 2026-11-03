@@ -3,16 +3,24 @@ import { Pressable, Text, View } from 'react-native';
 
 import { fetchAllAppointments } from '@/lib/api/appointments';
 import { parseDateString } from '@/lib/date-utils';
-import type { Appointment } from '@/lib/supabase';
+import { buildPastVisits, type PastVisit } from '@/lib/past-visits';
+import { fetchMarkers } from '@/lib/queries/markers';
 import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
-function categoryLabel(categories: Appointment['focus_categories']): string {
+function categoryLabel(categories: PastVisit['categories']): string | null {
   const hasMind = categories.includes('mind');
   const hasBody = categories.includes('body');
   if (hasMind && hasBody) return 'Mind + Body';
   if (hasBody) return 'Body';
-  return 'Mind';
+  if (hasMind) return 'Mind';
+  return null;
+}
+
+/** An event's label, unless it only repeats what the pill already says. */
+function eventLabel(v: PastVisit): string | null {
+  if (!v.label) return null;
+  return /^(mind|body) appointment$/i.test(v.label.trim()) ? null : v.label;
 }
 
 function fmtDate(d: string): string {
@@ -30,12 +38,13 @@ interface Props {
  * Completed appointments are never deleted (completeAppointment only flips
  * is_completed) — this is the one place that record is actually visible,
  * since fetchUpcomingAppointment excludes them and Prepare otherwise never
- * looks at them again once a new appointment is set. Ported from the web
- * app's PastAppointmentsSection.tsx.
+ * looks at them again once a new appointment is set. Appointments logged as
+ * events are listed too: see buildPastVisits. Ported from the web app's
+ * PastAppointmentsSection.tsx.
  */
 export default function PastAppointmentsSection({ userId, refreshKey }: Props) {
   const styles = useStyles();
-  const [past, setPast] = useState<Appointment[]>([]);
+  const [past, setPast] = useState<PastVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
 
@@ -46,8 +55,8 @@ export default function PastAppointmentsSection({ userId, refreshKey }: Props) {
     // reasoning on why this needs the disable comment.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    fetchAllAppointments(userId)
-      .then(all => { if (!cancelled) setPast(all.filter(a => a.is_completed)); })
+    Promise.all([fetchAllAppointments(userId), fetchMarkers()])
+      .then(([appts, markers]) => { if (!cancelled) setPast(buildPastVisits(appts, markers)); })
       .catch(console.error)
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -69,20 +78,27 @@ export default function PastAppointmentsSection({ userId, refreshKey }: Props) {
 
       {open && (
         <View style={styles.list}>
-          {past.map(appt => (
-            <View key={appt.id} style={styles.item}>
-              <View style={styles.itemHeader}>
-                <Text style={styles.itemDate}>{fmtDate(appt.appointment_date)}</Text>
-                <View style={styles.pill}>
-                  <Text style={styles.pillText}>{categoryLabel(appt.focus_categories)}</Text>
+          {past.map(visit => {
+            const category = categoryLabel(visit.categories);
+            const label = eventLabel(visit);
+            return (
+              <View key={visit.key} style={styles.item}>
+                <View style={styles.itemHeader}>
+                  <Text style={styles.itemDate}>{fmtDate(visit.date)}</Text>
+                  {category && (
+                    <View style={styles.pill}>
+                      <Text style={styles.pillText}>{category}</Text>
+                    </View>
+                  )}
                 </View>
+                {label && <Text style={styles.itemFocus}>{label}</Text>}
+                {visit.focusAreas.length > 0 && (
+                  <Text style={styles.itemFocus}>{visit.focusAreas.join(', ')}</Text>
+                )}
+                {visit.notes && <Text style={styles.itemNotes}>{visit.notes}</Text>}
               </View>
-              {appt.focus_areas && appt.focus_areas.length > 0 && (
-                <Text style={styles.itemFocus}>{appt.focus_areas.join(', ')}</Text>
-              )}
-              {appt.notes && <Text style={styles.itemNotes}>{appt.notes}</Text>}
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
     </View>

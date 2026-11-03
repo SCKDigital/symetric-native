@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import AppointmentContext from '@/components/prepare/appointment-context';
@@ -17,6 +18,7 @@ import { trackPrepareTabOpened } from '@/lib/analytics';
 import { fetchClustersForDateRange } from '@/lib/cluster-detection';
 import { addDays, todayDateString } from '@/lib/date-utils';
 import { defaultRangeForPreset, loadSavedRange, saveRange, type PrepareRange } from '@/lib/prepare-range';
+import { buildPastVisits } from '@/lib/past-visits';
 import { fetchMarkers } from '@/lib/queries/markers';
 import type { Appointment, DetectedCluster } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
@@ -90,13 +92,23 @@ export default function PrepareScreen() {
       .then(data => setAllClusters(data ?? []))
       .catch(console.error);
 
-    fetchAllAppointments(user.id).then(all => {
-      const completed = all.filter(a => a.is_completed).sort((a, b) => b.appointment_date.localeCompare(a.appointment_date));
-      setLastVisitDate(completed[0]?.appointment_date ?? null);
-    }).catch(() => {});
-
-    fetchMarkers().then(setMarkers).catch(() => {});
   }, [user]);
+
+  // Visits and events are re-read whenever the tab comes into view, not once
+  // on mount: tabs stay mounted, so an appointment logged as an event on
+  // Today never reached Past appointments or "Since last visit" until the
+  // app restarted. The last visit counts both sources (buildPastVisits).
+  useFocusEffect(useCallback(() => {
+    if (!user) return;
+    let cancelled = false;
+    Promise.all([fetchAllAppointments(user.id), fetchMarkers()]).then(([appts, allMarkers]) => {
+      if (cancelled) return;
+      setMarkers(allMarkers);
+      setLastVisitDate(buildPastVisits(appts, allMarkers)[0]?.date ?? null);
+      setPastRefresh(n => n + 1);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]));
 
   if (loading) return <PulseLoadingScreen />;
 
