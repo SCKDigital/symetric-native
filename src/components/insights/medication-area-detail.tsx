@@ -1,8 +1,9 @@
 import { ScrollView, Text, View } from 'react-native';
 
+import AllEventsList from '@/components/insights/all-events-list';
 import BackRow from '@/components/insights/back-row';
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
-import { readsAsEvent, type InterventionImpact } from '@/lib/detection/intervention-impact';
+import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import { parseDateString } from '@/lib/date-utils';
 import { interventionImpactFindings } from '@/lib/pattern-findings';
 import type { InterventionMarker } from '@/types/marker';
@@ -20,16 +21,18 @@ function fmtDate(d: string): string {
 
 interface Props {
   onBack: () => void;
-  markers: InterventionMarker[];
   impacts: InterventionImpact[];
+  /** Events with no finding that are still waiting on data (isAwaitingData),
+   *  newest first. Events already read with no clear change are not here. */
+  awaitingMarkers: InterventionMarker[];
+  /** Re-runs Insights' load after an event is added, edited or deleted. */
+  onEventsChanged: () => void;
+  cycleTrackingEnabled: boolean;
 }
 
-export default function MedicationAreaDetail({ onBack, markers, impacts }: Props) {
+export default function MedicationAreaDetail({ onBack, impacts, awaitingMarkers: noImpactYet, onEventsChanged, cycleTrackingEnabled }: Props) {
   const styles = useStyles();
   const findings = interventionImpactFindings(impacts);
-  const impactedMarkerIds = new Set(impacts.map(i => i.marker_id));
-  const eligibleMarkers = markers.filter(readsAsEvent);
-  const noImpactYet = eligibleMarkers.filter(m => !impactedMarkerIds.has(m.id));
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -68,6 +71,8 @@ export default function MedicationAreaDetail({ onBack, markers, impacts }: Props
           </View>
         </View>
       )}
+
+      <AllEventsList onChanged={onEventsChanged} cycleTrackingEnabled={cycleTrackingEnabled} />
 
       <Text style={styles.disclaimer}>These are observations from your data, not clinical conclusions. Patterns in the period after a marker don’t imply causation.</Text>
     </ScrollView>

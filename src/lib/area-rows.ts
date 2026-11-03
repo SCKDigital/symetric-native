@@ -57,7 +57,9 @@ export function buildAreaRows(input: BuildAreaRowsInput): AreaRow[] {
 
   rows.push(buildSleepRow(input.sleep));
 
-  if (input.medication.markerCount > 0) rows.push(buildMedicationRow(input.medication));
+  // Always present, even with no events: the Events screen is also where the
+  // full list of events lives, and adding the first one starts from there.
+  rows.push(buildMedicationRow(input.medication));
 
   return rows;
 }
@@ -94,7 +96,10 @@ function buildSleepRow({ findings }: SleepInput): AreaRow {
   return { area: 'sleep', label: 'Sleep', subtitle: count === 1 ? 'Affects 1 area' : `Affects ${count} areas`, state: 'active' };
 }
 
-function buildMedicationRow({ tooRecentLabel, findings }: MedicationInput): AreaRow {
+function buildMedicationRow({ markerCount, tooRecentLabel, findings }: MedicationInput): AreaRow {
+  if (markerCount === 0) {
+    return { area: 'medication', label: 'Events', subtitle: 'No events in this range', state: 'empty' };
+  }
   if (tooRecentLabel) {
     return { area: 'medication', label: 'Events', subtitle: tooRecentLabel, state: 'muted' };
   }

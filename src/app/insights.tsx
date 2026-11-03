@@ -24,7 +24,7 @@ import { detectBodyEventFrequency, BodyEventFrequencyPattern } from '@/lib/detec
 import { detectBodyEventImpacts, BodyEventMindImpact } from '@/lib/detection/body-event-impact';
 import { detectBodyTimeOfDayPatterns, MorningEveningPair, BodyTimeOfDayPattern } from '@/lib/detection/body-time-of-day';
 import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
-import { detectInterventionImpacts, InterventionImpact, readsAsEvent } from '@/lib/detection/intervention-impact';
+import { detectInterventionImpacts, InterventionImpact, isAwaitingData, readsAsEvent } from '@/lib/detection/intervention-impact';
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
 import { detectPatternEvolution, MIN_SPAN_DAYS as EVOLUTION_MIN_SPAN_DAYS, PatternEvolution } from '@/lib/detection/pattern-evolution';
 import { detectRareEvents, RareEvent } from '@/lib/detection/rare-events';
@@ -303,6 +303,7 @@ export default function InsightsScreen() {
   const [interventionImpacts, setInterventionImpacts] = useState<InterventionImpact[]>([]);
   const [markers, setMarkers] = useState<InterventionMarker[]>([]);
   const [tooRecentLabel, setTooRecentLabel] = useState<string | null>(null);
+  const [awaitingMarkers, setAwaitingMarkers] = useState<InterventionMarker[]>([]);
   const [activeDomains, setActiveDomains] = useState<DomainType[]>([]);
   const [rangeStats, setRangeStats] = useState({ from: '', to: '', checkInCount: 0, daysWithCheckIn: 0 });
   const [activeArea, setActiveArea] = useState<Area | null>(null);
@@ -626,9 +627,15 @@ export default function InsightsScreen() {
     // (not at render time) since it needs Date.now() — impure, and the
     // React Compiler-era lint rules flag that during render even for a
     // one-off "how many days ago" calculation like this.
-    const eligibleMarkers = markersInRange.filter(readsAsEvent);
+    //
+    // Only events still waiting on data count (isAwaitingData). This used to
+    // be every event without a finding, so an event read weeks ago that
+    // simply showed no change sat under "too early to read" forever.
     const impactedMarkerIds = new Set(impacts.map(i => i.marker_id));
-    const unreadMarkers = eligibleMarkers.filter(m => !impactedMarkerIds.has(m.id));
+    const unreadMarkers = markersInRange
+      .filter(m => readsAsEvent(m) && !impactedMarkerIds.has(m.id) && isAwaitingData(m, merged90d, to))
+      .sort((a, b) => b.marker_date.localeCompare(a.marker_date));
+    setAwaitingMarkers(unreadMarkers);
     const mostRecentUnread = [...unreadMarkers].sort((a, b) => b.marker_date.localeCompare(a.marker_date))[0];
     const daysSinceMostRecent = mostRecentUnread ? Math.round((Date.now() - parseDateString(mostRecentUnread.marker_date).getTime()) / 86400000) : null;
     setTooRecentLabel(impacts.length === 0 && mostRecentUnread ? `${mostRecentUnread.label} was ${daysSinceMostRecent} day${daysSinceMostRecent !== 1 ? 's' : ''} ago, too early to read` : null);
@@ -855,7 +862,13 @@ export default function InsightsScreen() {
   if (activeArea === 'medication') {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
-        <MedicationAreaDetail onBack={() => setActiveArea(null)} markers={markers} impacts={interventionImpacts} />
+        <MedicationAreaDetail
+          onBack={() => setActiveArea(null)}
+          impacts={interventionImpacts}
+          awaitingMarkers={awaitingMarkers}
+          onEventsChanged={load}
+          cycleTrackingEnabled={profile?.cycle_tracking_enabled ?? false}
+        />
       </SafeAreaView>
     );
   }

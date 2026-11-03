@@ -62,6 +62,21 @@ const MIN_CHANGE = 1.5;
 const SOLID_DAYS = 10;
 const MAX_RESULTS = 3;
 const WINDOWS: (7 | 14 | 21)[] = [14, 7, 21];
+const LONGEST_WINDOW = Math.max(...WINDOWS);
+
+/**
+ * An event with no finding that is still waiting on data: fewer than
+ * MIN_DAYS logged days since it, and its longest after-window has not closed,
+ * so more logging could still make it readable. This is the only honest
+ * "too early to read". An event that has its days and showed nothing, or
+ * whose window closed without enough logging, has been read: it is not
+ * early, so it is not surfaced at all.
+ */
+export function isAwaitingData(marker: { marker_date: string }, days: DayScores[], today: string): boolean {
+  if (addDays(marker.marker_date, LONGEST_WINDOW) < today) return false;
+  const loggedAfter = days.filter(d => d.date > marker.marker_date && d.date <= today).length;
+  return loggedAfter < MIN_DAYS;
+}
 
 export function detectInterventionImpacts(markers: InterventionMarker[], days: DayScores[], activeDomains: TrackedFactor[]): InterventionImpact[] {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
