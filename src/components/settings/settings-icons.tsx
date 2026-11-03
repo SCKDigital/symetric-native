@@ -54,6 +54,10 @@ export function DownloadIcon() {
   return <Frame><Path d="M8 2v8" /><Path d="M5 7l3 3 3-3" /><Path d="M3 12h10" /></Frame>;
 }
 
+export function ChartIcon() {
+  return <Frame><Path d="M2 14h12" /><Path d="M4.5 11V8" /><Path d="M8 11V4" /><Path d="M11.5 11V6.5" /></Frame>;
+}
+
 export function CalendarIcon() {
   return (
     <Frame>

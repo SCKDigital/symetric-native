@@ -60,7 +60,8 @@
             "extraProguardRules": "# react-native-screens and react-native-gesture-handler ship no consumer\n# rules of their own, unlike reanimated/worklets/svg and the expo modules.\n-keep class com.swmansion.** { *; }\n"
           }
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,
