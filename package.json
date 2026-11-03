@@ -55,21 +55,20 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "build:demo": "node scripts/build-demo.mjs"
+    "build:demo": "node scripts/build-demo.mjs",
+    "eas-build-pre-install": "node scripts/check-autolinking.mjs"
   },
   "private": true,
   "expo": {
     "autolinking": {
       "exclude": [
         "@expo/dom-webview",
-        "expo-symbols",
-        "expo-web-browser"
+        "expo-symbols"
       ],
       "android": {
         "exclude": [
           "@expo/dom-webview",
           "expo-symbols",
-          "expo-web-browser",
           "expo-glass-effect"
         ]
       }
