@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth } from '@/contexts/auth-context';
-import { dateToString, ensureUTC } from '@/lib/date-utils';
+import { cycleDayForDate, dateToString, ensureUTC } from '@/lib/date-utils';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { CheckIn, SleepLog, supabase } from '@/lib/supabase';
 import type { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite } from '@/lib/supabase';
+import type { TimeFormat } from '@/lib/time-format';
 import type { InterventionMarker } from '@/types/marker';
 
 export interface DayData {
@@ -15,11 +16,15 @@ export interface DayData {
   bodyEntry?: BodyCheckIn;
   bodyPainSites: BodyPainSite[];
   bodyEvents: (BodyEvent & { body_event_sites: BodyEventSite[] })[];
+  /** "Day N" counted from the latest cycle Day 1 on or before this date;
+   *  null when cycle tracking is off or there is no Day 1 to count from. */
+  cycleDay: number | null;
 }
 
 interface State {
   loading: boolean;
   days: DayData[];
+  timeFormat: TimeFormat;
 }
 
 /**
@@ -34,7 +39,7 @@ interface State {
  */
 export function useHistory() {
   const { user, profile } = useAuth();
-  const [state, setState] = useState<State>({ loading: true, days: [] });
+  const [state, setState] = useState<State>({ loading: true, days: [], timeFormat: '12hr' });
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -48,8 +53,9 @@ export function useHistory() {
     const fromStr = dateToString(ninetyDaysAgo);
 
     const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
+    const cycleTrackingEnabled = profile?.cycle_tracking_enabled ?? false;
 
-    const [{ data: checkIns }, { data: sleepLogs }, markers, { data: bodyCheckIns }, { data: bodyEventsData }] = await Promise.all([
+    const [{ data: checkIns }, { data: sleepLogs }, markers, { data: bodyCheckIns }, { data: bodyEventsData }, { data: cycleDayOnes }, { data: settings }] = await Promise.all([
       supabase.from('check_ins').select('*').eq('user_id', user.id).gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: false }),
       supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', fromStr).order('log_date', { ascending: false }),
       fetchMarkersInRange(fromStr, todayStr).catch(() => [] as InterventionMarker[]),
@@ -59,7 +65,16 @@ export function useHistory() {
       bodyTrackingEnabled
         ? supabase.from('body_events').select('*, body_event_sites(*)').eq('user_id', user.id).gte('event_date', fromStr)
         : Promise.resolve({ data: [] as (BodyEvent & { body_event_sites: BodyEventSite[] })[] }),
+      // Every Day 1, not just the 90-day window's: the first days in view
+      // count from a Day 1 that may have been logged before the window.
+      // Every cycle_phase marker is a Day 1 since the phase engine was cut.
+      cycleTrackingEnabled
+        ? supabase.from('intervention_markers').select('marker_date').eq('user_id', user.id).eq('marker_type', 'cycle_phase').order('marker_date', { ascending: true })
+        : Promise.resolve({ data: [] as { marker_date: string }[] }),
+      // For the times on check-in notes, in the person's 12/24-hour choice.
+      supabase.from('check_in_settings').select('time_format').eq('user_id', user.id).maybeSingle(),
     ]);
+    const dayOneDates = (cycleDayOnes ?? []).map(m => m.marker_date);
 
     const bodyEvents = (bodyEventsData ?? []) as (BodyEvent & { body_event_sites: BodyEventSite[] })[];
 
@@ -98,7 +113,7 @@ export function useHistory() {
     }
 
     const dayMap = new Map<string, DayData>();
-    const emptyDay = (date: string): DayData => ({ date, checkIns: [], sleepLog: null, markers: markersByDate.get(date) ?? [], ...bodyFor(date) });
+    const emptyDay = (date: string): DayData => ({ date, checkIns: [], sleepLog: null, markers: markersByDate.get(date) ?? [], ...bodyFor(date), cycleDay: cycleDayForDate(date, dayOneDates) });
 
     dayMap.set(todayStr, emptyDay(todayStr));
 
@@ -123,8 +138,8 @@ export function useHistory() {
     const thirtyDaysAgoStr = dateToString(thirtyDaysAgo);
     const hasDataBeyond30Days = sorted.some(d => d.date < thirtyDaysAgoStr);
 
-    setState({ loading: false, days: hasDataBeyond30Days ? sorted : sorted.filter(d => d.date >= thirtyDaysAgoStr) });
-  }, [user, profile?.body_tracking_enabled]);
+    setState({ loading: false, timeFormat: (settings?.time_format as TimeFormat | undefined) ?? '12hr', days: hasDataBeyond30Days ? sorted : sorted.filter(d => d.date >= thirtyDaysAgoStr) });
+  }, [user, profile?.body_tracking_enabled, profile?.cycle_tracking_enabled]);
 
   useEffect(() => {
     // See use-today-check-ins.ts for why this needs the disable comment —

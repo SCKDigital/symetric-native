@@ -89,3 +89,18 @@ export function getDatesInRange(from: string, to: string): string[] {
   }
   return dates;
 }
+
+/**
+ * "Day N" of the cycle on `date`, counted from the latest Day 1 on or before
+ * it (Day 1 itself is Day 1). Null with no prior Day 1, or past
+ * MAX_CYCLE_DAY: a count that has run on for months means Day 1s stopped
+ * being logged, not that this is day 140 of a cycle. `day1Dates` sorted
+ * ascending. Ported from the web app's dateUtils.cycleDayForDate.
+ */
+export const MAX_CYCLE_DAY = 60;
+export function cycleDayForDate(date: string, day1Dates: string[]): number | null {
+  const previousDay1 = day1Dates.filter(d => d <= date).slice(-1)[0];
+  if (!previousDay1) return null;
+  const day = Math.round((parseDateString(date).getTime() - parseDateString(previousDay1).getTime()) / 86_400_000) + 1;
+  return day <= MAX_CYCLE_DAY ? day : null;
+}

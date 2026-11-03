@@ -35,7 +35,7 @@ function formatFullDate(dateStr: string): string {
 // specific scoping notes.
 export default function HistoryScreen() {
   const { profile } = useAuth();
-  const { loading, days, refresh } = useHistory();
+  const { loading, days, timeFormat, refresh } = useHistory();
   const [editingMarker, setEditingMarker] = useState<InterventionMarker | null>(null);
 
   if (loading) return <PulseLoadingScreen />;
@@ -67,6 +67,8 @@ export default function HistoryScreen() {
             bodyEntry={item.bodyEntry}
             bodyPainSites={item.bodyPainSites}
             bodyEvents={item.bodyEvents}
+            cycleDay={item.cycleDay}
+            timeFormat={timeFormat}
             onEditMarker={setEditingMarker}
           />
         )}

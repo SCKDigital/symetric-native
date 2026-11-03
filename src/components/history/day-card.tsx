@@ -8,9 +8,12 @@ import { CalendarIcon, MoonIcon, NoteIcon, PillIcon, PinIcon } from '@/component
 import { formatEventLabel, formatPainSiteLabel } from '@/lib/body/format-body-event';
 import { BODY_DOMAIN_ORDER, MORNING_READABLE_DOMAIN_ORDER } from '@/lib/body/constants';
 import type { BodyColumnMode } from '@/lib/history/day-card-helpers';
+import { ensureUTC } from '@/lib/date-utils';
+import { formatTime, type TimeFormat } from '@/lib/time-format';
 import { summariseDay, type BodyReadingPair, type DaySummaryCheckIn } from '@/lib/summarise-day';
 import { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite, CheckIn, Profile, SleepLog } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
+import { markerColors } from '@/lib/marker-colors';
 import { makeAccentStyles } from '@/lib/accent-styles';
 import { useAccent } from '@/contexts/accent-context';
 
@@ -53,6 +56,12 @@ const MARKER_ICON: Partial<Record<InterventionMarker['marker_type'], typeof Pill
   life_event: PinIcon,
 };
 
+/** The cycle colour as a small dot: the marker row's pink, without adding a
+ *  bespoke icon for a chip that is only ever a number. */
+function CycleDot() {
+  return <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: markerColors.cycle_phase, marginHorizontal: 3 }} />;
+}
+
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   const accent = useAccent();
   return (
@@ -74,11 +83,14 @@ export interface DayCardProps {
   bodyEntry?: BodyCheckIn;
   bodyPainSites: BodyPainSite[];
   bodyEvents: (BodyEvent & { body_event_sites: BodyEventSite[] })[];
+  /** Cycle day number (see cycleDayForDate); null hides the chip. */
+  cycleDay: number | null;
+  timeFormat: TimeFormat;
   onEditMarker: (marker: InterventionMarker) => void;
 }
 
 // Scoped port of the web app's DayCard.tsx — deliberately drops what depends
-// on features not ported yet: cycle day numbers, cluster/pattern
+// on features not ported yet: cluster/pattern
 // highlighting, and the edit/delete menu for check-ins (CheckInMenu,
 // EditCheckInModal). Intervention markers and body tracking (chunk 2 of the
 // body-tracking port) ARE now included. Keeps the part that's genuinely
@@ -86,10 +98,11 @@ export interface DayCardProps {
 // sleep/marker/notes chips, and the expandable mind sparkline + body section.
 export default function DayCard({
   date: _date, dayLabel, fullDateLabel, completedCheckIns, profile, sleepLog, dayMarkers,
-  bodyColumnMode, bodyEntry, bodyPainSites, bodyEvents, onEditMarker,
+  bodyColumnMode, bodyEntry, bodyPainSites, bodyEvents, cycleDay, timeFormat, onEditMarker,
 }: DayCardProps) {
   const styles = useStyles();
   const [expanded, setExpanded] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   const mindCount = completedCheckIns.length;
 
@@ -113,7 +126,13 @@ export default function DayCard({
   });
 
   const hasSleep = !!sleepLog && (sleepLog.skipped || sleepLog.score !== null);
-  const hasNotes = completedCheckIns.some(ci => ci.notes);
+  // Each check-in's note with its time, oldest first: the Note chip used to
+  // say a note existed without any way to read it.
+  const notes = completedCheckIns
+    .filter(ci => ci.notes?.trim())
+    .map(ci => ({ id: ci.id, at: ci.completed_at || ci.scheduled_at, text: ci.notes!.trim() }))
+    .sort((a, b) => ensureUTC(a.at).getTime() - ensureUTC(b.at).getTime());
+  const hasNotes = notes.length > 0;
   const rowMarkers = dayMarkers.filter(m => m.marker_type !== 'cycle_phase');
 
   const chips: { icon: React.ReactNode; label: string; onPress?: () => void }[] = [];
@@ -121,11 +140,12 @@ export default function DayCard({
     const hoursSuffix = sleepLog!.hours_slept != null ? ` · ${sleepLog!.hours_slept}h` : '';
     chips.push({ icon: <MoonIcon />, label: sleepLog!.skipped ? 'Sleep skipped' : `${getSleepDescriptor(sleepLog!.score)}${hoursSuffix}` });
   }
+  if (cycleDay != null) chips.push({ icon: <CycleDot />, label: `Day ${cycleDay}` });
   rowMarkers.forEach(m => {
     const Icon = MARKER_ICON[m.marker_type] ?? PinIcon;
     chips.push({ icon: <Icon />, label: m.label, onPress: () => onEditMarker(m) });
   });
-  if (hasNotes) chips.push({ icon: <NoteIcon />, label: 'Note' });
+  if (hasNotes) chips.push({ icon: <NoteIcon />, label: notesOpen ? 'Hide note' : notes.length > 1 ? `${notes.length} notes` : 'Note', onPress: () => setNotesOpen(o => !o) });
 
   // Pain and joint-instability sites share one body map (see BodyCheckIn's
   // "Where does it hurt or feel unstable?" prompt) — there's no per-domain
@@ -160,7 +180,7 @@ export default function DayCard({
 
         {chips.length > 0 && (
           <View style={styles.chipRow}>
-            {chips.slice(0, 4).map((chip, i) =>
+            {(chips.length > 4 && hasNotes ? [...chips.slice(0, 3), chips[chips.length - 1]] : chips.slice(0, 4)).map((chip, i) =>
               chip.onPress ? (
                 <Pressable key={i} onPress={chip.onPress} style={styles.chip}>
                   {chip.icon}
@@ -173,6 +193,17 @@ export default function DayCard({
                 </View>
               ),
             )}
+          </View>
+        )}
+
+        {notesOpen && hasNotes && (
+          <View style={styles.notes}>
+            {notes.map(n => (
+              <View key={n.id}>
+                <Text style={styles.noteTime}>{formatTime(ensureUTC(n.at).toISOString(), timeFormat)}</Text>
+                <Text style={styles.noteText}>{n.text}</Text>
+              </View>
+            ))}
           </View>
         )}
 
@@ -209,6 +240,9 @@ const useStyles = makeAccentStyles(b => ({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#1e2533', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 9 },
   chipLabel: { fontSize: 11, color: '#8892a4' },
+  notes: { marginTop: 10, gap: 10, borderLeftWidth: 2, borderLeftColor: '#1e2533', paddingLeft: 12 },
+  noteTime: { fontSize: 11, color: '#4a5568', marginBottom: 2 },
+  noteText: { fontSize: 13, color: '#b0b8c8', lineHeight: 19 },
   bodySectionSpaced: { marginTop: 20 },
   expandButton: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12, paddingVertical: 4 },
   expandButtonText: { fontSize: 13, color: b.text },
