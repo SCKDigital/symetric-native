@@ -24,25 +24,34 @@ connection comes back. Online, nothing looks different.
 - **Sign-out** warns when entries haven't synced. They stay on the phone under
   that account and sync the next time it signs in here.
 
-## Anything that can't work offline says so
+## What works offline, and what can't
 
-The words are always **"Unavailable offline"**, from
-`src/components/shared/offline-gate.tsx`:
+**Works offline (queued, applied at once through an overlay):**
+- **Entries:** check-ins incl. one-tap, bonus and edits; body (evening, morning,
+  one-tap); sleep; markers.
+- **Today and Prepare:** rescheduling a check-in; appointments (add, edit,
+  remove, mark done); questions; flagging a pattern for the report.
+- **Settings and profile:** every Settings change (mind domains and baselines,
+  body and cycle tracking, time format, check-in window and frequency, do not
+  disturb, accent, app lock); comfort mode; setup cards. Profile changes are
+  laid over the profile in `auth-context.tsx`, and check-in settings in each
+  reader, via `overlayProfile` and `overlayCheckInSettings`.
 
-- `RequiresConnection` dims a section and blocks its controls, under that
-  caption. It's used for Settings (tracking setup, body, cycle, notifications,
-  security, preferences) and Today's setup cards.
-- `guardOnline(fn, 'What')` lets a button run online, and offline shows an
-  alert instead. It's used for comfort mode on/off, reschedule, flagging a
-  pattern for the report, appointment add/edit/remove/done, and the privacy and
-  terms links.
-- `OfflineUnavailable` is a card in place of content with nothing to show. It's
-  used when Today's check-ins, History, Insights, a pattern's day-by-day scores,
-  or the events list have never loaded on this phone.
-- Sheet buttons read "Unavailable offline" and are disabled: export, delete a
-  range, delete account, reset baselines, PDF report.
-- Sign-in shows the line under the email field. Onboarding's final step says
-  why it can't finish, and keeps the answers.
+**Genuinely needs the server, so it says "Unavailable offline"**
+(`src/components/shared/offline-gate.tsx`):
+- Sign-in (the link is emailed), and onboarding's final step (the server
+  stamps consent with the request's IP).
+- Turning push notifications on or off, and the test notification. These
+  register or remove this phone with Expo.
+- Export, delete a date range, delete account, reset baselines and the PDF
+  report. They act on the server's copy, and send the queue first when online.
+- The privacy and terms links, which are web pages.
+- Content never loaded on this phone (Today's check-ins, History, Insights, a
+  pattern's day-by-day scores, the events list, questions) gets an
+  `OfflineUnavailable` card instead of an empty screen.
+
+The helpers are `guardOnline(fn, 'What')` for buttons and `OfflineUnavailable`
+for missing content.
 
 **Never let a failed read look like real data.** These were all wrong offline
 before this pass:
@@ -125,8 +134,9 @@ the saved copy with nothing; see `fetchClustersForDateRangeOrThrow`.
 
 ## Not covered yet
 
-- **Appointments, reschedule, settings, comfort mode, sign-in and onboarding**
-  need a connection, and are marked unavailable offline (see above).
+- **Insights' own settings bundle** (active domains, time format) doesn't
+  overlay unsent settings changes. Its findings are server-derived anyway and
+  update after sync.
 - **Insights doesn't overlay unsent entries.** Its findings come from server
   detection, so they update after sync, as intended.
 - **No check-ins scheduled yet.** If the phone is offline from before the

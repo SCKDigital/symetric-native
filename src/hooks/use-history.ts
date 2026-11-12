@@ -5,7 +5,7 @@ import { cycleDayForDate, dateToString, ensureUTC } from '@/lib/date-utils';
 import { readCache, writeCache } from '@/lib/offline/cache';
 import { isOnline, subscribeOnline } from '@/lib/offline/connectivity';
 import { onSynced } from '@/lib/offline/outbox';
-import { overlayBody, overlayCheckIns, overlayMarkers, overlaySleepLogs, pendingBonusCheckIns } from '@/lib/offline/overlays';
+import { overlayBody, overlayCheckIns, overlayCheckInSettings, overlayMarkers, overlaySleepLogs, pendingBonusCheckIns } from '@/lib/offline/overlays';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { CheckIn, SleepLog, supabase } from '@/lib/supabase';
 import type { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite } from '@/lib/supabase';
@@ -197,7 +197,9 @@ export function useHistory() {
     const thirtyDaysAgoStr = dateToString(thirtyDaysAgo);
     const hasDataBeyond30Days = sorted.some(d => d.date < thirtyDaysAgoStr);
 
-    setState({ loading: false, offlineUnavailable, offlineCopy, timeFormat: raw.timeFormat, days: hasDataBeyond30Days ? sorted : sorted.filter(d => d.date >= thirtyDaysAgoStr) });
+    // A 12/24-hour change made offline applies here too.
+    const timeFormat = (overlayCheckInSettings({ time_format: raw.timeFormat })?.time_format ?? raw.timeFormat) as TimeFormat;
+    setState({ loading: false, offlineUnavailable, offlineCopy, timeFormat, days: hasDataBeyond30Days ? sorted : sorted.filter(d => d.date >= thirtyDaysAgoStr) });
   }, [user, profile?.body_tracking_enabled, profile?.cycle_tracking_enabled]);
 
   useEffect(() => {

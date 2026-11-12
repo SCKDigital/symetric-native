@@ -8,7 +8,7 @@ import {
   type AccentTokens,
 } from '@/constants/accents';
 import { useAuth } from '@/contexts/auth-context';
-import { supabase } from '@/lib/supabase';
+import { saveProfile } from '@/lib/offline/queued-writes';
 
 /**
  * Which accent the app is wearing, for everything inside the tree.
@@ -61,10 +61,7 @@ export function AccentProvider({ children }: { children: ReactNode }) {
       setError(null);
       setOverride(next);
 
-      const { error: writeError } = await supabase
-        .from('profiles')
-        .update({ accent: next })
-        .eq('id', user.id);
+      const { error: writeError } = await saveProfile(user.id, { accent: next });
 
       const isLatest = () => seq === writeSeqRef.current;
       if (writeError) {

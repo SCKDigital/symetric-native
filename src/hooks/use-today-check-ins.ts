@@ -6,7 +6,7 @@ import { RESCUE_WINDOW_MS } from '@/lib/constants';
 import { readCache, writeCache } from '@/lib/offline/cache';
 import { isOnline, subscribeOnline } from '@/lib/offline/connectivity';
 import { onSynced, pendingPayloads } from '@/lib/offline/outbox';
-import { overlayCheckIns } from '@/lib/offline/overlays';
+import { overlayBaselines, overlayCheckIns, overlayCheckInSettings } from '@/lib/offline/overlays';
 import { ensureTodayCheckIns } from '@/lib/scheduler';
 import { Baseline, CheckIn, CheckInSettings, DomainType, supabase } from '@/lib/supabase';
 import type { TimeFormat } from '@/lib/time-format';
@@ -168,10 +168,12 @@ export function useTodayCheckIns() {
       writeCache(user.id, 'today', { date: todayLocal, checkIns: checkInRows, settings: settingsRow, baselines: baselineRows } satisfies TodayCache);
     }
 
-    const activeDomains = resolveActiveDomains(settingsRow);
+    // Settings and baselines changed offline apply straight away.
+    const settingsNow = overlayCheckInSettings(settingsRow);
+    const activeDomains = resolveActiveDomains(settingsNow);
 
     const baselines = {} as Record<DomainType, number>;
-    baselineRows.forEach(b => {
+    overlayBaselines(baselineRows).forEach(b => {
       if (baselines[b.domain] === undefined) baselines[b.domain] = b.baseline_score;
     });
 
@@ -274,8 +276,8 @@ export function useTodayCheckIns() {
         || pendingPayloads('checkIn.bonus').length > 0
         ? true
         : (everRes.data?.length ?? 0) > 0,
-      timeFormat: (settingsRow?.time_format as TimeFormat | undefined) ?? '12hr',
-      checkInSettings: settingsRow,
+      timeFormat: (settingsNow?.time_format as TimeFormat | undefined) ?? '12hr',
+      checkInSettings: settingsNow,
       // Only worth showing when it actually left the day empty.
       schedulingError: totalCount === 0 ? schedulingError : null,
       checkInsUnavailable: !!checkInsRes.error && cached?.date !== todayLocal,

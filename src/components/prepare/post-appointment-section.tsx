@@ -5,7 +5,6 @@ import { completeAppointment } from '@/lib/api/appointments';
 import { fetchQuestionsForAppointment } from '@/lib/api/questions';
 import { trackAppointmentCompleted, trackPostAppointmentOutcomeCaptured } from '@/lib/analytics';
 import { todayDateString } from '@/lib/date-utils';
-import { guardOnline } from '@/components/shared/offline-gate';
 import type { Appointment, PrepareQuestion } from '@/lib/supabase';
 import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
@@ -115,7 +114,7 @@ export default function PostAppointmentSection({ appointment, onComplete }: Prop
       )}
 
       {!confirmOpen ? (
-        <Pressable onPress={guardOnline(() => setConfirmOpen(true), 'Marking an appointment done')} style={styles.markDoneButton}>
+        <Pressable onPress={() => setConfirmOpen(true)} style={styles.markDoneButton}>
           <Text style={styles.markDoneText}>Mark appointment as done</Text>
         </Pressable>
       ) : (
@@ -124,7 +123,7 @@ export default function PostAppointmentSection({ appointment, onComplete }: Prop
           <Pressable onPress={() => setConfirmOpen(false)} hitSlop={4}>
             <Text style={styles.confirmCancel}>Cancel</Text>
           </Pressable>
-          <Pressable onPress={guardOnline(handleComplete, 'Marking an appointment done')} disabled={completing} style={[styles.doneButton, completing && styles.doneButtonDisabled]}>
+          <Pressable onPress={handleComplete} disabled={completing} style={[styles.doneButton, completing && styles.doneButtonDisabled]}>
             <Text style={[styles.doneButtonText, completing && styles.doneButtonTextDisabled]}>{completing ? 'Saving…' : 'Done'}</Text>
           </Pressable>
         </View>

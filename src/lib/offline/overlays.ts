@@ -14,10 +14,14 @@ import type { InterventionMarker } from '@/types/marker';
 export function overlayCheckIns(rows: CheckIn[]): CheckIn[] {
   const completes = pendingPayloads('checkIn.complete');
   const edits = pendingPayloads('checkIn.edit');
-  if (completes.length === 0 && edits.length === 0) return rows;
+  const moves = pendingPayloads('checkIn.reschedule');
+  if (completes.length === 0 && edits.length === 0 && moves.length === 0) return rows;
 
   return rows.map(row => {
     let next = row;
+    for (const m of moves) {
+      if (m.checkInId === row.id) next = { ...next, ...m.fields } as CheckIn;
+    }
     for (const c of completes) {
       if (c.checkInId !== row.id) continue;
       next = {
@@ -166,6 +170,70 @@ export function overlayQuestions(rows: PrepareQuestion[], appointmentId: string)
   }
   return [...out].sort((a, b) =>
     Number(b.is_priority) - Number(a.is_priority) || a.sort_order - b.sort_order);
+}
+
+/** The profile with unsent profile changes applied, in the order made. */
+export function overlayProfile<T extends object>(profile: T): T {
+  const updates = pendingPayloads('profile.update');
+  if (updates.length === 0) return profile;
+  return updates.reduce((p, u) => ({ ...p, ...u.fields }), profile);
+}
+
+/** check_in_settings with unsent changes applied. Null stays null unless a
+ *  change is waiting, which creates the row on the server too. */
+export function overlayCheckInSettings<T extends object>(row: T | null): T | null {
+  const updates = pendingPayloads('checkInSettings.upsert');
+  if (updates.length === 0) return row;
+  return updates.reduce((r, u) => ({ ...(r ?? {}), ...u.fields }) as T, row as T | null);
+}
+
+/** Current baselines with unsent ones applied: a newly set baseline replaces
+ *  the domain's current one; seeds only fill domains that have none. */
+export function overlayBaselines<T extends { domain: string; is_current?: boolean }>(rows: T[]): T[] {
+  const commands = pendingCommandsOf(['baseline.set', 'baseline.seed']);
+  if (commands.length === 0) return rows;
+  let out = rows;
+  for (const c of commands) {
+    if (c.type === 'baseline.set') {
+      const row = (c.payload as CommandPayloads['baseline.set']).row as unknown as T;
+      out = [row, ...out.filter(b => b.domain !== row.domain)];
+    } else {
+      for (const r of (c.payload as CommandPayloads['baseline.seed']).rows as unknown as T[]) {
+        if (!out.some(b => b.domain === r.domain)) out = [...out, r];
+      }
+    }
+  }
+  return out;
+}
+
+/** Patterns with unsent report flags applied. */
+export function overlayClusters<T extends { id: string; flagged_for_report?: boolean }>(rows: T[]): T[] {
+  const flags = pendingPayloads('cluster.flag');
+  if (flags.length === 0) return rows;
+  return rows.map(c => {
+    const last = flags.filter(f => f.id === c.id).at(-1);
+    return last ? { ...c, flagged_for_report: last.flagged } : c;
+  });
+}
+
+/** Appointments with unsent creates, edits and deletes applied. */
+export function overlayAppointments<T extends { id: string }>(rows: T[]): T[] {
+  const commands = pendingCommandsOf(['appointment.create', 'appointment.update', 'appointment.delete']);
+  if (commands.length === 0) return rows;
+  let out = rows;
+  for (const c of commands) {
+    if (c.type === 'appointment.create') {
+      const row = (c.payload as CommandPayloads['appointment.create']).row as unknown as T;
+      if (!out.some(a => a.id === row.id)) out = [...out, row];
+    } else if (c.type === 'appointment.update') {
+      const { id, updates } = c.payload as CommandPayloads['appointment.update'];
+      out = out.map(a => (a.id === id ? { ...a, ...updates } : a));
+    } else {
+      const { id } = c.payload as CommandPayloads['appointment.delete'];
+      out = out.filter(a => a.id !== id);
+    }
+  }
+  return out;
 }
 
 /** Bonus check-ins saved on this phone and not yet on the server, newest first. */

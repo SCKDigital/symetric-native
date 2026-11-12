@@ -17,6 +17,7 @@ import { fetchUpcomingAppointment, fetchAllAppointments } from '@/lib/api/appoin
 import { trackPrepareTabOpened } from '@/lib/analytics';
 import { fetchClustersForDateRangeOrThrow } from '@/lib/cluster-detection';
 import { readThrough } from '@/lib/offline/read-through';
+import { overlayClusters } from '@/lib/offline/overlays';
 import { useIsOnline } from '@/lib/offline/connectivity';
 import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
 import { addDays, todayDateString } from '@/lib/date-utils';
@@ -95,7 +96,8 @@ export default function PrepareScreen() {
     // One fixed name, not the dates: offline the next day, yesterday's
     // 90-day read is still the best there is.
     readThrough('clusters.prepare', () => fetchClustersForDateRangeOrThrow(user.id, from, todayStr))
-      .then(data => setAllClusters(data ?? []))
+      // Flags set offline count, so the report picker matches Insights.
+      .then(data => setAllClusters(overlayClusters(data ?? [])))
       .catch(console.error);
 
   }, [user]);
@@ -134,7 +136,7 @@ export default function PrepareScreen() {
         {!online && (
           <OfflineSnapshotNote
             what="your appointments"
-            extra="Questions you add will sync. Changing an appointment needs a connection." />
+            extra="Appointments and questions you add or change sync when you’re back online." />
         )}
 
         <AppointmentContext appointment={appointment} onAppointmentChange={loadAppointment} />

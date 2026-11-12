@@ -84,6 +84,25 @@ export interface CommandPayloads {
     fields: Record<string, unknown>;
   };
 
+  /** A scheduled check-in moved to a new time. fields are the columns it sets. */
+  'checkIn.reschedule': { checkInId: string; fields: Record<string, unknown> };
+
+  /** Profile columns, set outright: settings, comfort mode, accent, app lock. */
+  'profile.update': { fields: Record<string, unknown> };
+  /** check_in_settings columns, upserted on user_id (one row per user). */
+  'checkInSettings.upsert': { fields: Record<string, unknown> };
+  /** A new current baseline for one domain; earlier ones stop being current. */
+  'baseline.set': { row: Record<string, unknown> & { id: string; domain: string } };
+  /** Starting baselines at setup, inserted as they are. */
+  'baseline.seed': { rows: (Record<string, unknown> & { id: string })[] };
+
+  /** A pattern flagged, or unflagged, for the report. */
+  'cluster.flag': { id: string; flagged: boolean };
+
+  'appointment.create': { row: Record<string, unknown> & { id: string } };
+  'appointment.update': { id: string; updates: Record<string, unknown> };
+  'appointment.delete': { id: string };
+
   /** Prepare's questions for an appointment. */
   'question.create': { row: Record<string, unknown> & { id: string; appointment_id: string } };
   'question.update': { id: string; updates: Record<string, unknown> };
@@ -208,6 +227,47 @@ export const HANDLERS: Handlers = {
       { user_id: userId, log_date: logDate, ...fields },
       { onConflict: 'user_id,log_date' },
     ));
+  },
+
+  'checkIn.reschedule': async ({ checkInId, fields }) => {
+    must(await supabase.from('check_ins').update(fields).eq('id', checkInId));
+  },
+
+  'profile.update': async ({ fields }, userId) => {
+    must(await supabase.from('profiles').update(fields).eq('id', userId));
+  },
+
+  'checkInSettings.upsert': async ({ fields }, userId) => {
+    must(await supabase.from('check_in_settings').upsert({ user_id: userId, ...fields }, { onConflict: 'user_id' }));
+  },
+
+  'baseline.set': async ({ row }, userId) => {
+    // Every other current row for the domain stops being current — but never
+    // this one, so a resend after the insert landed leaves it current.
+    must(await supabase.from('baselines').update({ is_current: false })
+      .eq('user_id', userId).eq('domain', row.domain).eq('is_current', true).neq('id', row.id));
+    must(await supabase.from('baselines').upsert({ user_id: userId, ...row }, { onConflict: 'id', ignoreDuplicates: true }));
+  },
+
+  'baseline.seed': async ({ rows }, userId) => {
+    must(await supabase.from('baselines').upsert(
+      rows.map(r => ({ user_id: userId, ...r })), { onConflict: 'id', ignoreDuplicates: true }));
+  },
+
+  'cluster.flag': async ({ id, flagged }) => {
+    must(await supabase.from('detected_clusters').update({ flagged_for_report: flagged }).eq('id', id));
+  },
+
+  'appointment.create': async ({ row }) => {
+    must(await supabase.from('appointments').upsert(row, { onConflict: 'id', ignoreDuplicates: true }));
+  },
+
+  'appointment.update': async ({ id, updates }) => {
+    must(await supabase.from('appointments').update(updates).eq('id', id));
+  },
+
+  'appointment.delete': async ({ id }) => {
+    must(await supabase.from('appointments').delete().eq('id', id));
   },
 
   'question.create': async ({ row }) => {

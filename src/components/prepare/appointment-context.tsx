@@ -5,7 +5,6 @@ import { createAppointment, deleteAppointment, updateAppointment } from '@/lib/a
 import { trackAppointmentCreated } from '@/lib/analytics';
 import { parseDateString, todayDateString } from '@/lib/date-utils';
 import { useAuth } from '@/contexts/auth-context';
-import { guardOnline } from '@/components/shared/offline-gate';
 import type { Appointment, AppointmentFocusCategory } from '@/lib/supabase';
 
 import AppointmentModal from './appointment-modal';
@@ -71,7 +70,7 @@ export default function AppointmentContext({ appointment, onAppointmentChange }:
         <View style={styles.card}>
           <Text style={styles.emptyTitle}>Set your next appointment</Text>
           <Text style={styles.emptyBody}>Add your appointment date and we&rsquo;ll help you prepare with patterns, questions, and a report.</Text>
-          <Pressable onPress={guardOnline(() => setShowModal(true), 'Adding an appointment')} style={styles.setButton}>
+          <Pressable onPress={() => setShowModal(true)} style={styles.setButton}>
             <Text style={styles.setButtonText}>Set appointment date</Text>
           </Pressable>
         </View>
@@ -92,7 +91,7 @@ export default function AppointmentContext({ appointment, onAppointmentChange }:
             <Text style={styles.date}>{fmtDate(appointment.appointment_date)}</Text>
             <Text style={[styles.daysLabel, daysLabel === 'Today' ? styles.daysLabelToday : isPast ? styles.daysLabelPast : null]}>{daysLabel}</Text>
           </View>
-          <Pressable onPress={guardOnline(() => setShowModal(true), 'Changing an appointment')} hitSlop={8}>
+          <Pressable onPress={() => setShowModal(true)} hitSlop={8}>
             <Text style={styles.editText}>Edit</Text>
           </Pressable>
         </View>
@@ -105,13 +104,13 @@ export default function AppointmentContext({ appointment, onAppointmentChange }:
         )}
 
         {!showDeleteConfirm ? (
-          <Pressable onPress={guardOnline(() => setShowDeleteConfirm(true), 'Removing an appointment')} style={styles.removeButton}>
+          <Pressable onPress={() => setShowDeleteConfirm(true)} style={styles.removeButton}>
             <Text style={styles.removeText}>Remove appointment</Text>
           </Pressable>
         ) : (
           <View style={styles.confirmRow}>
             <Text style={styles.confirmText}>Remove this appointment?</Text>
-            <Pressable onPress={guardOnline(handleDelete, 'Removing an appointment')} disabled={deleting} hitSlop={8}>
+            <Pressable onPress={handleDelete} disabled={deleting} hitSlop={8}>
               <Text style={styles.confirmYes}>{deleting ? 'Removing…' : 'Yes, remove'}</Text>
             </Pressable>
             <Pressable onPress={() => setShowDeleteConfirm(false)} hitSlop={8}>

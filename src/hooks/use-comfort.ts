@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { addDays } from '@/lib/date-utils';
 import { localTimeToUTC } from '@/lib/scheduler';
-import { supabase } from '@/lib/supabase';
+import { saveProfile } from '@/lib/offline/queued-writes';
 
 /** How long an armed comfort window lasts. Two options on purpose — a duration
  *  picker is itself a demand, which is the thing this mode exists to remove. */
@@ -138,7 +138,7 @@ export function useComfort(): Comfort {
       const seq = ++writeSeqRef.current;
       setError(null);
       setOverride(patch);
-      const { error: writeError } = await supabase.from('profiles').update(patch).eq('id', user.id);
+      const { error: writeError } = await saveProfile(user.id, patch);
       const isLatest = () => seq === writeSeqRef.current;
       if (writeError) {
         if (isLatest()) {

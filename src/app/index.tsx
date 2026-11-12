@@ -8,7 +8,7 @@ import MarkerModal from '@/components/marker-modal';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
 import SyncStatusBanner from '@/components/shared/sync-status-banner';
-import { guardOnline, OfflineUnavailable, RequiresConnection } from '@/components/shared/offline-gate';
+import { OfflineUnavailable } from '@/components/shared/offline-gate';
 import { BodyCheckInCard, MorningBodyCheckInCard } from '@/components/today/body-check-in-cards';
 import { ActiveCheckInCard, LateCheckInCard, PendingCheckInCard } from '@/components/today/check-in-cards';
 import AppointmentReminderCard, { daysUntil } from '@/components/today/appointment-reminder-card';
@@ -30,7 +30,7 @@ import { submit } from '@/lib/offline/outbox';
 import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 import { timeOfDayInTZ } from '@/lib/scheduler';
 import { formatTime, formatWindowTime } from '@/lib/time-format';
-import { supabase, type Appointment, type CheckIn } from '@/lib/supabase';
+import { type Appointment, type CheckIn } from '@/lib/supabase';
 import { type ComfortTokens } from '@/lib/comfort-theme';
 import { brandTint } from '@/constants/brand';
 import type { AccentTokens } from '@/constants/accents';
@@ -187,16 +187,24 @@ function TodayHome() {
   // the new time rather than counting as already sent, and scheduled_date is
   // recomputed in the user's zone because a late-evening move can cross
   // midnight in UTC while still being the same local day.
+  //
+  // Through the outbox, so it works offline: the move shows at once (the
+  // check-in overlay applies it) and the server, which sends the reminder,
+  // learns of it on the next sync.
   const handleReschedule = async (target: CheckIn, newTimeIso: string) => {
+    if (!user) return;
     const newScheduledAt = new Date(newTimeIso);
-    const { error } = await supabase.from('check_ins').update({
-      scheduled_at: newTimeIso,
-      expires_at: new Date(newScheduledAt.getTime() + CHECK_IN_EXPIRY_MINUTES * 60_000).toISOString(),
-      scheduled_date: new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(newScheduledAt),
-      rescheduled_at: new Date().toISOString(),
-      notified_at: null,
-    }).eq('id', target.id);
-    if (error) console.error('[Today] reschedule error:', error);
+    const result = await submit(user.id, 'checkIn.reschedule', {
+      checkInId: target.id,
+      fields: {
+        scheduled_at: newTimeIso,
+        expires_at: new Date(newScheduledAt.getTime() + CHECK_IN_EXPIRY_MINUTES * 60_000).toISOString(),
+        scheduled_date: new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(newScheduledAt),
+        rescheduled_at: new Date().toISOString(),
+        notified_at: null,
+      },
+    });
+    if (result.status === 'rejected') console.error('[Today] reschedule rejected:', result.error);
     setReschedulingCheckIn(null);
     refresh();
   };
@@ -298,9 +306,7 @@ function TodayHome() {
         {header}
         <ComfortBanner comfort={comfort} timeFormat={timeFormat} onTurnOff={comfort.disarm} />
 
-        <RequiresConnection>
-          <SetupCards state={setupCards} onChanged={() => { setupCards.refresh(); refresh(); }} />
-        </RequiresConnection>
+        <SetupCards state={setupCards} onChanged={() => { setupCards.refresh(); refresh(); }} />
 
         {snoozedCheckIn && (
           <PendingCheckInCard
@@ -342,7 +348,7 @@ function TodayHome() {
                 <Text style={styles.nextThen}>then {formatTime(afterNextScheduled.scheduled_at, timeFormat)}</Text>
               )}
               {checkInSettings && (
-                <Pressable onPress={guardOnline(() => setShowRescheduleList(true), 'Rescheduling a check-in')} style={({ pressed }) => pressed && styles.pressed}>
+                <Pressable onPress={() => setShowRescheduleList(true)} style={({ pressed }) => pressed && styles.pressed}>
                   <Text style={styles.reschedule}>Reschedule</Text>
                 </Pressable>
               )}

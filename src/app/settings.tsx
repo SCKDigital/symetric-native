@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOutbox } from '@/lib/offline/outbox';
 import { useIsOnline } from '@/lib/offline/connectivity';
 import { readThrough } from '@/lib/offline/read-through';
-import { guardOnline, OfflineUnavailable, RequiresConnection } from '@/components/shared/offline-gate';
+import { guardOnline } from '@/components/shared/offline-gate';
+import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
 
 import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
@@ -39,6 +40,8 @@ import { openPrivacyPolicy, openTermsOfUse } from '@/lib/legal-links';
 import { subscribeToPushNotifications, syncPushToken, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
 import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
 import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
+import { saveCheckInSettings, saveProfile, setBaseline } from '@/lib/offline/queued-writes';
+import { overlayCheckInSettings } from '@/lib/offline/overlays';
 import { supabase } from '@/lib/supabase';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { brandTint } from '@/constants/brand';
@@ -248,8 +251,10 @@ export default function SettingsScreen() {
       setLoading(false);
       return;
     }
-    setCheckInSettings(data as CheckInSettings | null);
-    setActiveDomains(resolveActiveDomains(data));
+    // Changes still waiting to sync show as made.
+    const settingsNow = overlayCheckInSettings(data as CheckInSettings | null);
+    setCheckInSettings(settingsNow);
+    setActiveDomains(resolveActiveDomains(settingsNow));
     setLoading(false);
   }, [user]);
 
@@ -269,8 +274,7 @@ export default function SettingsScreen() {
   const updateActiveDomains = async (next: DomainType[], prev: DomainType[]) => {
     if (!user) return;
     setActiveDomains(next);
-    const { error } = await supabase.from('check_in_settings')
-      .update({ active_domains: next, updated_at: new Date().toISOString() }).eq('user_id', user.id);
+    const { error } = await saveCheckInSettings(user.id, { active_domains: next, updated_at: new Date().toISOString() });
     if (error) {
       setActiveDomains(prev);
       setToastMessage('Failed to save changes. Please try again.');
@@ -302,11 +306,10 @@ export default function SettingsScreen() {
 
   const handleBaselineSubmit = async (score: number) => {
     if (!pendingEnable || !user) return;
-    await supabase.from('baselines').update({ is_current: false })
-      .eq('user_id', user.id).eq('domain', pendingEnable).eq('is_current', true);
-    await supabase.from('baselines').insert({
-      user_id: user.id, domain: pendingEnable, baseline_score: score, source: 'manual_reset', is_current: true,
-    });
+    // Queued like any other setting: the new baseline replaces the domain's
+    // current one, on the server when it arrives and in the overlay until then.
+    const { error } = await setBaseline(user.id, pendingEnable, score, 'manual_reset');
+    if (error) { setToastMessage('Failed to save changes. Please try again.'); return; }
     await updateActiveDomains([...activeDomains, pendingEnable], activeDomains);
     setPendingEnable(null);
   };
@@ -317,7 +320,7 @@ export default function SettingsScreen() {
     if (!user) return;
     const next = !current;
     onOptimistic?.(next);
-    const { error } = await supabase.from('profiles').update({ [field]: next }).eq('id', user.id);
+    const { error } = await saveProfile(user.id, { [field]: next });
     if (error) {
       onOptimistic?.(current);
       setToastMessage('Failed to save changes. Please try again.');
@@ -332,7 +335,7 @@ export default function SettingsScreen() {
     if (!user || next === timeFormat) return;
     const prev = checkInSettings;
     setCheckInSettings(p => (p ? { ...p, time_format: next } : p));
-    const { error } = await supabase.from('check_in_settings').update({ time_format: next }).eq('user_id', user.id);
+    const { error } = await saveCheckInSettings(user.id, { time_format: next });
     if (error) { setCheckInSettings(prev); setToastMessage('Failed to save changes. Please try again.'); }
   };
 
@@ -345,7 +348,7 @@ export default function SettingsScreen() {
       dnd_end_time: next ? `${dndEndTime}:00` : null,
     };
     setCheckInSettings(p => (p ? { ...p, ...patch } : p));
-    const { error } = await supabase.from('check_in_settings').update(patch).eq('user_id', user.id);
+    const { error } = await saveCheckInSettings(user.id, patch);
     if (error) { setCheckInSettings(prev); setToastMessage('Failed to save changes. Please try again.'); }
   };
 
@@ -353,22 +356,20 @@ export default function SettingsScreen() {
     if (!user) return;
     const patch = { dnd_start_time: `${start}:00`, dnd_end_time: `${end}:00` };
     setCheckInSettings(p => (p ? { ...p, ...patch } : p));
-    const { error } = await supabase.from('check_in_settings').update(patch).eq('user_id', user.id);
+    const { error } = await saveCheckInSettings(user.id, patch);
     if (error) setToastMessage('Failed to save times. Please try again.');
   };
 
   const handleSaveActiveWindow = async (start: string, end: string) => {
     if (!user) return;
-    const { error } = await supabase.from('check_in_settings')
-      .update({ window_start: start, window_end: end }).eq('user_id', user.id);
+    const { error } = await saveCheckInSettings(user.id, { window_start: start, window_end: end });
     if (error) throw error;
     setCheckInSettings(p => (p ? { ...p, window_start: start, window_end: end } : p));
   };
 
   const handleSaveFrequency = async (freq: number) => {
     if (!user) return;
-    const { error } = await supabase.from('check_in_settings')
-      .update({ check_ins_per_day: freq }).eq('user_id', user.id);
+    const { error } = await saveCheckInSettings(user.id, { check_ins_per_day: freq });
     if (error) throw error;
     setCheckInSettings(p => (p ? { ...p, check_ins_per_day: freq } : p));
   };
@@ -440,12 +441,13 @@ export default function SettingsScreen() {
           <View style={styles.loadError}><Text style={styles.loadErrorText}>{loadError}</Text></View>
         )}
         {!online && (
-          <OfflineUnavailable detail="Changing settings needs a connection. You can still see them here, and sign out." />
+          <OfflineSnapshotNote
+            what="your settings"
+            extra="Changes you make sync when you’re back online. Turning push notifications on needs a connection." />
         )}
 
         {/* ── Your tracking setup ─────────────────────────────────────────── */}
         <SectionLabel>Your tracking setup</SectionLabel>
-        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<BrainIcon />}
@@ -471,11 +473,9 @@ export default function SettingsScreen() {
             onPress={() => setSheet('frequency')}
           />
         </SectionCard>
-        </RequiresConnection>
 
         {/* ── Body tracking ───────────────────────────────────────────────── */}
         <SectionLabel>Body tracking</SectionLabel>
-        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<BodyIcon />}
@@ -529,11 +529,9 @@ export default function SettingsScreen() {
             </>
           )}
         </SectionCard>
-        </RequiresConnection>
 
         {/* ── Cycle tracking ──────────────────────────────────────────────── */}
         <SectionLabel>Cycle tracking</SectionLabel>
-        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<CycleIcon />}
@@ -545,11 +543,9 @@ export default function SettingsScreen() {
             />}
           />
         </SectionCard>
-        </RequiresConnection>
 
         {/* ── Notifications ───────────────────────────────────────────────── */}
         <SectionLabel>Notifications</SectionLabel>
-        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<BellSlashIcon />}
@@ -572,7 +568,7 @@ export default function SettingsScreen() {
             icon={<BellIcon />}
             label="Push notifications"
             subtitle="How Symetric reaches you for check-ins"
-            right={<Toggle value={pushEnabled} onValueChange={handleTogglePush} disabled={pushBusy} />}
+            right={<Toggle value={pushEnabled} onValueChange={guardOnline(handleTogglePush, 'Changing push notifications')} disabled={pushBusy} />}
           />
           {pushError && <View style={styles.inlineWrap}><InlineMessage type="error">{pushError}</InlineMessage></View>}
 
@@ -590,7 +586,7 @@ export default function SettingsScreen() {
                 subtitle={pushEnabled ? 'Check that delivery is working on this device' : 'Enable push notifications first'}
                 right={
                   <Pressable
-                    onPress={handleSendTestNotification}
+                    onPress={guardOnline(handleSendTestNotification, 'Sending a test notification')}
                     disabled={testingPush || !pushEnabled}
                     style={[styles.smallButton, (testingPush || !pushEnabled) && styles.smallButtonDisabled]}>
                     <Text style={[styles.smallButtonText, (testingPush || !pushEnabled) && styles.smallButtonTextDisabled]}>
@@ -607,11 +603,9 @@ export default function SettingsScreen() {
             </>
           )}
         </SectionCard>
-        </RequiresConnection>
 
         {/* ── Security ────────────────────────────────────────────────────── */}
         <SectionLabel>Security</SectionLabel>
-        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<LockIcon />}
@@ -629,11 +623,9 @@ export default function SettingsScreen() {
             </>
           )}
         </SectionCard>
-        </RequiresConnection>
 
         {/* ── Preferences ─────────────────────────────────────────────────── */}
         <SectionLabel>Preferences</SectionLabel>
-        <RequiresConnection>
         <SectionCard>
           {/* First in Preferences because it is the only setting whose
               result is the screen you are reading. Instant, not on
@@ -686,7 +678,6 @@ export default function SettingsScreen() {
             onPress={() => setSheet('timeFormat')}
           />
         </SectionCard>
-        </RequiresConnection>
 
         {/* ── Your data ───────────────────────────────────────────────────── */}
         <SectionLabel>Your data</SectionLabel>

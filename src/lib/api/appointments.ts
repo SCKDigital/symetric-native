@@ -1,44 +1,53 @@
+import * as Crypto from 'expo-crypto';
+
+import { submit } from '@/lib/offline/outbox';
+import { overlayAppointments } from '@/lib/offline/overlays';
 import { readThrough } from '@/lib/offline/read-through';
+import { currentUserId } from '@/lib/offline/session';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, AppointmentFocusCategory } from '@/lib/supabase';
 
-// Direct port of the web app's src/lib/api/appointments.ts — pure Supabase
-// queries, no browser-specific APIs, nothing to adapt.
+// Port of the web app's src/lib/api/appointments.ts.
+//
+// Offline: reads fall back to the last list read (read-through.ts) and writes
+// go through the outbox with ids made here, so an appointment can be added,
+// changed, removed or marked done with no connection. Both reads lay unsent
+// changes over what they return. Writes still throw when the server rejects
+// them, which is what the callers' error handling expects.
 
-// The two reads fall back to their last result offline (see read-through.ts),
-// so Prepare and Today's reminder card still show the next appointment.
-// Creating, editing and completing appointments still need a connection.
+/** The soonest appointment not yet marked done, or null. Worked out from the
+ *  full list so unsent changes (a new one, one marked done) count. */
 export async function fetchUpcomingAppointment(userId: string): Promise<Appointment | null> {
-  return readThrough('appointments.upcoming', () => readUpcoming(userId));
+  const all = await fetchAllAppointments(userId);
+  return all
+    .filter(a => !a.is_completed)
+    .sort((a, b) => a.appointment_date.localeCompare(b.appointment_date))[0] ?? null;
 }
 
-async function readUpcoming(userId: string): Promise<Appointment | null> {
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_completed', false)
-    .order('appointment_date', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}
-
+/** Every appointment, newest first. */
 export async function fetchAllAppointments(userId: string): Promise<Appointment[]> {
-  return readThrough('appointments.all', () => readAll(userId));
+  const rows = await readThrough('appointments.all', async () => {
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('user_id', userId)
+      .order('appointment_date', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as Appointment[];
+  });
+  return overlayAppointments(rows).sort((a, b) => b.appointment_date.localeCompare(a.appointment_date));
 }
 
-async function readAll(userId: string): Promise<Appointment[]> {
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('*')
-    .eq('user_id', userId)
-    .order('appointment_date', { ascending: false });
+async function send(...args: Parameters<typeof submit>): Promise<void> {
+  const result = await submit(...args);
+  if (result.status === 'rejected') throw new Error(result.error);
+}
 
-  if (error) throw error;
-  return data || [];
+async function requireUserId(): Promise<string> {
+  const id = await currentUserId();
+  if (!id) throw new Error('Not authenticated');
+  return id;
 }
 
 export async function createAppointment(
@@ -47,40 +56,36 @@ export async function createAppointment(
   focusAreas?: string[],
   focusCategories?: AppointmentFocusCategory[],
 ): Promise<Appointment> {
-  const { data, error } = await supabase
-    .from('appointments')
-    .insert({
-      user_id: userId,
-      appointment_date: appointmentDate,
-      focus_areas: focusAreas || [],
-      focus_categories: focusCategories?.length ? focusCategories : ['mind'],
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  const now = new Date().toISOString();
+  const row = {
+    // Made here so a resend is recognised as the same appointment, and so
+    // questions added to it offline can point at it before it reaches the
+    // server (the outbox sends them after it, in order).
+    id: Crypto.randomUUID(),
+    user_id: userId,
+    appointment_date: appointmentDate,
+    focus_areas: focusAreas || [],
+    focus_categories: focusCategories?.length ? focusCategories : ['mind' as AppointmentFocusCategory],
+    notes: null,
+    is_completed: false,
+    created_at: now,
+    updated_at: now,
+  };
+  await send(userId, 'appointment.create', { row });
+  return row;
 }
 
 export async function updateAppointment(
   appointmentId: string,
   updates: Partial<Omit<Appointment, 'id' | 'user_id' | 'created_at'>>
-): Promise<Appointment> {
-  const { data, error } = await supabase
-    .from('appointments')
-    .update(updates)
-    .eq('id', appointmentId)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+): Promise<void> {
+  await send(await requireUserId(), 'appointment.update', { id: appointmentId, updates });
 }
 
 export async function completeAppointment(
   appointmentId: string,
   notes?: string
-): Promise<Appointment> {
+): Promise<void> {
   return updateAppointment(appointmentId, {
     is_completed: true,
     notes: notes ?? null,
@@ -88,10 +93,5 @@ export async function completeAppointment(
 }
 
 export async function deleteAppointment(appointmentId: string): Promise<void> {
-  const { error } = await supabase
-    .from('appointments')
-    .delete()
-    .eq('id', appointmentId);
-
-  if (error) throw error;
+  await send(await requireUserId(), 'appointment.delete', { id: appointmentId });
 }

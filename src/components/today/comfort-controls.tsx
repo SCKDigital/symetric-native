@@ -2,8 +2,6 @@ import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
-import { guardOnline, OfflineUnavailable } from '@/components/shared/offline-gate';
-import { useIsOnline } from '@/lib/offline/connectivity';
 import type { Comfort, ComfortDuration } from '@/hooks/use-comfort';
 import { formatTime, type TimeFormat } from '@/lib/time-format';
 import { brandTint } from '@/constants/brand';
@@ -81,7 +79,7 @@ export function ComfortBanner({ comfort, timeFormat, onTurnOff }: {
           {comfort.endsAt && !comfort.pausesReminders ? ' · reminders still on' : ''}
         </Text>
       </View>
-      <Pressable onPress={guardOnline(onTurnOff, 'Turning comfort mode off')} accessibilityRole="button" hitSlop={8}
+      <Pressable onPress={onTurnOff} accessibilityRole="button" hitSlop={8}
         style={({ pressed }) => pressed && styles.pressed}>
         <Text style={styles.bannerAction}>Turn off</Text>
       </Pressable>
@@ -101,9 +99,6 @@ const DURATIONS: { value: ComfortDuration; label: string; hint: string }[] = [
 
 export function ComfortSheet({ comfort, onClose }: { comfort: Comfort; onClose: () => void }) {
   const styles = useStyles();
-  // Comfort mode lives on the profile so every device agrees on it, which
-  // means switching it needs the server.
-  const online = useIsOnline();
   const arm = async (duration: ComfortDuration) => {
     await comfort.arm(duration);
     onClose();
@@ -116,8 +111,7 @@ export function ComfortSheet({ comfort, onClose }: { comfort: Comfort; onClose: 
         ? 'One quiet colour, larger text, no countdown. Reminders pause and you can log a day in one tap.'
         : 'One quiet colour, larger text, no countdown, and you can log a day in one tap. Reminders keep coming — you asked them to, in Settings.'}
       onClose={onClose}>
-      {!online && <OfflineUnavailable detail="Comfort mode is saved to your account, so switching it needs a connection." />}
-      <View style={styles.options} pointerEvents={online ? 'auto' : 'none'}>
+      <View style={styles.options}>
         {DURATIONS.map(d => (
           <Pressable
             key={d.value}
@@ -134,7 +128,7 @@ export function ComfortSheet({ comfort, onClose }: { comfort: Comfort; onClose: 
 
       {comfort.reducesDemand ? (
         <Pressable
-          onPress={guardOnline(async () => { await comfort.disarm(); onClose(); }, 'Turning comfort mode off')}
+          onPress={async () => { await comfort.disarm(); onClose(); }}
           accessibilityRole="button"
           style={({ pressed }) => [styles.turnOff, pressed && styles.pressed]}>
           <Text style={styles.turnOffText}>Turn off now</Text>

@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth } from '@/contexts/auth-context';
 import { resolveActiveDomains } from '@/lib/domains';
+import { overlayCheckInSettings } from '@/lib/offline/overlays';
+import { pendingPayloads } from '@/lib/offline/outbox';
+import { readThrough } from '@/lib/offline/read-through';
 import { supabase } from '@/lib/supabase';
 import type { TimeFormat } from '@/lib/time-format';
 
@@ -77,31 +80,47 @@ export function useSetupCards(): SetupCardState {
   const load = useCallback(async () => {
     if (!user || !profile) return;
 
+    // Both reads fall back to their last result offline (read-through.ts), so
+    // the cards still show, and a step finished offline (queued, see
+    // queued-writes.ts) drops off through the overlay below.
+    const asResult = <T,>(p: Promise<T>) =>
+      p.then(data => ({ data, error: null }), (error: unknown) => ({ data: null, error }));
     const [settingsRes, cycleMarkerRes] = await Promise.all([
-      supabase
-        .from('check_in_settings')
-        .select('active_domains, quick_checkin_domains, setup_times_confirmed_at, setup_notifications_ack_at, setup_preferences_ack_at, time_format')
-        .eq('user_id', user.id)
-        .maybeSingle(),
+      asResult(readThrough('setup.settings', async () => {
+        const r = await supabase
+          .from('check_in_settings')
+          .select('active_domains, quick_checkin_domains, setup_times_confirmed_at, setup_notifications_ack_at, setup_preferences_ack_at, time_format')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (r.error) throw r.error;
+        return r.data;
+      })),
       // Only asked for when cycle tracking is on, and only to find out whether
       // a Day 1 has ever been recorded — one row is enough to answer that.
       profile.cycle_tracking_enabled
-        ? supabase
-            .from('intervention_markers')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('marker_type', 'cycle_phase')
-            .limit(1)
-        : Promise.resolve({ data: [] as { id: string }[] }),
+        ? asResult(readThrough('setup.cycleMarker', async () => {
+            const r = await supabase
+              .from('intervention_markers')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('marker_type', 'cycle_phase')
+              .limit(1);
+            if (r.error) throw r.error;
+            return r.data;
+          }))
+        : Promise.resolve({ data: [] as { id: string }[], error: null }),
     ]);
 
-    // Offline (or any failed read), show no setup cards rather than guess:
-    // a missing settings row reads as "nothing set up yet", which would put
+    // A failed read with nothing saved: show no setup cards rather than guess.
+    // A missing settings row reads as "nothing set up yet", which would put
     // every prompt in front of someone who finished setup long ago.
-    if (settingsRes.error || ('error' in cycleMarkerRes && cycleMarkerRes.error)) return;
+    if (settingsRes.error || cycleMarkerRes.error) return;
 
-    const settings = settingsRes.data;
-    const hasCycleMarker = (cycleMarkerRes.data ?? []).length > 0;
+    // A setup step finished offline counts as finished.
+    const settings = overlayCheckInSettings(settingsRes.data);
+    // A Day 1 added offline counts too.
+    const hasCycleMarker = (cycleMarkerRes.data ?? []).length > 0
+      || pendingPayloads('marker.create').some(m => m.row.marker_type === 'cycle_phase');
 
     const needsNotifications = !profile.push_enabled && !settings?.setup_notifications_ack_at;
     const needsMindDomains = resolveActiveDomains(settings).length === 0;

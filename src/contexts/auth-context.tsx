@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 
 import { identifyUser, resetUser } from '@/lib/analytics';
@@ -6,6 +6,8 @@ import { buildEmailRedirectUrl } from '@/lib/auth-deep-link';
 import { readCache, writeCache } from '@/lib/offline/cache';
 import { isOnline } from '@/lib/offline/connectivity';
 import { readStoredSession } from '@/lib/offline/session';
+import { onSynced, useOutbox } from '@/lib/offline/outbox';
+import { overlayProfile } from '@/lib/offline/overlays';
 import { removeThisDevicePushToken } from '@/lib/push-notifications';
 import { IS_DEMO, Profile, supabase } from '@/lib/supabase';
 
@@ -79,11 +81,22 @@ async function loadProfile(userId: string): Promise<{ profile: Profile | null | 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
+  // The server's copy (or, offline, the last one saved). What the app sees is
+  // this with any profile changes still waiting in the outbox laid over it, so
+  // a setting changed offline (comfort mode, accent, app lock, body settings)
+  // takes effect at once rather than when it reaches the server.
+  const [baseProfile, setProfile] = useState<Profile | null | undefined>(undefined);
+  const { items: outboxItems } = useOutbox();
+  const profile = useMemo(
+    () => (baseProfile ? overlayProfile(baseProfile) : baseProfile),
+    // Recomputed when the outbox changes, which is when the overlay changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseProfile, outboxItems],
+  );
   const [loading, setLoading] = useState(true);
   const fetchGenRef = useRef(0);
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (user) {
       const profileData = await fetchProfile(user.id);
       // A failed read keeps the profile already held. Setting null here sent
@@ -92,7 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profileData) writeCache(user.id, 'profile', profileData);
       setProfile(profileData);
     }
-  };
+  }, [user]);
+
+  // Once queued profile changes reach the server, take its copy again, so the
+  // base catches up with what the overlay was showing.
+  useEffect(() => onSynced(types => {
+    if (types.includes('profile.update')) refreshProfile();
+  }), [refreshProfile]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setLoading(false), 8000);

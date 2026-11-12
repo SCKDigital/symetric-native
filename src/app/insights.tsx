@@ -10,7 +10,7 @@ import SleepAreaDetail from '@/components/insights/sleep-area-detail';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
 import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
-import { guardOnline, OfflineUnavailable } from '@/components/shared/offline-gate';
+import { OfflineUnavailable } from '@/components/shared/offline-gate';
 import { onDetectionAfterSync } from '@/hooks/use-outbox-runner';
 import { ChevronDownIcon, ChevronRightIcon } from '@/components/shared/chevrons';
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
@@ -48,6 +48,8 @@ import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainT
 import type { InterventionMarker } from '@/types/marker';
 import { readCache, writeCache } from '@/lib/offline/cache';
 import { isOnline, subscribeOnline } from '@/lib/offline/connectivity';
+import { submit } from '@/lib/offline/outbox';
+import { overlayClusters } from '@/lib/offline/overlays';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
 type RangeDays = 7 | 14 | 30 | 60 | 90;
@@ -461,7 +463,8 @@ export default function InsightsScreen() {
     // an ongoing one (no end_date) is judged on its start.
     const inRangeCluster = (c: { start_date: string; end_date?: string | null }) =>
       (c.end_date ?? c.start_date) >= fromRange && c.start_date <= to;
-    const sorted = [...clusterData]
+    // Flags set offline and not yet sent stay set when the bundle is re-read.
+    const sorted = [...overlayClusters(clusterData)]
       .filter(inRangeCluster)
       .sort((a, b) => (b.sort_weight ?? 0) - (a.sort_weight ?? 0));
     setClusters(sorted as DetectedCluster[]);
@@ -724,16 +727,16 @@ export default function InsightsScreen() {
     return () => { offDetected(); offOnline(); };
   }, [load, offlineSince, offlineUnavailable]);
 
-  // Flagging writes to the server's copy of the pattern, which the report
-  // reads, so it isn't queued: offline it says so instead.
-  const toggleFlag = guardOnline(async (clusterId: string) => {
+  // Through the outbox, so a pattern can be flagged offline; the report, which
+  // reads flags from the server, sends the queue before it is built.
+  const toggleFlag = async (clusterId: string) => {
     const cluster = clusters.find(c => c.id === clusterId);
-    if (!cluster) return;
-    const { error } = await supabase.from('detected_clusters').update({ flagged_for_report: !cluster.flagged_for_report }).eq('id', clusterId);
-    if (error) { console.error('[InsightsScreen] toggleFlag:', error); return; }
+    if (!cluster || !user) return;
+    const result = await submit(user.id, 'cluster.flag', { id: clusterId, flagged: !cluster.flagged_for_report });
+    if (result.status === 'rejected') { console.error('[InsightsScreen] toggleFlag:', result.error); return; }
     setClusters(prev => prev.map(c => c.id === clusterId ? { ...c, flagged_for_report: !c.flagged_for_report } : c));
     setViewingCluster(prev => prev?.id === clusterId ? { ...prev, flagged_for_report: !prev.flagged_for_report } : prev);
-  }, 'Flagging a pattern for your report');
+  };
 
   if (loading) return <PulseLoadingScreen />;
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { supabase } from '@/lib/supabase';
+import { saveProfile } from '@/lib/offline/queued-writes';
 import type { BodyDomainType, Profile } from '@/lib/supabase';
 import { BODY_DOMAINS, MORNING_DOMAIN_LIMIT, resolveMorningDomains } from '@/lib/body/constants';
 
@@ -56,7 +56,7 @@ export function useBodyTrackingSettings(
     const prev = bodyDomainsActive;
     const next = prev.includes(domain) ? prev.filter(d => d !== domain) : [...prev, domain];
     setBodyDomainsActive(next);
-    const { error } = await supabase.from('profiles').update({ body_domains_active: next }).eq('id', userId);
+    const { error } = await saveProfile(userId, { body_domains_active: next });
     if (error) {
       setBodyDomainsActive(prev);
       onError?.('Failed to save changes. Please try again.');
@@ -80,7 +80,7 @@ export function useBodyTrackingSettings(
     if (!removing && prev.length >= MORNING_DOMAIN_LIMIT) return;
     const next = removing ? prev.filter(d => d !== domain) : [...prev, domain];
     setBodyMorningDomains(next);
-    const { error } = await supabase.from('profiles').update({ body_morning_domains: next }).eq('id', userId);
+    const { error } = await saveProfile(userId, { body_morning_domains: next });
     if (error) {
       setBodyMorningDomains(prev);
       onError?.('Failed to save changes. Please try again.');
@@ -91,12 +91,12 @@ export function useBodyTrackingSettings(
 
   const handleSaveBodyTiming = async (availableFrom: string, reminderTime: string, morningEnabled: boolean, morningTime: string) => {
     if (!userId) return;
-    const { error } = await supabase.from('profiles').update({
+    const { error } = await saveProfile(userId, {
       body_available_from: availableFrom,
       body_reminder_time: reminderTime,
       body_morning_enabled: morningEnabled,
       body_morning_time: morningTime,
-    }).eq('id', userId);
+    });
     if (error) throw error;
     setBodyAvailableFrom(availableFrom);
     setBodyReminderTime(reminderTime);

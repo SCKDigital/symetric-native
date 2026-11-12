@@ -20,7 +20,9 @@ import { subscribeToPushNotifications } from '@/lib/push-notifications';
 import { createMarker } from '@/lib/queries/markers';
 import { recordFirstCheckinsScheduledMilestone } from '@/lib/milestones';
 import { ensureTodayCheckIns } from '@/lib/scheduler';
-import { supabase, type BodyDomainType, type DomainType } from '@/lib/supabase';
+import { saveCheckInSettings, saveProfile, seedBaselines } from '@/lib/offline/queued-writes';
+import { isOnline } from '@/lib/offline/connectivity';
+import { type BodyDomainType, type DomainType } from '@/lib/supabase';
 import { todayDateString } from '@/lib/date-utils';
 import { TimeField } from '@/components/today/time-field';
 import type { TimeFormat } from '@/lib/time-format';
@@ -111,9 +113,7 @@ export default function SetupCards({ state, onChanged }: Props) {
 
   const markAcked = async (patch: Record<string, unknown>) => {
     if (!user) return;
-    const { error: e } = await supabase.from('check_in_settings').upsert(
-      { user_id: user.id, ...patch }, { onConflict: 'user_id' },
-    );
+    const { error: e } = await saveCheckInSettings(user.id, patch);
     if (e) { setError('Could not save that. Try again.'); return; }
     onChanged();
   };
@@ -121,6 +121,12 @@ export default function SetupCards({ state, onChanged }: Props) {
   // ── Reminders ─────────────────────────────────────────────────────────────
   const handleNotifications = async (enable: boolean) => {
     if (!user || busy) return;
+    // Turning reminders on registers this phone with Expo's push service, so
+    // it genuinely needs a connection. "Not now" is just a setting, and queues.
+    if (enable && !isOnline()) {
+      setError('Unavailable offline. Turning reminders on needs a connection.');
+      return;
+    }
     setBusy(true);
     setError(null);
     if (enable) {
@@ -159,30 +165,29 @@ export default function SetupCards({ state, onChanged }: Props) {
     setBusy(true);
     setError(null);
 
-    const { error: settingsError } = await supabase.from('check_in_settings').upsert(
-      { user_id: user.id, active_domains: pickedDomains }, { onConflict: 'user_id' },
-    );
+    const { error: settingsError } = await saveCheckInSettings(user.id, { active_domains: pickedDomains });
     if (settingsError) { setError('Could not save your domains. Try again.'); setBusy(false); return; }
 
     // Neutral seed rows rather than asked-for numbers. Every read of a baseline
     // falls back to the scale midpoint anyway, but a real row means nothing
     // downstream has to care whether one exists, and the weekly rolling recalc
     // (which is append-only, and expects a prior row) takes over from day 14.
-    const seeds = pickedDomains.map(domain => ({
-      user_id: user.id, domain, baseline_score: 5, source: 'default' as const, is_current: true,
-    }));
-    const { error: baselineError } = await supabase.from('baselines').insert(seeds);
+    const { error: baselineError } = await seedBaselines(user.id, pickedDomains, 5, 'default');
     if (baselineError) { setError('Could not set up your baselines. Try again.'); setBusy(false); return; }
 
     const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    try {
-      await ensureTodayCheckIns(user.id, timezone);
-      await recordFirstCheckinsScheduledMilestone(user.id);
-    } catch (e) {
-      // The domains saved; only scheduling failed. Say so rather than implying
-      // the whole thing went wrong.
-      console.error('[SetupCards] scheduling after domain selection:', e);
-      setError("Your domains saved, but today's check-ins couldn't be scheduled. Pull to refresh.");
+    // Offline the domains are queued, and today's check-ins are scheduled by
+    // the first load back online (use-today-check-ins.ts) — nothing to report.
+    if (isOnline()) {
+      try {
+        await ensureTodayCheckIns(user.id, timezone);
+        await recordFirstCheckinsScheduledMilestone(user.id);
+      } catch (e) {
+        // The domains saved; only scheduling failed. Say so rather than implying
+        // the whole thing went wrong.
+        console.error('[SetupCards] scheduling after domain selection:', e);
+        setError("Your domains saved, but today's check-ins couldn't be scheduled. Pull to refresh.");
+      }
     }
 
     setBusy(false);
@@ -202,7 +207,7 @@ export default function SetupCards({ state, onChanged }: Props) {
         body.bodyMorningEnabled,
         bodyMorning ?? body.bodyMorningTime,
       );
-      const { error: e } = await supabase.from('profiles').update({ body_setup_complete: true }).eq('id', user.id);
+      const { error: e } = await saveProfile(user.id, { body_setup_complete: true });
       if (e) throw e;
       await refreshProfile();
       setSheet(null);
@@ -266,8 +271,7 @@ export default function SetupCards({ state, onChanged }: Props) {
           onPress={() => setSheet('cycle')}
           onSecondary={async () => {
             if (!user) return;
-            await supabase.from('profiles')
-              .update({ cycle_day_one_prompt_ack_at: new Date().toISOString() }).eq('id', user.id);
+            await saveProfile(user.id, { cycle_day_one_prompt_ack_at: new Date().toISOString() });
             await refreshProfile();
             onChanged();
           }}
@@ -489,8 +493,7 @@ function TimesSheet({ initialTimeFormat, onClose, onSaved, onError }: {
 
   const save = async () => {
     if (!user) return;
-    const { error } = await supabase.from('check_in_settings').upsert({
-      user_id: user.id,
+    const { error } = await saveCheckInSettings(user.id, {
       check_ins_per_day: perDay,
       window_start: start,
       window_end: end,
@@ -499,7 +502,7 @@ function TimesSheet({ initialTimeFormat, onClose, onSaved, onError }: {
       dnd_start_time: dndEnabled ? `${dndStart}:00` : null,
       dnd_end_time: dndEnabled ? `${dndEnd}:00` : null,
       setup_times_confirmed_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
+    });
     if (error) { onError('Could not save your hours. Try again.'); return; }
     onSaved();
   };
