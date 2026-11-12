@@ -10,7 +10,9 @@ import { IS_DEMO } from '@/lib/supabase';
 // load/save are async now (same throttle-key pattern as
 // pattern-detection-scheduler.ts).
 
-export type DatePreset = '14' | '30' | '60' | '90' | 'since_visit' | 'since_marker' | 'custom';
+// 'since_visit' starts on whichever past appointment was picked, not
+// necessarily the latest; range.start is that appointment's date.
+export type DatePreset ='14' | '30' | '60' | '90' | 'since_visit' | 'since_marker' | 'custom';
 
 export interface PrepareRange {
   preset: DatePreset;

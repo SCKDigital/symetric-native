@@ -7,7 +7,6 @@ import Svg, { Line, Rect } from 'react-native-svg';
 import AppointmentContext from '@/components/prepare/appointment-context';
 import DateRangeControl from '@/components/prepare/date-range-control';
 import GenerateReportSection from '@/components/prepare/generate-report-section';
-import PastAppointmentsSection from '@/components/prepare/past-appointments-section';
 import PostAppointmentSection from '@/components/prepare/post-appointment-section';
 import PrepareInfoSheet from '@/components/prepare/prepare-info-sheet';
 import QuestionsSection from '@/components/prepare/questions-section';
@@ -22,7 +21,7 @@ import { useIsOnline } from '@/lib/offline/connectivity';
 import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
 import { addDays, todayDateString } from '@/lib/date-utils';
 import { defaultRangeForPreset, loadSavedRange, saveRange, type PrepareRange } from '@/lib/prepare-range';
-import { buildPastVisits } from '@/lib/past-visits';
+import { buildPastVisits, type PastVisit } from '@/lib/past-visits';
 import { fetchMarkers } from '@/lib/queries/markers';
 import type { Appointment, DetectedCluster } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
@@ -48,7 +47,7 @@ export default function PrepareScreen() {
   const [range, setRange] = useState<PrepareRange>(() => defaultRangeForPreset('30'));
   const [rangeReady, setRangeReady] = useState(false);
   const [allClusters, setAllClusters] = useState<DetectedCluster[]>([]);
-  const [lastVisitDate, setLastVisitDate] = useState<string | null>(null);
+  const [pastVisits, setPastVisits] = useState<PastVisit[]>([]);
   const [markers, setMarkers] = useState<InterventionMarker[]>([]);
 
   const loadAppointment = useCallback(async () => {
@@ -104,19 +103,21 @@ export default function PrepareScreen() {
 
   // Visits and events are re-read whenever the tab comes into view, not once
   // on mount: tabs stay mounted, so an appointment logged as an event on
-  // Today never reached Past appointments or "Since last visit" until the
-  // app restarted. The last visit counts both sources (buildPastVisits).
+  // Today never reached "Since appointment" until the app restarted. Also
+  // re-read after an appointment is saved or marked done (pastRefresh).
+  // The list counts both sources (buildPastVisits).
   useFocusEffect(useCallback(() => {
     if (!user) return;
     let cancelled = false;
     Promise.all([fetchAllAppointments(user.id), fetchMarkers()]).then(([appts, allMarkers]) => {
       if (cancelled) return;
       setMarkers(allMarkers);
-      setLastVisitDate(buildPastVisits(appts, allMarkers)[0]?.date ?? null);
-      setPastRefresh(n => n + 1);
+      setPastVisits(buildPastVisits(appts, allMarkers));
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [user]));
+    // pastRefresh is only a trigger to re-read; nothing inside uses it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, pastRefresh]));
 
   if (loading) return <PulseLoadingScreen />;
 
@@ -141,12 +142,10 @@ export default function PrepareScreen() {
 
         <AppointmentContext appointment={appointment} onAppointmentChange={loadAppointment} />
 
-        {user && <PastAppointmentsSection userId={user.id} refreshKey={pastRefresh} />}
-
         {appointment ? (
           <>
             {rangeReady && (
-              <DateRangeControl range={range} onChange={handleRangeChange} lastVisitDate={lastVisitDate} mostRecentMarker={mostRecentMarker} />
+              <DateRangeControl range={range} onChange={handleRangeChange} pastVisits={pastVisits} mostRecentMarker={mostRecentMarker} />
             )}
 
             <QuestionsSection appointmentId={appointment.id} />

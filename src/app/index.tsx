@@ -23,7 +23,9 @@ import { useSetupCards } from '@/hooks/use-setup-cards';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@/lib/edit-window';
 import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
-import { fetchUpcomingAppointment } from '@/lib/api/appointments';
+import { fetchAllAppointments } from '@/lib/api/appointments';
+import AppointmentFollowUpCard, { findFollowUpAppointment } from '@/components/today/appointment-follow-up-card';
+import { dateToString } from '@/lib/date-utils';
 import { trackCheckInCompleted } from '@/lib/analytics';
 import { createMarker } from '@/lib/queries/markers';
 import { submit } from '@/lib/offline/outbox';
@@ -82,6 +84,7 @@ function TodayHome() {
   const [snoozedId, setSnoozedId] = useState<string | null>(null);
   const [snoozedUntil, setSnoozedUntil] = useState<number | null>(null);
   const [upcomingAppointment, setUpcomingAppointment] = useState<Appointment | null>(null);
+  const [followUpAppointment, setFollowUpAppointment] = useState<Appointment | null>(null);
   // Ticked rather than read during render: the expiry countdown on the hero
   // card has to move on its own, and reading the clock mid-render is impure.
   // Thirty seconds is enough for a minute-resolution countdown.
@@ -117,20 +120,27 @@ function TodayHome() {
   }, [refresh]);
 
   // The appointment reminder, shown when one is within the next seven days —
-  // the same rule the web app's TodayScreen applies. Failures are swallowed on
-  // purpose: this is an FYI card, and nothing else on the screen depends on it.
+  // the same rule the web app's TodayScreen applies — and the day-after
+  // follow-up card. Failures are swallowed on purpose: these are FYI cards,
+  // and nothing else on the screen depends on them. Keyed on the local day
+  // so an app left open past midnight re-decides both.
+  const dayKey = dateToString(new Date(nowMs));
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    fetchUpcomingAppointment(user.id)
-      .then(appt => {
-        if (cancelled || !appt) return;
-        const days = daysUntil(appt.appointment_date);
-        if (days >= 0 && days <= 7) setUpcomingAppointment(appt);
+    fetchAllAppointments(user.id)
+      .then(async all => {
+        const followUp = await findFollowUpAppointment(user.id, all, dayKey);
+        if (cancelled) return;
+        setFollowUpAppointment(followUp);
+        const upcoming = all
+          .filter(a => !a.is_completed && daysUntil(a.appointment_date) >= 0)
+          .sort((a, b) => a.appointment_date.localeCompare(b.appointment_date))[0];
+        setUpcomingAppointment(upcoming && daysUntil(upcoming.appointment_date) <= 7 ? upcoming : null);
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, dayKey]);
 
   // Detection is throttled internally (daily for clusters, weekly for
   // connections and the baseline recalc), so this is a cheap call that mostly
@@ -409,6 +419,15 @@ function TodayHome() {
             <Text style={styles.checkInNowTitle}>Check in now</Text>
             <Text style={styles.checkInNowBody}>Your first scheduled check-in may be hours away. You don&apos;t have to wait for it.</Text>
           </Pressable>
+        )}
+
+        {user && followUpAppointment && (
+          <AppointmentFollowUpCard
+            key={followUpAppointment.id}
+            userId={user.id}
+            appointment={followUpAppointment}
+            onClose={() => setFollowUpAppointment(null)}
+          />
         )}
 
         {upcomingAppointment && <AppointmentReminderCard appointment={upcomingAppointment} />}

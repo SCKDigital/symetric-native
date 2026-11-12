@@ -8,8 +8,8 @@ import type { InterventionMarker } from '@/types/marker';
 //   logged after the fact from Today's "+ Add an event".
 //
 // Prepare used to read only the first, so an appointment logged as an event
-// was missing from Past appointments and from "Since last visit". Both now
-// go through here. When both exist for the same date, they are one visit:
+// was missing from the date range's appointment list. Both now go through
+// here. When both exist for the same date, they are one visit:
 // the appointment row wins (it carries focus areas and notes), and the
 // event's Mind/Body is merged into its categories.
 
@@ -21,6 +21,24 @@ export interface PastVisit {
   notes: string | null;
   /** The event's own label, when the visit came from an event alone. */
   label: string | null;
+}
+
+/** "Mind", "Body", "Mind + Body", or null when the visit has neither. */
+export function visitCategoryLabel(categories: PastVisit['categories']): string | null {
+  const hasMind = categories.includes('mind');
+  const hasBody = categories.includes('body');
+  if (hasMind && hasBody) return 'Mind + Body';
+  if (hasBody) return 'Body';
+  if (hasMind) return 'Mind';
+  return null;
+}
+
+/** What the visit was, when it says more than its Mind/Body pill does: an
+ *  event's own label, else the appointment's focus areas. */
+export function visitDescription(v: PastVisit): string | null {
+  if (v.label && !/^(mind|body) appointment$/i.test(v.label.trim())) return v.label;
+  if (v.focusAreas.length > 0) return v.focusAreas.join(', ');
+  return null;
 }
 
 export function buildPastVisits(appointments: Appointment[], markers: InterventionMarker[]): PastVisit[] {
