@@ -13,10 +13,11 @@ import {
   BODY_DOMAINS, BODY_EARLY_LOG_HOUR, BODY_EARLY_LOG_SENSITIVE_DOMAINS, BODY_EVENT_ORDER, BODY_EVENTS,
   BREATHLESSNESS_CHARACTER_TAGS, CHECKIN_BODY_DOMAIN_ORDER, PAIN_CHARACTER_TAGS, REACTION_CHARACTER_TAGS,
 } from '@/lib/body/constants';
-import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
-import { dailyBodyValue } from '@/lib/detection/body-daily-value';
+import * as Crypto from 'expo-crypto';
+import { loadBodyBaselines } from '@/lib/body/load-body-baselines';
 import { BODY_COLOR } from '@/lib/domains';
 import { addDays, parseDateString, todayDateString } from '@/lib/date-utils';
+import { pendingPayloads, submit } from '@/lib/offline/outbox';
 import { supabase } from '@/lib/supabase';
 import type { BodyDomainType, BodyEventType, BodySide } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
@@ -34,6 +35,10 @@ interface Props {
 }
 
 type DomainValues = Partial<Record<BodyDomainType, number>>;
+
+/** checkinId when the day's only entry is one still waiting to sync: there is
+ *  an entry (so a save is an edit) but no server id for it yet. */
+const PENDING_ENTRY = 'pending';
 
 // The evening check-in form (chunks 1, 3, and 4 of the body-tracking port,
 // see project_rn_body_tracking_scoping.md): domain sliders (now respecting
@@ -111,27 +116,9 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   useEffect(() => {
     if (!user || !visible) return;
     let cancelled = false;
-    const from = addDays(selectedDate, -90);
-    supabase
-      .from('body_checkins').select('*')
-      .eq('user_id', user.id)
-      .gte('entry_date', from)
-      .lt('entry_date', selectedDate)
-      .order('entry_date', { ascending: true })
-      .then(({ data }) => {
-        if (cancelled) return;
-        const rows = (data ?? []) as Record<string, unknown>[];
-        const next: Partial<Record<BodyDomainType, number>> = {};
-        for (const d of CHECKIN_BODY_DOMAIN_ORDER) {
-          const history = rows
-            .map(r => dailyBodyValue(r, d))
-            .filter((v): v is number => v !== null);
-          // Rounded: the slider steps in whole numbers and the columns are
-          // smallint, so a median of 4.5 has to land somewhere.
-          next[d] = Math.round(rollingBodyBaseline(history));
-        }
-        setDomainBaselines(next);
-      });
+    loadBodyBaselines(user.id, selectedDate).then(next => {
+      if (!cancelled) setDomainBaselines(next);
+    });
     return () => { cancelled = true; };
   }, [user, visible, selectedDate]);
 
@@ -195,6 +182,38 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
         const characterForEvent = (ev as unknown as { character: string[] | null }).character;
         if (characterForEvent?.length) nextCharacter[type] = characterForEvent;
       }
+
+      // An entry for this day still waiting in the outbox is newer than
+      // anything the server holds (and is all there is offline), so the form
+      // reopens on it. Server event ids are kept, so unticking an event that
+      // is already on the server still removes it.
+      const pending = pendingPayloads('body.save').filter(p => p.entryDate === selectedDate).at(-1);
+      if (pending) {
+        const f = pending.fields as Record<string, unknown>;
+        if (!checkin) setCheckinId(PENDING_ENTRY);
+        const nextValues: DomainValues = {};
+        for (const d of CHECKIN_BODY_DOMAIN_ORDER) {
+          const v = f[d];
+          if (typeof v === 'number') nextValues[d] = v;
+        }
+        setValues(nextValues);
+        setPainDiffuse(!!f.pain_diffuse);
+        setPainCharacter((f.pain_character as string[] | undefined) ?? []);
+        setBreathlessnessCharacter((f.breathlessness_character as string[] | undefined) ?? []);
+        setNote((f.note as string | null) ?? '');
+        setNoteExpanded(!!f.note);
+        setPainSites(pending.painSites.map(s => ({ region: s.region, side: s.side, aspect: s.aspect }) as PainSite));
+        nextTicked.clear();
+        for (const k of Object.keys(nextSites) as BodyEventType[]) delete nextSites[k];
+        for (const k of Object.keys(nextCharacter) as BodyEventType[]) delete nextCharacter[k];
+        for (const ev of pending.events) {
+          nextTicked.add(ev.type);
+          nextIds[ev.type] ??= ev.newId;
+          if (ev.sites.length) nextSites[ev.type] = ev.sites.map(s => ({ region: s.region, side: s.side as BodySide | null }));
+          if (ev.character?.length) nextCharacter[ev.type] = ev.character;
+        }
+      }
+
       setTickedEvents(nextTicked);
       setExistingEventIds(nextIds);
       setEventSites(nextSites);
@@ -266,65 +285,35 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
       payload[d] = values[d] ?? domainBaselines[d] ?? 5;
     }
 
-    let id = checkinId;
-    if (id) {
-      const { error: updErr } = await supabase.from('body_checkins').update({ ...payload, edited_at: new Date().toISOString() }).eq('id', id);
-      if (updErr) { setSaving(false); setError('Could not save. Try again.'); return; }
-    } else {
-      const { data: inserted, error: insErr } = await supabase.from('body_checkins').insert(payload).select('id').single();
-      if (insErr || !inserted) { setSaving(false); setError('Could not save. Try again.'); return; }
-      id = inserted.id;
-    }
-
-    // Everything below is delete-then-insert, which is the dangerous shape: a
-    // delete that succeeds followed by an insert that fails destroys sites that
-    // were already recorded. None of these results were checked, so that loss
-    // was silent and the save still reported success. The main body_checkins
-    // row has already been written at this point, so a failure here is partial
-    // rather than total — the user is told which part didn't stick.
-    const sideEffectErrors: unknown[] = [];
-    const track = <T extends { error: unknown }>(r: T) => { if (r.error) sideEffectErrors.push(r.error); return r; };
-
-    track(await supabase.from('body_pain_sites').delete().eq('body_checkin_id', id));
-    if (painSites.length > 0) {
-      track(await supabase.from('body_pain_sites').insert(
-        painSites.map(s => ({ body_checkin_id: id, user_id: user.id, region: s.region, side: s.side, aspect: s.aspect }))
-      ));
-    }
-
-    for (const type of BODY_EVENT_ORDER) {
-      const wasTicked = type in existingEventIds;
-      const isTicked = tickedEvents.has(type);
-      const sites = eventSites[type];
-      const character = eventCharacter[type];
-
-      if (isTicked && !wasTicked) {
-        const { data: ev, error: evErr } = await supabase
-          .from('body_events')
-          .insert({ user_id: user.id, event_date: selectedDate, event_type: type, body_checkin_id: id, entered_retroactively: retro, character: character?.length ? character : null })
-          .select('id').single();
-        if (evErr) sideEffectErrors.push(evErr);
-        if (ev && sites?.length) {
-          track(await supabase.from('body_event_sites').insert(sites.map(s => ({ body_event_id: ev.id, user_id: user.id, region: s.region, side: s.side }))));
-        }
-        if (ev) trackBodyEventLogged(type);
-      } else if (isTicked && wasTicked) {
-        const evId = existingEventIds[type]!;
-        track(await supabase.from('body_events').update({ character: character?.length ? character : null }).eq('id', evId));
-        track(await supabase.from('body_event_sites').delete().eq('body_event_id', evId));
-        if (sites?.length) {
-          track(await supabase.from('body_event_sites').insert(sites.map(s => ({ body_event_id: evId, user_id: user.id, region: s.region, side: s.side }))));
-        }
-      } else if (!isTicked && wasTicked) {
-        track(await supabase.from('body_events').delete().eq('id', existingEventIds[type]!));
-      }
-    }
-
-    if (sideEffectErrors.length > 0) {
-      sideEffectErrors.forEach(e => console.error('[BodyCheckIn] secondary write failed:', e));
+    // The whole entry goes as one command: the day's row, its pain sites and
+    // its events, as the form now shows them. Sent now if the server can be
+    // reached, kept on the phone otherwise. The handler (lib/offline/commands
+    // .ts) reconciles against the server when it runs, so the delete-then-
+    // insert steps that used to run here, each able to fail on its own, now
+    // either all land or are all retried.
+    const { user_id: _userId, entry_date: _entryDate, ...fields } = payload;
+    if (checkinId) fields.edited_at = new Date().toISOString();
+    const result = await submit(user.id, 'body.save', {
+      entryDate: selectedDate,
+      fields,
+      painSites: painSites.map(s => ({ region: s.region, side: s.side, aspect: s.aspect })),
+      events: BODY_EVENT_ORDER.filter(type => tickedEvents.has(type)).map(type => ({
+        type,
+        newId: Crypto.randomUUID(),
+        retro,
+        character: eventCharacter[type]?.length ? eventCharacter[type]! : null,
+        sites: (eventSites[type] ?? []).map(s => ({ region: s.region, side: s.side })),
+      })),
+      removedEventTypes: BODY_EVENT_ORDER.filter(type => type in existingEventIds && !tickedEvents.has(type)),
+    });
+    if (result.status === 'rejected') {
+      console.error('[BodyCheckIn] save rejected:', result.error);
       setSaving(false);
-      setError('Your scores saved, but the sites or events on this entry did not. Reopen the day and check them.');
+      setError('Could not save. Try again.');
       return;
+    }
+    for (const type of tickedEvents) {
+      if (!(type in existingEventIds)) trackBodyEventLogged(type);
     }
 
     const domainCount = activeDomains.filter(d => values[d] !== undefined).length;

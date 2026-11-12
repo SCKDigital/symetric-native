@@ -7,6 +7,8 @@ import EditCheckInModal from '@/components/checkin/edit-check-in-modal';
 import MarkerModal from '@/components/marker-modal';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
+import SyncStatusBanner from '@/components/shared/sync-status-banner';
+import { guardOnline, OfflineUnavailable, RequiresConnection } from '@/components/shared/offline-gate';
 import { BodyCheckInCard, MorningBodyCheckInCard } from '@/components/today/body-check-in-cards';
 import { ActiveCheckInCard, LateCheckInCard, PendingCheckInCard } from '@/components/today/check-in-cards';
 import AppointmentReminderCard, { daysUntil } from '@/components/today/appointment-reminder-card';
@@ -20,10 +22,11 @@ import { useComfort } from '@/hooks/use-comfort';
 import { useSetupCards } from '@/hooks/use-setup-cards';
 import { useTodayCheckIns } from '@/hooks/use-today-check-ins';
 import { getMinutesRemaining, isWithinEditWindow, wasRecentlyCompleted } from '@/lib/edit-window';
-import { forcePatternDetection, runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
+import { runPatternDetectionIfNeeded } from '@/lib/pattern-detection-scheduler';
 import { fetchUpcomingAppointment } from '@/lib/api/appointments';
 import { trackCheckInCompleted } from '@/lib/analytics';
 import { createMarker } from '@/lib/queries/markers';
+import { submit } from '@/lib/offline/outbox';
 import { CHECK_IN_EXPIRY_MINUTES } from '@/lib/constants';
 import { timeOfDayInTZ } from '@/lib/scheduler';
 import { formatTime, formatWindowTime } from '@/lib/time-format';
@@ -60,7 +63,7 @@ function TodayHome() {
   const {
     loading, activeCheckIn, rescuableCheckIn, allDone, activeDomains, baselines,
     completedCount, totalCount, nextScheduled, afterNextScheduled, lastCompleted,
-    timeFormat, allCheckIns, checkInSettings, schedulingError, hasEverCompletedCheckIn, refresh,
+    timeFormat, allCheckIns, checkInSettings, schedulingError, hasEverCompletedCheckIn, refresh, checkInsUnavailable,
   } = useTodayCheckIns();
   const [editingCheckIn, setEditingCheckIn] = useState<CheckIn | null>(null);
   const [showMarkerModal, setShowMarkerModal] = useState(false);
@@ -157,10 +160,9 @@ function TodayHome() {
         totalCount={totalCount}
         onComplete={() => {
           setStartedCheckIn(null);
+          // Detection re-runs once the answer reaches the server — see
+          // use-outbox-runner.ts — not here, where it may still be queued.
           refresh();
-          // Re-run detection so today's answers are included rather than
-          // waiting for tomorrow's throttle window.
-          if (user) forcePatternDetection(user.id).catch(e => console.error('[Today] force detection:', e));
         }}
       />
     );
@@ -199,15 +201,20 @@ function TodayHome() {
     refresh();
   };
 
+  // The sync line rides with the header so all three of Today's layouts —
+  // due, late, and the dashboard — carry it.
   const header = (
-    <AppLogoHeader
-      trailing={
-        <View style={styles.headerTrailing}>
-          <Text style={styles.date}>{formatDate()}</Text>
-          <ComfortButton active={comfort.active} onPress={() => setShowComfortSheet(true)} />
-        </View>
-      }
-    />
+    <>
+      <AppLogoHeader
+        trailing={
+          <View style={styles.headerTrailing}>
+            <Text style={styles.date}>{formatDate()}</Text>
+            <ComfortButton active={comfort.active} onPress={() => setShowComfortSheet(true)} />
+          </View>
+        }
+      />
+      <SyncStatusBanner />
+    </>
   );
 
   /**
@@ -229,19 +236,18 @@ function TodayHome() {
       (acc, domain) => ({ ...acc, [domain]: Math.round(baselines[domain] ?? 5) }),
       {},
     );
-    const { error } = await supabase.from('check_ins').update({
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-      low_demand: true,
-      ...values,
-    }).eq('id', target.id);
-    if (error) {
-      console.error('[Today] one-tap check-in failed:', error);
+    const result = await submit(user.id, 'checkIn.complete', {
+      checkInId: target.id,
+      completedAt: new Date().toISOString(),
+      values,
+      lowDemand: true,
+    });
+    if (result.status === 'rejected') {
+      console.error('[Today] one-tap check-in rejected:', result.error);
       return;
     }
     trackCheckInCompleted(activeDomains.length);
     refresh();
-    if (user) forcePatternDetection(user.id).catch(e => console.error('[Today] force detection:', e));
   };
 
   // A check-in that is due, or one from earlier still inside its rescue
@@ -292,7 +298,9 @@ function TodayHome() {
         {header}
         <ComfortBanner comfort={comfort} timeFormat={timeFormat} onTurnOff={comfort.disarm} />
 
-        <SetupCards state={setupCards} onChanged={() => { setupCards.refresh(); refresh(); }} />
+        <RequiresConnection>
+          <SetupCards state={setupCards} onChanged={() => { setupCards.refresh(); refresh(); }} />
+        </RequiresConnection>
 
         {snoozedCheckIn && (
           <PendingCheckInCard
@@ -315,12 +323,12 @@ function TodayHome() {
         {/* Sleep isn't a scheduled check-in, so it doesn't go through the
             check-in completion path — but it feeds sleep-connection and lag
             detection just the same. */}
-        <SleepCard onLogged={() => {
-          refresh();
-          if (user) forcePatternDetection(user.id).catch(e => console.error('[Today] force detection:', e));
-        }} />
+        <SleepCard onLogged={refresh} />
 
-        <View style={styles.statusBlock}>
+        {checkInsUnavailable && (
+          <OfflineUnavailable detail="Today’s check-ins haven’t loaded on this phone yet. They will once you’re back online. Sleep, body and bonus check-ins still work and sync later." />
+        )}
+        <View style={[styles.statusBlock, checkInsUnavailable && { display: 'none' }]}>
           {allDone ? (
             <>
               <Text style={styles.statusHeading}>All done for today</Text>
@@ -334,7 +342,7 @@ function TodayHome() {
                 <Text style={styles.nextThen}>then {formatTime(afterNextScheduled.scheduled_at, timeFormat)}</Text>
               )}
               {checkInSettings && (
-                <Pressable onPress={() => setShowRescheduleList(true)} style={({ pressed }) => pressed && styles.pressed}>
+                <Pressable onPress={guardOnline(() => setShowRescheduleList(true), 'Rescheduling a check-in')} style={({ pressed }) => pressed && styles.pressed}>
                   <Text style={styles.reschedule}>Reschedule</Text>
                 </Pressable>
               )}

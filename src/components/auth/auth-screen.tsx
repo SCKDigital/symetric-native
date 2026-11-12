@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SymetricLogo } from '@/components/symetric-logo';
 import { useAuth } from '@/contexts/auth-context';
+import { OFFLINE_TITLE } from '@/components/shared/offline-gate';
+import { isOnline, useIsOnline } from '@/lib/offline/connectivity';
 import { makeAccentStyles } from '@/lib/accent-styles';
 import { useAccent } from '@/contexts/accent-context';
 
@@ -76,8 +78,14 @@ export function AuthScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signInWithMagicLink } = useAuth();
+  const online = useIsOnline();
 
   const handleSubmit = async () => {
+    // The link is emailed by the server, so there's nothing to queue.
+    if (!isOnline()) {
+      setError('Signing in needs a connection. Try again once you’re back online.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -127,6 +135,12 @@ export function AuthScreen() {
                   onSubmitEditing={handleSubmit}
                   returnKeyType="send"
                 />
+
+                {!online && !error ? (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorText}>{OFFLINE_TITLE}. Signing in needs a connection.</Text>
+                  </View>
+                ) : null}
 
                 {error ? (
                   <View style={styles.errorBox}>

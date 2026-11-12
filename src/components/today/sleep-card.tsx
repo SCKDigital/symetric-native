@@ -14,6 +14,8 @@ import type { AccentTokens } from '@/constants/accents';
 import { makeComfortStyles } from '@/lib/accent-styles';
 import { useAccent } from '@/contexts/accent-context';
 import { dateToString } from '@/lib/date-utils';
+import { readCache, writeCache } from '@/lib/offline/cache';
+import { pendingPayloads, submit } from '@/lib/offline/outbox';
 
 // Port of the web app's SleepCard.tsx — the Today-screen sleep row, in its
 // three states: a CTA when nothing is logged, the expanded question when
@@ -25,6 +27,12 @@ import { dateToString } from '@/lib/date-utils';
 
 interface Props {
   onLogged?: () => void;
+}
+
+/** The fields a night has before the server has given it an id. Nothing reads
+ *  the id; the card only needs the score and created_at. */
+function pendingRow(userId: string, logDate: string) {
+  return { id: 'pending', user_id: userId, log_date: logDate };
 }
 
 export default function SleepCard({ onLogged }: Props) {
@@ -51,9 +59,21 @@ export default function SleepCard({ onLogged }: Props) {
       .eq('log_date', today)
       .order('created_at', { ascending: false })
       .limit(1)
-      .then(({ data, error }) => {
-        if (error) console.error('[SleepCard] query error:', error);
-        setSleepLog((data?.[0] as SleepLog) ?? null);
+      .then(async ({ data, error }) => {
+        let row: SleepLog | null;
+        if (error) {
+          // Offline: the last answer the server gave for today, if it was today.
+          console.error('[SleepCard] query error:', error);
+          const cached = await readCache<{ date: string; row: SleepLog | null }>(user.id, 'sleepToday');
+          row = cached?.date === today ? cached.row : null;
+        } else {
+          row = (data?.[0] as SleepLog) ?? null;
+          writeCache(user.id, 'sleepToday', { date: today, row });
+        }
+        // A score still waiting to sync is newer than either.
+        const pending = pendingPayloads('sleep.save').filter(p => p.logDate === today).at(-1);
+        if (pending) row = { ...(row ?? pendingRow(user.id, today)), ...pending.fields } as SleepLog;
+        setSleepLog(row);
       });
   }, [user]);
 
@@ -64,19 +84,18 @@ export default function SleepCard({ onLogged }: Props) {
   const saveSleepLog = async (score: number | null, skipped = false, hoursSlept: number | null = null): Promise<SleepLog | null> => {
     if (!user) return null;
     const today = dateToString(new Date());
-    // limit(1) rather than maybeSingle() — avoids PGRST116 if stale duplicate rows exist.
-    const { data: rows, error: selectError } = await supabase
-      .from('sleep_logs').select('id').eq('user_id', user.id).eq('log_date', today).limit(1);
-    if (selectError) { console.error('[SleepCard] select error:', selectError); return null; }
-    const existing = rows?.[0];
-    const payload = existing
-      ? { score, skipped, hours_slept: hoursSlept, edited_at: new Date().toISOString() }
-      : { score, skipped, hours_slept: hoursSlept };
-    const { data, error } = existing
-      ? await supabase.from('sleep_logs').update(payload).eq('id', existing.id).select().limit(1)
-      : await supabase.from('sleep_logs').insert({ user_id: user.id, log_date: today, ...payload }).select().limit(1);
-    if (error) { console.error('[SleepCard] save error:', error); return null; }
-    return (data?.[0] as SleepLog) ?? null;
+    const now = new Date().toISOString();
+    // One row per night (sleep_logs_user_date_unique), so the outbox upserts
+    // on the date. An existing row gets edited_at; a new one carries the
+    // moment it was logged as created_at, because the edit window counts
+    // from created_at and a night logged offline must not get a fresh ten
+    // minutes when the phone reconnects.
+    const fields: Record<string, unknown> = sleepLog
+      ? { score, skipped, hours_slept: hoursSlept, edited_at: now }
+      : { score, skipped, hours_slept: hoursSlept, created_at: now };
+    const result = await submit(user.id, 'sleep.save', { logDate: today, fields });
+    if (result.status === 'rejected') { console.error('[SleepCard] save rejected:', result.error); return null; }
+    return { ...(sleepLog ?? pendingRow(user.id, today)), ...fields } as SleepLog;
   };
 
   const handleSelect = async (score: number) => {

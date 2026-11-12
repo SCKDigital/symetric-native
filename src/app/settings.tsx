@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { useOutbox } from '@/lib/offline/outbox';
+import { useIsOnline } from '@/lib/offline/connectivity';
+import { readThrough } from '@/lib/offline/read-through';
+import { guardOnline, OfflineUnavailable, RequiresConnection } from '@/components/shared/offline-gate';
 
 import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
@@ -175,6 +180,24 @@ export default function SettingsScreen() {
   const comfort = useComfort();
   const appLock = useAppLockSettings();
   const { user, profile, signOut, refreshProfile } = useAuth();
+  const outbox = useOutbox();
+  const online = useIsOnline();
+
+  // Entries still waiting to sync are kept on this phone under this account
+  // and sent the next time it signs in here — but someone signing out to
+  // switch phones would otherwise never know they hadn't arrived.
+  const handleSignOut = () => {
+    const unsent = outbox.pendingCount + outbox.failedCount;
+    if (unsent === 0) { signOut(); return; }
+    Alert.alert(
+      unsent === 1 ? '1 entry hasn’t synced' : `${unsent} entries haven’t synced`,
+      'They’ll stay on this phone and sync the next time you sign in here. Signing in on a different phone won’t have them.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign out', style: 'destructive', onPress: () => { signOut(); } },
+      ],
+    );
+  };
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -212,7 +235,13 @@ export default function SettingsScreen() {
     if (!user) return;
     setLoading(true);
     setLoadError(null);
-    const { data, error } = await supabase.from('check_in_settings').select('*').eq('user_id', user.id).maybeSingle();
+    // Falls back to the last copy offline (read-through.ts), so the screen
+    // shows the current settings rather than a load error.
+    const { data, error } = await readThrough('settings.checkIn', async () => {
+      const res = await supabase.from('check_in_settings').select('*').eq('user_id', user.id).maybeSingle();
+      if (res.error) throw res.error;
+      return res;
+    }).catch((e: unknown) => ({ data: null, error: e }));
     if (error) {
       console.error('[Settings] load error:', error);
       setLoadError('Failed to load settings. Pull down or reopen the tab to try again.');
@@ -410,9 +439,13 @@ export default function SettingsScreen() {
         {loadError && (
           <View style={styles.loadError}><Text style={styles.loadErrorText}>{loadError}</Text></View>
         )}
+        {!online && (
+          <OfflineUnavailable detail="Changing settings needs a connection. You can still see them here, and sign out." />
+        )}
 
         {/* ── Your tracking setup ─────────────────────────────────────────── */}
         <SectionLabel>Your tracking setup</SectionLabel>
+        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<BrainIcon />}
@@ -438,9 +471,11 @@ export default function SettingsScreen() {
             onPress={() => setSheet('frequency')}
           />
         </SectionCard>
+        </RequiresConnection>
 
         {/* ── Body tracking ───────────────────────────────────────────────── */}
         <SectionLabel>Body tracking</SectionLabel>
+        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<BodyIcon />}
@@ -494,9 +529,11 @@ export default function SettingsScreen() {
             </>
           )}
         </SectionCard>
+        </RequiresConnection>
 
         {/* ── Cycle tracking ──────────────────────────────────────────────── */}
         <SectionLabel>Cycle tracking</SectionLabel>
+        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<CycleIcon />}
@@ -508,9 +545,11 @@ export default function SettingsScreen() {
             />}
           />
         </SectionCard>
+        </RequiresConnection>
 
         {/* ── Notifications ───────────────────────────────────────────────── */}
         <SectionLabel>Notifications</SectionLabel>
+        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<BellSlashIcon />}
@@ -568,9 +607,11 @@ export default function SettingsScreen() {
             </>
           )}
         </SectionCard>
+        </RequiresConnection>
 
         {/* ── Security ────────────────────────────────────────────────────── */}
         <SectionLabel>Security</SectionLabel>
+        <RequiresConnection>
         <SectionCard>
           <SettingsRow
             icon={<LockIcon />}
@@ -588,9 +629,11 @@ export default function SettingsScreen() {
             </>
           )}
         </SectionCard>
+        </RequiresConnection>
 
         {/* ── Preferences ─────────────────────────────────────────────────── */}
         <SectionLabel>Preferences</SectionLabel>
+        <RequiresConnection>
         <SectionCard>
           {/* First in Preferences because it is the only setting whose
               result is the screen you are reading. Instant, not on
@@ -643,6 +686,7 @@ export default function SettingsScreen() {
             onPress={() => setSheet('timeFormat')}
           />
         </SectionCard>
+        </RequiresConnection>
 
         {/* ── Your data ───────────────────────────────────────────────────── */}
         <SectionLabel>Your data</SectionLabel>
@@ -688,12 +732,12 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={<DocumentIcon />} label="Privacy policy"
             subtitle="What we collect, where it's stored, and your rights"
-            right={<ChevronRight />} onPress={openPrivacyPolicy}
+            right={<ChevronRight />} onPress={guardOnline(openPrivacyPolicy, 'The privacy policy')}
           />
           <RowDivider />
           <SettingsRow
             icon={<DocumentIcon />} label="Terms of use"
-            right={<ChevronRight />} onPress={openTermsOfUse}
+            right={<ChevronRight />} onPress={guardOnline(openTermsOfUse, 'The terms of use')}
           />
         </SectionCard>
 
@@ -709,7 +753,7 @@ export default function SettingsScreen() {
           />
         </SectionCard>
 
-        <Pressable onPress={() => signOut()} style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
+        <Pressable onPress={handleSignOut} style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
       </ScrollView>

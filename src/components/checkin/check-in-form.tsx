@@ -9,7 +9,8 @@ import { trackCheckInCompleted } from '@/lib/analytics';
 import { useComfort } from '@/hooks/use-comfort';
 import { type ComfortTokens } from '@/lib/comfort-theme';
 import { getDomainColorFromProfile, DOMAIN_COPY } from '@/lib/domains';
-import { CheckIn, DomainType, supabase } from '@/lib/supabase';
+import { submit } from '@/lib/offline/outbox';
+import { CheckIn, DomainType } from '@/lib/supabase';
 import type { AccentTokens } from '@/constants/accents';
 import { makeComfortStyles } from '@/lib/accent-styles';
 import { useAccent } from '@/contexts/accent-context';
@@ -72,6 +73,7 @@ export default function CheckInForm({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
+  const [savedOffline, setSavedOffline] = useState(false);
 
   const handleSave = async () => {
     if (!user) return;
@@ -84,14 +86,19 @@ export default function CheckInForm({
         notes: notes || undefined,
         ...values,
       };
-      // PostgREST failures are returned, not thrown, so the try/catch around
-      // this never saw them: a rejected write fell straight through to the
-      // "Logged" tick, the analytics event and the screen closing. The user was
-      // told their check-in saved when nothing had been written.
-      const { error } = await supabase.from('check_ins').update(updateData).eq('id', checkIn.id);
-      if (error) {
-        console.error('[CheckInForm] save failed:', error);
-        setSaveError("Couldn't save that. Check your connection and try again.");
+      // Through the outbox: sent now if the server can be reached, kept on the
+      // phone and sent later if not. Only "the server said no" is an error
+      // here — PostgREST returns those rather than throwing, which is how a
+      // rejected write once fell through to the "Logged" tick.
+      const result = await submit(user.id, 'checkIn.complete', {
+        checkInId: checkIn.id,
+        completedAt: updateData.completed_at!,
+        notes: updateData.notes,
+        values,
+      });
+      if (result.status === 'rejected') {
+        console.error('[CheckInForm] save rejected:', result.error);
+        setSaveError("Couldn't save that. Try again.");
         setSaving(false);
         return;
       }
@@ -101,12 +108,13 @@ export default function CheckInForm({
         onCompleted({ ...checkIn, ...updateData });
       } else {
         setDoneCount(completedCount + 1);
+        setSavedOffline(result.status === 'queued');
         setShowConfirmation(true);
-        setTimeout(() => onComplete(), 1500);
+        setTimeout(() => onComplete(), result.status === 'queued' ? 2500 : 1500);
       }
     } catch (e) {
       console.error('[CheckInForm] save threw:', e);
-      setSaveError("Couldn't save that. Check your connection and try again.");
+      setSaveError("Couldn't save that. Try again.");
       setSaving(false);
     }
   };
@@ -123,6 +131,9 @@ export default function CheckInForm({
         <Text style={styles.confirmationCount}>
           {doneCount} of {totalCount} done today
         </Text>
+        {savedOffline && (
+          <Text style={styles.confirmationCount}>Saved on this phone. It will sync when you’re back online.</Text>
+        )}
       </View>
     );
   }

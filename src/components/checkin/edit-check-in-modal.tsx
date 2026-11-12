@@ -4,7 +4,8 @@ import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 import DomainSlider from '@/components/checkin/domain-slider';
 import { useAuth } from '@/contexts/auth-context';
 import { DOMAIN_COPY, getDomainColorFromProfile } from '@/lib/domains';
-import { CheckIn, DomainType, supabase } from '@/lib/supabase';
+import { submit } from '@/lib/offline/outbox';
+import { CheckIn, DomainType } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
 // Port of the web app's EditCheckInModal.tsx — correcting a check-in inside
@@ -21,7 +22,7 @@ interface Props {
 
 export default function EditCheckInModal({ checkIn, activeDomains, baselines, onClose, onSaved }: Props) {
   const styles = useStyles();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
 
   // Only domains this check-in actually recorded. `activeDomains` is what's
   // tracked *today* — a domain added to tracking after this check-in happened
@@ -37,7 +38,7 @@ export default function EditCheckInModal({ checkIn, activeDomains, baselines, on
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async () => {
-    if (saving) return;
+    if (saving || !user) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -46,17 +47,24 @@ export default function EditCheckInModal({ checkIn, activeDomains, baselines, on
         notes: notes || undefined,
         edited_at: new Date().toISOString(),
       };
-      const { error } = await supabase.from('check_ins').update(updates).eq('id', checkIn.id);
-      if (error) {
-        console.error('[EditCheckInModal] save error:', error);
-        setSaveError("Couldn't save changes. Check your connection and try again.");
+      // Queued like any other entry when offline; edited_at is fixed here so
+      // a resend doesn't count as a second edit.
+      const result = await submit(user.id, 'checkIn.edit', {
+        checkInId: checkIn.id,
+        editedAt: updates.edited_at!,
+        notes: updates.notes,
+        values,
+      });
+      if (result.status === 'rejected') {
+        console.error('[EditCheckInModal] save rejected:', result.error);
+        setSaveError("Couldn't save changes. Try again.");
         setSaving(false);
         return;
       }
       onSaved({ ...checkIn, ...updates });
     } catch (e) {
       console.error('[EditCheckInModal] save threw:', e);
-      setSaveError("Couldn't save changes. Check your connection and try again.");
+      setSaveError("Couldn't save changes. Try again.");
       setSaving(false);
     }
   };

@@ -3,8 +3,11 @@ import { Session, User } from '@supabase/supabase-js';
 
 import { identifyUser, resetUser } from '@/lib/analytics';
 import { buildEmailRedirectUrl } from '@/lib/auth-deep-link';
+import { readCache, writeCache } from '@/lib/offline/cache';
+import { isOnline } from '@/lib/offline/connectivity';
+import { readStoredSession } from '@/lib/offline/session';
 import { removeThisDevicePushToken } from '@/lib/push-notifications';
-import { Profile, supabase } from '@/lib/supabase';
+import { IS_DEMO, Profile, supabase } from '@/lib/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -46,6 +49,9 @@ async function fetchProfile(userId: string) {
 // and the first read after a brand-new account can land before it commits.
 async function fetchProfileWithRetry(userId: string) {
   let data = await fetchProfile(userId);
+  // A failed read with no connection isn't the signup race, and waiting three
+  // and a half seconds to fail twice more only delays the cached profile.
+  if (data === undefined && !isOnline()) return undefined;
   if (data == null) {
     await new Promise(resolve => setTimeout(resolve, 1500));
     data = await fetchProfile(userId);
@@ -55,6 +61,19 @@ async function fetchProfileWithRetry(userId: string) {
     data = await fetchProfile(userId);
   }
   return data;
+}
+
+/** The profile, from the server if it answers, else the last copy on this
+ *  phone. Without the fallback a failed read came back as "no profile", and
+ *  AuthGate sent an onboarded account offline straight to Onboarding. */
+async function loadProfile(userId: string): Promise<{ profile: Profile | null | undefined; fromServer: boolean }> {
+  const fetched = await fetchProfileWithRetry(userId);
+  if (fetched !== undefined) {
+    if (fetched) writeCache(userId, 'profile', fetched);
+    return { profile: fetched, fromServer: true };
+  }
+  const cached = await readCache<Profile>(userId, 'profile');
+  return { profile: cached ?? undefined, fromServer: false };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -67,7 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = async () => {
     if (user) {
       const profileData = await fetchProfile(user.id);
-      setProfile(profileData ?? null);
+      // A failed read keeps the profile already held. Setting null here sent
+      // anyone whose refresh happened offline back to Onboarding.
+      if (profileData === undefined) return;
+      if (profileData) writeCache(user.id, 'profile', profileData);
+      setProfile(profileData);
     }
   };
 
@@ -82,8 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // profile twice.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, reportedSession) => {
       (async () => {
+        let session = reportedSession;
+        if (!session && _event === 'INITIAL_SESSION' && !IS_DEMO) {
+          session = await readStoredSession();
+          if (session) console.warn('[auth] session could not be refreshed; continuing on the stored one until online');
+        }
         const nextUserId = session?.user?.id ?? null;
         const identityChanged = nextUserId !== currentUserId;
         currentUserId = nextUserId;
@@ -104,9 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Only a new identity goes back through the loading screen; the
           // same account just gets its profile re-read in place.
           if (identityChanged) setProfile(undefined);
-          let profileData = await fetchProfileWithRetry(session.user.id);
+          const loaded = await loadProfile(session.user.id);
+          let profileData = loaded.profile;
           if (gen !== fetchGenRef.current) return;
-          if (profileData && !profileData.timezone) {
+          if (loaded.fromServer && profileData && !profileData.timezone) {
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
             await supabase.from('profiles').update({ timezone: tz }).eq('id', session.user.id);
             profileData = { ...profileData, timezone: tz };

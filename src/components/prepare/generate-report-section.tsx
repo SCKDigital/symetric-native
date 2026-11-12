@@ -4,6 +4,9 @@ import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-nativ
 import { useAuth } from '@/contexts/auth-context';
 import { trackReportGenerated } from '@/lib/analytics';
 import { localDayEndISO, localDayStartISO, parseDateString } from '@/lib/date-utils';
+import { useIsOnline } from '@/lib/offline/connectivity';
+import { syncBeforeServerAction } from '@/lib/offline/outbox';
+import { OFFLINE_TITLE } from '@/components/shared/offline-gate';
 import { generateReport } from '@/lib/report/generate-report';
 import { supabase } from '@/lib/supabase';
 import type { DetectedCluster } from '@/lib/supabase';
@@ -35,6 +38,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
   const styles = useStyles();
   const accent = useAccent();
   const { user, profile } = useAuth();
+  const online = useIsOnline();
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +57,9 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
       .eq('status', 'completed')
       .gte('scheduled_at', localDayStartISO(fromDate))
       .lte('scheduled_at', localDayEndISO(toDate))
-      .then(({ count }) => setCheckInCount(count ?? 0));
+      // A failed count (offline) leaves it unknown rather than 0, which
+      // would claim there are no check-ins in the period.
+      .then(({ count, error }) => { if (!error) setCheckInCount(count ?? 0); });
   }, [user, fromDate, toDate]);
 
   async function handleGenerate() {
@@ -62,6 +68,12 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
     setError(null);
     setGenerated(false);
     try {
+      // The report is built from the server's copy, so anything still
+      // waiting to sync would be missing from it. Send it first.
+      if (!(await syncBeforeServerAction())) {
+        setError('Some entries are still syncing. Try again in a moment.');
+        return;
+      }
       // Remembered for next time, same as the web app — a clinician-facing
       // name is not something to retype every appointment.
       const trimmed = reportName.trim();
@@ -105,7 +117,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
 
   const flaggedCount = clusters.filter(c => c.flagged_for_report).length;
   // Nothing selected means nothing to report on.
-  const disabled = generating || (!includeMind && !includeBody && !includeCycle);
+  const disabled = !online || generating || (!includeMind && !includeBody && !includeCycle);
 
   return (
     <View style={styles.card}>
@@ -147,7 +159,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
             <Text style={styles.generateButtonText}>Generating…</Text>
           </View>
         ) : (
-          <Text style={styles.generateButtonText}>{generated ? 'Generate PDF again' : 'Generate PDF'}</Text>
+          <Text style={styles.generateButtonText}>{!online ? OFFLINE_TITLE : generated ? 'Generate PDF again' : 'Generate PDF'}</Text>
         )}
       </Pressable>
     </View>

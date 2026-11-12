@@ -5,6 +5,7 @@ import DraggableFlatList, { type RenderItemParams } from 'react-native-draggable
 import QuestionCard from '@/components/prepare/question-card';
 import { useAuth } from '@/contexts/auth-context';
 import { createQuestion, fetchQuestionsForAppointment, reorderQuestions, updateQuestion } from '@/lib/api/questions';
+import { isOnline } from '@/lib/offline/connectivity';
 import { trackQuestionAdded, trackQuestionReordered } from '@/lib/analytics';
 import type { PrepareQuestion } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
@@ -38,7 +39,9 @@ export default function QuestionsSection({ appointmentId }: Props) {
       const qs = await fetchQuestionsForAppointment(appointmentId);
       setQuestions(qs);
     } catch {
-      setError('Unable to load questions. Check your connection and try again.');
+      setError(isOnline()
+        ? 'Unable to load questions. Check your connection and try again.'
+        : 'Unavailable offline. These questions haven’t loaded on this phone yet; they will once you’re back online.');
     } finally {
       setLoading(false);
     }
@@ -65,7 +68,7 @@ export default function QuestionsSection({ appointmentId }: Props) {
   }
 
   async function handleTogglePriority(question: PrepareQuestion) {
-    const updated = await updateQuestion(question.id, { is_priority: !question.is_priority });
+    const updated = await updateQuestion(question, { is_priority: !question.is_priority });
     setQuestions(prev => prev.map(q => (q.id === updated.id ? updated : q)));
   }
 
@@ -82,7 +85,7 @@ export default function QuestionsSection({ appointmentId }: Props) {
       const otherGroup = isPriority ? prev.filter(q => !q.is_priority) : prev.filter(q => q.is_priority);
       return isPriority ? [...reordered, ...otherGroup] : [...otherGroup, ...reordered];
     });
-    await reorderQuestions(reordered.map(q => q.id), isPriority);
+    if (user) await reorderQuestions(user.id, reordered.map(q => q.id), isPriority);
     trackQuestionReordered();
   }
 

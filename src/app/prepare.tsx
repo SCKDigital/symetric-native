@@ -15,7 +15,10 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { fetchUpcomingAppointment, fetchAllAppointments } from '@/lib/api/appointments';
 import { trackPrepareTabOpened } from '@/lib/analytics';
-import { fetchClustersForDateRange } from '@/lib/cluster-detection';
+import { fetchClustersForDateRangeOrThrow } from '@/lib/cluster-detection';
+import { readThrough } from '@/lib/offline/read-through';
+import { useIsOnline } from '@/lib/offline/connectivity';
+import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
 import { addDays, todayDateString } from '@/lib/date-utils';
 import { defaultRangeForPreset, loadSavedRange, saveRange, type PrepareRange } from '@/lib/prepare-range';
 import { buildPastVisits } from '@/lib/past-visits';
@@ -34,6 +37,7 @@ export default function PrepareScreen() {
   const styles = useStyles();
   const accent = useAccent();
   const { user } = useAuth();
+  const online = useIsOnline();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -88,7 +92,9 @@ export default function PrepareScreen() {
     if (!user) return;
     const todayStr = todayDateString();
     const from = addDays(todayStr, -90);
-    fetchClustersForDateRange(user.id, from, todayStr)
+    // One fixed name, not the dates: offline the next day, yesterday's
+    // 90-day read is still the best there is.
+    readThrough('clusters.prepare', () => fetchClustersForDateRangeOrThrow(user.id, from, todayStr))
       .then(data => setAllClusters(data ?? []))
       .catch(console.error);
 
@@ -124,6 +130,12 @@ export default function PrepareScreen() {
             <Text style={styles.infoIcon}>ⓘ</Text>
           </Pressable>
         </View>
+
+        {!online && (
+          <OfflineSnapshotNote
+            what="your appointments"
+            extra="Questions you add will sync. Changing an appointment needs a connection." />
+        )}
 
         <AppointmentContext appointment={appointment} onAppointmentChange={loadAppointment} />
 

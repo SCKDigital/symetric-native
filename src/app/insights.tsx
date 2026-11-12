@@ -9,6 +9,9 @@ import PatternDetailScreen from '@/components/insights/pattern-detail-screen';
 import SleepAreaDetail from '@/components/insights/sleep-area-detail';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLogoHeader from '@/components/shared/app-logo-header';
+import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
+import { guardOnline, OfflineUnavailable } from '@/components/shared/offline-gate';
+import { onDetectionAfterSync } from '@/hooks/use-outbox-runner';
 import { ChevronDownIcon, ChevronRightIcon } from '@/components/shared/chevrons';
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import { useAuth } from '@/contexts/auth-context';
@@ -43,6 +46,8 @@ import { selectStandoutFindings } from '@/lib/standout-ranking';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
 import { Baseline, BodyDomainType, CheckIn, ContextTag, DetectedCluster, DomainType, IS_DEMO, SleepLog, supabase } from '@/lib/supabase';
 import type { InterventionMarker } from '@/types/marker';
+import { readCache, writeCache } from '@/lib/offline/cache';
+import { isOnline, subscribeOnline } from '@/lib/offline/connectivity';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
 type RangeDays = 7 | 14 | 30 | 60 | 90;
@@ -291,6 +296,10 @@ export default function InsightsScreen() {
   const hasLoadedOnce = useRef(false);
   // Range-independent query results, cached per user — see the note in load().
   const fetchCache = useRef<{ userId: string; data: InsightsFetchBundle } | null>(null);
+  // When the bundle above came from the copy saved on this phone rather than
+  // the server: when that copy was saved. Shown as the offline note.
+  const [offlineSince, setOfflineSince] = useState<string | null>(null);
+  const [offlineUnavailable, setOfflineUnavailable] = useState(false);
   // The website demo opens on the 90 days its sample report covers, so the
   // two show the same findings; its headline flare is older than 30 days.
   const [range, setRange] = useState<RangeDays>(IS_DEMO ? 90 : 30);
@@ -363,6 +372,16 @@ export default function InsightsScreen() {
     // re-run all fifteen queries and wait on them before redrawing, which is
     // what made switching range feel broken: the dropdown label updated
     // immediately while the numbers under it were still the old range's.
+    // Offline, the queries below can only fail. The bundle saved the last time
+    // they all came back stands in, dated, until the connection returns.
+    if (fetchCache.current?.userId !== user.id && !isOnline()) {
+      const saved = await readCache<{ savedAt: string; data: InsightsFetchBundle }>(user.id, 'insights');
+      if (saved) {
+        fetchCache.current = { userId: user.id, data: saved.data };
+        setOfflineSince(saved.savedAt);
+      }
+    }
+
     if (fetchCache.current?.userId !== user.id) {
       const [
         clusterData, circadianData, { data: checkIns90d }, { data: sleepLogs90d }, { data: settings }, { data: baselines },
@@ -405,6 +424,28 @@ export default function InsightsScreen() {
           sleepConnections90d,
         } as InsightsFetchBundle,
       };
+      // A failed check-in read comes back as null (success is []), which is
+      // the sign the connection dropped mid-load. Prefer the saved copy then;
+      // keep a fresh one whenever the read worked.
+      if (checkIns90d === null) {
+        const saved = await readCache<{ savedAt: string; data: InsightsFetchBundle }>(user.id, 'insights');
+        if (saved) {
+          fetchCache.current = { userId: user.id, data: saved.data };
+          setOfflineSince(saved.savedAt);
+        } else {
+          // Nothing saved yet: whatever renders below is built from empty
+          // reads and would read as "no patterns", which isn't true. Say so,
+          // and don't keep the empty bundle, so the next load tries again.
+          fetchCache.current = null;
+          setOfflineUnavailable(true);
+          setLoading(false);
+          return;
+        }
+      } else {
+        writeCache(user.id, 'insights', { savedAt: new Date().toISOString(), data: fetchCache.current.data });
+        setOfflineSince(null);
+        setOfflineUnavailable(false);
+      }
     }
 
     const {
@@ -673,16 +714,40 @@ export default function InsightsScreen() {
     load();
   }, [load]);
 
-  const toggleFlag = async (clusterId: string) => {
+  // The bundle is cached for as long as the tab stays mounted, so new data
+  // needs an explicit re-read: once detection has re-run on entries that just
+  // synced, and when the connection returns to an offline copy.
+  useEffect(() => {
+    const reread = () => { fetchCache.current = null; load(); };
+    const offDetected = onDetectionAfterSync(reread);
+    const offOnline = subscribeOnline(() => { if (isOnline() && (offlineSince || offlineUnavailable)) reread(); });
+    return () => { offDetected(); offOnline(); };
+  }, [load, offlineSince, offlineUnavailable]);
+
+  // Flagging writes to the server's copy of the pattern, which the report
+  // reads, so it isn't queued: offline it says so instead.
+  const toggleFlag = guardOnline(async (clusterId: string) => {
     const cluster = clusters.find(c => c.id === clusterId);
     if (!cluster) return;
     const { error } = await supabase.from('detected_clusters').update({ flagged_for_report: !cluster.flagged_for_report }).eq('id', clusterId);
     if (error) { console.error('[InsightsScreen] toggleFlag:', error); return; }
     setClusters(prev => prev.map(c => c.id === clusterId ? { ...c, flagged_for_report: !c.flagged_for_report } : c));
     setViewingCluster(prev => prev?.id === clusterId ? { ...prev, flagged_for_report: !prev.flagged_for_report } : prev);
-  };
+  }, 'Flagging a pattern for your report');
 
   if (loading) return <PulseLoadingScreen />;
+
+  if (offlineUnavailable) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <View style={styles.list}>
+          <AppLogoHeader />
+          <Text style={styles.heading}>Insights</Text>
+          <OfflineUnavailable detail="Insights haven’t loaded on this phone yet. They’re worked out from your synced entries, so they’ll appear once you’re back online." />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (viewingCluster) {
     return (
@@ -885,6 +950,7 @@ export default function InsightsScreen() {
           <>
             <AppLogoHeader />
             <Text style={styles.heading}>Insights</Text>
+            {offlineSince && <OfflineSnapshotNote savedAt={offlineSince} what="insights" />}
             <RangeControl range={range} onChange={r => { setRange(r); setActiveArea(null); }} fromDate={rangeStats.from} toDate={rangeStats.to} checkInCount={rangeStats.checkInCount} daysWithCheckIn={rangeStats.daysWithCheckIn} />
             {/* Every finding now has exactly one home. These five sections used
                 to sit here as well as inside the drill-downs, so a top finding

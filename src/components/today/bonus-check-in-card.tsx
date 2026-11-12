@@ -9,6 +9,9 @@ import { trackCheckInCompleted } from '@/lib/analytics';
 import { RESCUE_WINDOW_MS } from '@/lib/constants';
 import { DOMAIN_COPY, getDomainColorFromProfile } from '@/lib/domains';
 import { getMinutesRemaining, isWithinEditWindow } from '@/lib/edit-window';
+import * as Crypto from 'expo-crypto';
+import { submit } from '@/lib/offline/outbox';
+import { overlayCheckIns, pendingBonusCheckIns } from '@/lib/offline/overlays';
 import { CheckIn, DomainType, supabase } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
@@ -126,9 +129,13 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
-        if (cancelled || !data) return;
-        const row = data as CheckIn;
-        if (row.completed_at && isWithinEditWindow(row.completed_at)) setLastBonus(row);
+        if (cancelled) return;
+        // One saved offline and not yet sent is newer than anything the
+        // server holds, and is just as correctable.
+        const row = pendingBonusCheckIns()[0] ?? (data as CheckIn | null);
+        if (!row) return;
+        const [current] = overlayCheckIns([row]);
+        if (current.completed_at && isWithinEditWindow(current.completed_at)) setLastBonus(current);
       });
     return () => { cancelled = true; };
   }, [user]);
@@ -170,7 +177,10 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
     setError('');
 
     const now = new Date();
-    const payload: Record<string, unknown> = {
+    const payload: Record<string, unknown> & { id: string } = {
+      // Decided here, not by the database, so a resend after a dropped
+      // connection is recognised as the same row instead of a second one.
+      id: Crypto.randomUUID(),
       user_id: user.id,
       scheduled_at: now.toISOString(),
       expires_at: new Date(now.getTime() + RESCUE_WINDOW_MS).toISOString(),
@@ -180,19 +190,19 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
     };
     for (const d of domains) payload[d] = values[d] ?? restingValue(d);
 
-    // The inserted row comes back so it can be handed straight to the edit
-    // modal — a bonus check-in is not in Today's list to be found again.
-    const { data: inserted, error: insertError } = await supabase
-      .from('check_ins').insert(payload).select().single();
+    const result = await submit(user.id, 'checkIn.bonus', { row: payload });
     setSaving(false);
 
-    if (insertError) {
-      console.error('[BonusCheckInCard] insert error:', insertError);
+    if (result.status === 'rejected') {
+      console.error('[BonusCheckInCard] insert rejected:', result.error);
       setError('Could not save. Try again.');
       return;
     }
 
-    setLastBonus((inserted as CheckIn | null) ?? null);
+    // Built here rather than read back, so it can go straight to the edit
+    // modal whether or not it has reached the server yet — a bonus check-in
+    // is not in Today's list to be found again.
+    setLastBonus(payload as unknown as CheckIn);
     setNowMs(Date.now());
     trackCheckInCompleted(domains.length);
 

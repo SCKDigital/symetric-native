@@ -14,11 +14,12 @@ import { brandTint } from '@/constants/brand';
 import type { AccentTokens } from '@/constants/accents';
 import { makeComfortStyles } from '@/lib/accent-styles';
 import { BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER } from '@/lib/body/constants';
+import { loadBodyBaselines } from '@/lib/body/load-body-baselines';
 import { rollingBodyBaseline } from '@/lib/detection/body-baseline';
-import { dailyBodyValue } from '@/lib/detection/body-daily-value';
 import { trackBodyCheckInCompleted } from '@/lib/analytics';
-import { forcePatternDetection } from '@/lib/pattern-detection-scheduler';
-import { dateToString, todayDateString } from '@/lib/date-utils';
+import { todayDateString } from '@/lib/date-utils';
+import { readCache, writeCache } from '@/lib/offline/cache';
+import { pendingPayloads, submit } from '@/lib/offline/outbox';
 
 // Ports of the web app's BodyCheckInCard.tsx and MorningBodyCheckInCard.tsx —
 // the Today entry points into the body check-in forms. Native already had both
@@ -86,10 +87,21 @@ export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
 
   const refreshLoggedState = useCallback(async () => {
     if (!user || !enabled) return;
-    const { data } = await supabase
+    const today = todayDateString();
+    const { data, error } = await supabase
       .from('body_checkins').select('id')
-      .eq('user_id', user.id).eq('entry_date', todayDateString()).maybeSingle();
-    setLoggedToday(!!data);
+      .eq('user_id', user.id).eq('entry_date', today).maybeSingle();
+    // An entry still waiting to sync counts as logged; offline, so does the
+    // last answer the server gave for today.
+    const pending = [...pendingPayloads('body.save'), ...pendingPayloads('body.upsert')]
+      .some(p => p.entryDate === today);
+    let logged = !!data || pending;
+    if (error) {
+      logged = logged || (await readCache<string>(user.id, 'bodyLoggedDate')) === today;
+    } else if (data) {
+      writeCache(user.id, 'bodyLoggedDate', today);
+    }
+    setLoggedToday(logged);
   }, [user, enabled]);
 
   useEffect(() => {
@@ -112,29 +124,24 @@ export function BodyCheckInCard({ timeFormat }: { timeFormat: TimeFormat }) {
     setLoggingAsUsual(true);
     try {
       const today = todayDateString();
-      const from = dateToString(new Date(Date.now() - 90 * 86_400_000));
-      const { data } = await supabase
-        .from('body_checkins').select('*')
-        .eq('user_id', user.id).gte('entry_date', from).lt('entry_date', today)
-        .order('entry_date', { ascending: true });
-      const rows = (data ?? []) as Record<string, unknown>[];
+      // Same loader as the form, so offline this uses the last baselines
+      // computed rather than the flat midpoint.
+      const baselines = await loadBodyBaselines(user.id, today);
 
-      const payload: Record<string, unknown> = { user_id: user.id, entry_date: today, low_demand: true };
+      const fields: Record<string, unknown> = { low_demand: true };
       for (const d of activeDomains) {
-        const history = rows.map(r => dailyBodyValue(r, d)).filter((v): v is number => v !== null);
-        // Rounded: the slider steps in whole numbers and the columns are
-        // smallint, matching body-check-in.tsx's own rounding.
-        payload[d] = Math.round(rollingBodyBaseline(history));
+        fields[d] = baselines[d] ?? Math.round(rollingBodyBaseline([]));
       }
 
-      const { error } = await supabase.from('body_checkins').insert(payload);
-      if (error) {
-        console.error('[BodyCheckInCard] one-tap check-in failed:', error);
+      // insertOnly: like the plain insert it replaces, this never overwrites
+      // a row the day already has.
+      const result = await submit(user.id, 'body.upsert', { entryDate: today, fields, insertOnly: true });
+      if (result.status === 'rejected') {
+        console.error('[BodyCheckInCard] one-tap check-in rejected:', result.error);
         return;
       }
       trackBodyCheckInCompleted(activeDomains.length, 0, false);
       setLoggedToday(true);
-      forcePatternDetection(user.id).catch(e => console.error('[BodyCheckInCard] force detection:', e));
     } finally {
       setLoggingAsUsual(false);
     }

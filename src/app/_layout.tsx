@@ -18,6 +18,7 @@ import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
 import { IS_DEMO } from '@/lib/supabase';
 import { useAppLock } from '@/hooks/use-app-lock';
 import { usePushTokenSync } from '@/hooks/use-push-token-sync';
+import { useOutboxRunner } from '@/hooks/use-outbox-runner';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -73,6 +74,8 @@ function AuthGate() {
   const { session, profile, loading, user, refreshProfile } = useAuth();
   const { locked, unlock, obscured } = useAppLock(user?.id, profile?.app_lock_enabled ?? false);
   usePushTokenSync(user?.id, profile?.push_enabled ?? false, refreshProfile);
+  // Sends entries saved while offline. See lib/offline/outbox.ts.
+  useOutboxRunner(user?.id);
 
   useEffect(() => {
     Linking.getInitialURL().then(url => {

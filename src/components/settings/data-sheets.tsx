@@ -9,6 +9,10 @@ import { median, round2, stddevPop } from '@/lib/baseline-stats';
 import { buildCsvExport, buildJsonExport, type ExportFile } from '@/lib/data-export';
 import { dateToString } from '@/lib/date-utils';
 import { resolveActiveDomains } from '@/lib/domains';
+import { clearCache } from '@/lib/offline/cache';
+import { useIsOnline } from '@/lib/offline/connectivity';
+import { clearOutbox, syncBeforeServerAction } from '@/lib/offline/outbox';
+import { OFFLINE_TITLE } from '@/components/shared/offline-gate';
 import { supabase } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
@@ -44,6 +48,7 @@ async function shareExportFile(file: ExportFile): Promise<void> {
 export function ExportSheet({ onClose }: { onClose: () => void }) {
   const styles = useStyles();
   const { user } = useAuth();
+  const online = useIsOnline();
   const [fmt, setFmt] = useState<'CSV' | 'JSON'>('CSV');
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +58,11 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
     setExporting(true);
     setError(null);
     try {
+      // The export reads the server's copy; unsent entries would be missing.
+      if (!(await syncBeforeServerAction())) {
+        setError('Some entries are still syncing. Try again in a moment.');
+        return;
+      }
       if (fmt === 'CSV') {
         // Four files as on the web, plus body files when there is body data.
         // The share sheet can only take one at a time, so they go one after
@@ -84,7 +94,9 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
           : 'A single JSON file with everything you have recorded, including body tracking and appointments.'}
       </Text>
       {error && <Text style={styles.error}>{error}</Text>}
-      <SheetButton label={exporting ? 'Exporting...' : `Export as ${fmt}`} onPress={handleExport} disabled={exporting} />
+      <SheetButton
+        label={!online ? OFFLINE_TITLE : exporting ? 'Exporting...' : `Export as ${fmt}`}
+        onPress={handleExport} disabled={!online || exporting} />
       <SheetCancel onPress={onClose} />
     </SheetShell>
   );
@@ -119,6 +131,7 @@ export function DeleteRangeSheet({ userId, onClose, onDeleted }: {
   userId: string; onClose: () => void; onDeleted: () => void;
 }) {
   const styles = useStyles();
+  const online = useIsOnline();
   const [step, setStep] = useState<'pick' | 'confirm'>('pick');
   const [from, setFrom] = useState<Date | null>(null);
   const [to, setTo] = useState<Date | null>(null);
@@ -131,6 +144,13 @@ export function DeleteRangeSheet({ userId, onClose, onDeleted }: {
     if (!from || !to) return;
     setDeleting(true);
     setError(null);
+    // An entry still waiting to sync would arrive after the delete and put
+    // back part of the period the person just removed. Send it first.
+    if (!(await syncBeforeServerAction())) {
+      setDeleting(false);
+      setError('Some entries are still syncing. Try again in a moment.');
+      return;
+    }
     const fromStr = fmtDate(from);
     const toStr = fmtDate(to);
     const results = await Promise.all([
@@ -159,7 +179,9 @@ export function DeleteRangeSheet({ userId, onClose, onDeleted }: {
         description={`Every check-in, body check-in, body event and sleep log from ${displayDate(from)} to ${displayDate(to)} will be removed. This cannot be undone.`}
         onClose={onClose}>
         {error && <Text style={styles.error}>{error}</Text>}
-        <SheetButton danger label={deleting ? 'Deleting...' : 'Delete this period'} onPress={handleConfirmDelete} disabled={deleting} />
+        <SheetButton danger
+          label={!online ? OFFLINE_TITLE : deleting ? 'Deleting...' : 'Delete this period'}
+          onPress={handleConfirmDelete} disabled={!online || deleting} />
         <SheetCancel onPress={() => setStep('pick')} label="Back" />
       </SheetShell>
     );
@@ -183,6 +205,7 @@ export function DeleteRangeSheet({ userId, onClose, onDeleted }: {
 export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
   const styles = useStyles();
   const { user, signOut } = useAuth();
+  const online = useIsOnline();
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -206,6 +229,9 @@ export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
       return;
     }
 
+    // Nothing left on the server for queued entries to reach, and nothing on
+    // this phone should outlive the account.
+    await Promise.all([clearOutbox(user.id), clearCache(user.id)]);
     await signOut();
   };
 
@@ -226,7 +252,9 @@ export function DeleteAllSheet({ onClose }: { onClose: () => void }) {
         style={styles.textInput}
       />
       {deleteError && <Text style={styles.error}>{deleteError}</Text>}
-      <SheetButton danger label={deleting ? 'Deleting...' : 'Delete everything'} onPress={handleDeleteAll} disabled={!isConfirmed || deleting} />
+      <SheetButton danger
+        label={!online ? OFFLINE_TITLE : deleting ? 'Deleting...' : 'Delete everything'}
+        onPress={handleDeleteAll} disabled={!online || !isConfirmed || deleting} />
       <SheetCancel onPress={onClose} />
     </SheetShell>
   );
@@ -238,6 +266,7 @@ interface CurrentBaseline { domain: string; baseline_score: number; source: stri
 
 export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClose: () => void }) {
   const styles = useStyles();
+  const online = useIsOnline();
   const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
   const [current, setCurrent] = useState<CurrentBaseline[] | null>(null);
 
@@ -316,7 +345,9 @@ export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClos
       )}
       {state === 'done'
         ? <Text style={styles.hint}>Baselines updated.</Text>
-        : <SheetButton label={state === 'loading' ? 'Recalculating...' : 'Recalculate baselines'} onPress={handleReset} disabled={state === 'loading'} />}
+        : <SheetButton
+            label={!online ? OFFLINE_TITLE : state === 'loading' ? 'Recalculating...' : 'Recalculate baselines'}
+            onPress={handleReset} disabled={!online || state === 'loading'} />}
       <SheetCancel onPress={onClose} />
     </SheetShell>
   );

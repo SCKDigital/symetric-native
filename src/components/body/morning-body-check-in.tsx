@@ -7,6 +7,7 @@ import { trackBodyMorningCheckInCompleted } from '@/lib/analytics';
 import { BODY_DOMAINS, MORNING_READABLE_DOMAIN_ORDER, resolveMorningDomains } from '@/lib/body/constants';
 import { BODY_COLOR } from '@/lib/domains';
 import { todayDateString } from '@/lib/date-utils';
+import { pendingPayloads, submit } from '@/lib/offline/outbox';
 import { supabase } from '@/lib/supabase';
 import type { BodyDomainType } from '@/lib/supabase';
 
@@ -97,10 +98,15 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
 
       if (cancelled) return;
 
-      if (checkin) {
-        setCheckinId(checkin.id);
-        setExistingRetro(checkin.entered_retroactively ?? false);
-        const row = checkin as unknown as Record<string, number | null>;
+      // A morning entry still waiting to sync is newer than the server's
+      // copy, and offline it is the only copy.
+      const pending = pendingPayloads('body.upsert')
+        .filter(p => p.entryDate === selectedDate && 'morning_logged_at' in p.fields).at(-1);
+
+      if (checkin || pending) {
+        setCheckinId(checkin?.id ?? 'pending');
+        setExistingRetro(checkin?.entered_retroactively ?? false);
+        const row = { ...(checkin ?? {}), ...(pending?.fields ?? {}) } as unknown as Record<string, number | null>;
         const nextValues: MorningValues = {};
         for (const d of MORNING_READABLE_DOMAIN_ORDER) {
           const v = row[`morning_${d}`];
@@ -135,12 +141,16 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
       payload[`morning_${d}`] = values[d] ?? null;
     }
 
-    if (checkinId) {
-      const { error: updErr } = await supabase.from('body_checkins').update({ ...payload, edited_at: new Date().toISOString() }).eq('id', checkinId);
-      if (updErr) { setSaving(false); setError('Could not save. Try again.'); return; }
-    } else {
-      const { error: insErr } = await supabase.from('body_checkins').insert(payload);
-      if (insErr) { setSaving(false); setError('Could not save. Try again.'); return; }
+    // Through the outbox. Keyed on the day rather than the row id, so it
+    // lands on the evening entry's row if that reached the server first.
+    const { user_id: _userId, entry_date: _entryDate, ...fields } = payload;
+    if (checkinId) fields.edited_at = new Date().toISOString();
+    const result = await submit(user.id, 'body.upsert', { entryDate: selectedDate, fields });
+    if (result.status === 'rejected') {
+      console.error('[MorningBodyCheckIn] save rejected:', result.error);
+      setSaving(false);
+      setError('Could not save. Try again.');
+      return;
     }
 
     const domainCount = morningDomains.filter(d => values[d] !== undefined).length;

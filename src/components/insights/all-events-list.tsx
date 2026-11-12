@@ -6,6 +6,8 @@ import { CalendarIcon, PillIcon, PinIcon } from '@/components/marker-icons';
 import { parseDateString } from '@/lib/date-utils';
 import { markerColors, markerTypeLabels } from '@/lib/marker-colors';
 import { createMarker, deleteMarker, fetchMarkers, updateMarker } from '@/lib/queries/markers';
+import { OfflineUnavailable } from '@/components/shared/offline-gate';
+import { isOnline } from '@/lib/offline/connectivity';
 import type { InterventionMarker } from '@/types/marker';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
@@ -46,13 +48,17 @@ export default function AllEventsList({ onChanged, cycleTrackingEnabled }: Props
   const [editing, setEditing] = useState<InterventionMarker | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
 
   const reload = useCallback(async () => {
     try {
       setEvents(await fetchMarkers());
+      setUnavailable(false);
     } catch (e) {
       console.error('[AllEventsList] fetch error:', e);
       setEvents(prev => prev ?? []);
+      // Offline with no saved list: an empty list would read as "no events".
+      if (!isOnline()) setUnavailable(true);
     }
   }, []);
 
@@ -82,10 +88,13 @@ export default function AllEventsList({ onChanged, cycleTrackingEnabled }: Props
           <Text style={styles.addText}>+ Add an event</Text>
         </Pressable>
       </View>
+      {unavailable && (
+        <OfflineUnavailable detail="Your events haven’t loaded on this phone yet. They will once you’re back online. Events you add now are kept and sync later." />
+      )}
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      {visible.length === 0 ? (
+      {unavailable ? null : visible.length === 0 ? (
         <Text style={styles.empty}>No events yet. Log a medication change, an appointment or something that happened, and its effect can be read once there are days of check-ins either side.</Text>
       ) : (
         <View style={styles.card}>

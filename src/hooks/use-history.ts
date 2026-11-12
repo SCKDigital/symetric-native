@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth } from '@/contexts/auth-context';
 import { cycleDayForDate, dateToString, ensureUTC } from '@/lib/date-utils';
+import { readCache, writeCache } from '@/lib/offline/cache';
+import { isOnline, subscribeOnline } from '@/lib/offline/connectivity';
+import { onSynced } from '@/lib/offline/outbox';
+import { overlayBody, overlayCheckIns, overlayMarkers, overlaySleepLogs, pendingBonusCheckIns } from '@/lib/offline/overlays';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { CheckIn, SleepLog, supabase } from '@/lib/supabase';
 import type { BodyCheckIn, BodyEvent, BodyEventSite, BodyPainSite } from '@/lib/supabase';
@@ -21,8 +25,26 @@ export interface DayData {
   cycleDay: number | null;
 }
 
+/** Everything History read, as it came back — what's kept for offline use. */
+interface HistoryRaw {
+  fromStr: string;
+  checkIns: CheckIn[];
+  sleepLogs: SleepLog[];
+  markers: InterventionMarker[];
+  bodyCheckIns: BodyCheckIn[];
+  bodyEvents: (BodyEvent & { body_event_sites: BodyEventSite[] })[];
+  bodyPainSites: BodyPainSite[];
+  dayOneDates: string[];
+  timeFormat: TimeFormat;
+}
+
 interface State {
   loading: boolean;
+  /** The read failed and nothing was saved to fall back on: what's shown is
+   *  only the entries made on this phone, not the person's history. */
+  offlineUnavailable: boolean;
+  /** Showing the saved copy rather than a fresh read. */
+  offlineCopy: boolean;
   days: DayData[];
   timeFormat: TimeFormat;
 }
@@ -39,11 +61,12 @@ interface State {
  */
 export function useHistory() {
   const { user, profile } = useAuth();
-  const [state, setState] = useState<State>({ loading: true, days: [], timeFormat: '12hr' });
+  const [state, setState] = useState<State>({ loading: true, offlineUnavailable: false, offlineCopy: false, days: [], timeFormat: '12hr' });
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!user) return;
-    setState(prev => ({ ...prev, loading: true }));
+    // A reload triggered by a sync keeps the list on screen.
+    if (!opts?.silent) setState(prev => ({ ...prev, loading: true }));
 
     const todayStr = dateToString(new Date());
     const ninetyDaysAgo = new Date();
@@ -55,34 +78,70 @@ export function useHistory() {
     const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
     const cycleTrackingEnabled = profile?.cycle_tracking_enabled ?? false;
 
-    const [{ data: checkIns }, { data: sleepLogs }, markers, { data: bodyCheckIns }, { data: bodyEventsData }, { data: cycleDayOnes }, { data: settings }] = await Promise.all([
+    const [checkInsRes, sleepLogsRes, markersRes, bodyCheckInsRes, bodyEventsRes, cycleDayOnesRes, settingsRes] = await Promise.all([
       supabase.from('check_ins').select('*').eq('user_id', user.id).gte('scheduled_at', ninetyDaysAgo.toISOString()).order('scheduled_at', { ascending: false }),
       supabase.from('sleep_logs').select('*').eq('user_id', user.id).gte('log_date', fromStr).order('log_date', { ascending: false }),
-      fetchMarkersInRange(fromStr, todayStr).catch(() => [] as InterventionMarker[]),
+      fetchMarkersInRange(fromStr, todayStr).then(data => ({ data, error: null }), error => ({ data: null, error })),
       bodyTrackingEnabled
         ? supabase.from('body_checkins').select('*').eq('user_id', user.id).gte('entry_date', fromStr)
-        : Promise.resolve({ data: [] as BodyCheckIn[] }),
+        : Promise.resolve({ data: [] as BodyCheckIn[], error: null }),
       bodyTrackingEnabled
         ? supabase.from('body_events').select('*, body_event_sites(*)').eq('user_id', user.id).gte('event_date', fromStr)
-        : Promise.resolve({ data: [] as (BodyEvent & { body_event_sites: BodyEventSite[] })[] }),
+        : Promise.resolve({ data: [] as (BodyEvent & { body_event_sites: BodyEventSite[] })[], error: null }),
       // Every Day 1, not just the 90-day window's: the first days in view
       // count from a Day 1 that may have been logged before the window.
       // Every cycle_phase marker is a Day 1 since the phase engine was cut.
       cycleTrackingEnabled
         ? supabase.from('intervention_markers').select('marker_date').eq('user_id', user.id).eq('marker_type', 'cycle_phase').order('marker_date', { ascending: true })
-        : Promise.resolve({ data: [] as { marker_date: string }[] }),
+        : Promise.resolve({ data: [] as { marker_date: string }[], error: null }),
       // For the times on check-in notes, in the person's 12/24-hour choice.
       supabase.from('check_in_settings').select('time_format').eq('user_id', user.id).maybeSingle(),
     ]);
-    const dayOneDates = (cycleDayOnes ?? []).map(m => m.marker_date);
 
-    const bodyEvents = (bodyEventsData ?? []) as (BodyEvent & { body_event_sites: BodyEventSite[] })[];
-
-    let bodyPainSites: BodyPainSite[] = [];
-    if (bodyCheckIns?.length) {
-      const { data: sites } = await supabase.from('body_pain_sites').select('*').in('body_checkin_id', bodyCheckIns.map(c => c.id));
-      bodyPainSites = sites ?? [];
+    let raw: HistoryRaw = {
+      fromStr,
+      checkIns: (checkInsRes.data ?? []) as CheckIn[],
+      sleepLogs: (sleepLogsRes.data ?? []) as SleepLog[],
+      markers: (markersRes.data ?? []) as InterventionMarker[],
+      bodyCheckIns: (bodyCheckInsRes.data ?? []) as BodyCheckIn[],
+      bodyEvents: (bodyEventsRes.data ?? []) as (BodyEvent & { body_event_sites: BodyEventSite[] })[],
+      bodyPainSites: [],
+      dayOneDates: ((cycleDayOnesRes.data ?? []) as { marker_date: string }[]).map(m => m.marker_date),
+      timeFormat: (settingsRes.data?.time_format as TimeFormat | undefined) ?? '12hr',
+    };
+    let failed = [checkInsRes, sleepLogsRes, markersRes, bodyCheckInsRes, bodyEventsRes, cycleDayOnesRes, settingsRes]
+      .some(r => r.error);
+    if (!failed && raw.bodyCheckIns.length) {
+      const sitesRes = await supabase.from('body_pain_sites').select('*').in('body_checkin_id', raw.bodyCheckIns.map(c => c.id));
+      raw.bodyPainSites = (sitesRes.data ?? []) as BodyPainSite[];
+      failed = !!sitesRes.error;
     }
+    // A failed read, almost always no connection, shows the last full read
+    // instead of an empty history. Only a read that came back whole is kept,
+    // so a half-failed one can never overwrite a good copy.
+    let offlineCopy = false;
+    let offlineUnavailable = false;
+    if (failed) {
+      const cached = await readCache<HistoryRaw>(user.id, 'history');
+      if (cached) raw = cached;
+      offlineCopy = !!cached;
+      offlineUnavailable = !cached;
+    } else {
+      writeCache(user.id, 'history', raw);
+    }
+
+    // Entries still waiting to sync, laid over what was read.
+    const checkIns = [...overlayCheckIns(raw.checkIns), ...pendingBonusCheckIns()]
+      .sort((a, b) => b.scheduled_at.localeCompare(a.scheduled_at));
+    const sleepLogs = overlaySleepLogs(raw.sleepLogs, user.id);
+    const markers = overlayMarkers(raw.markers);
+    const body = bodyTrackingEnabled
+      ? overlayBody(raw.bodyCheckIns, raw.bodyPainSites, raw.bodyEvents, user.id)
+      : { checkins: [], painSites: [], events: [] };
+    const bodyCheckIns = body.checkins;
+    const bodyEvents = body.events;
+    const bodyPainSites = body.painSites;
+    const dayOneDates = raw.dayOneDates;
 
     const bodyCheckInsByDate = new Map<string, BodyCheckIn>();
     (bodyCheckIns ?? []).forEach(c => bodyCheckInsByDate.set(c.entry_date, c));
@@ -138,7 +197,7 @@ export function useHistory() {
     const thirtyDaysAgoStr = dateToString(thirtyDaysAgo);
     const hasDataBeyond30Days = sorted.some(d => d.date < thirtyDaysAgoStr);
 
-    setState({ loading: false, timeFormat: (settings?.time_format as TimeFormat | undefined) ?? '12hr', days: hasDataBeyond30Days ? sorted : sorted.filter(d => d.date >= thirtyDaysAgoStr) });
+    setState({ loading: false, offlineUnavailable, offlineCopy, timeFormat: raw.timeFormat, days: hasDataBeyond30Days ? sorted : sorted.filter(d => d.date >= thirtyDaysAgoStr) });
   }, [user, profile?.body_tracking_enabled, profile?.cycle_tracking_enabled]);
 
   useEffect(() => {
@@ -150,5 +209,13 @@ export function useHistory() {
     load();
   }, [load]);
 
-  return { ...state, refresh: load };
+  // Re-read once entries reach the server, and when the connection returns,
+  // so the offline copy gives way to the real one without a manual refresh.
+  useEffect(() => {
+    const offSynced = onSynced(() => { load({ silent: true }); });
+    const offOnline = subscribeOnline(() => { if (isOnline()) load({ silent: true }); });
+    return () => { offSynced(); offOnline(); };
+  }, [load]);
+
+  return { ...state, refresh: () => load() };
 }

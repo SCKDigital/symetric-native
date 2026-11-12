@@ -95,6 +95,11 @@ export function useSetupCards(): SetupCardState {
         : Promise.resolve({ data: [] as { id: string }[] }),
     ]);
 
+    // Offline (or any failed read), show no setup cards rather than guess:
+    // a missing settings row reads as "nothing set up yet", which would put
+    // every prompt in front of someone who finished setup long ago.
+    if (settingsRes.error || ('error' in cycleMarkerRes && cycleMarkerRes.error)) return;
+
     const settings = settingsRes.data;
     const hasCycleMarker = (cycleMarkerRes.data ?? []).length > 0;
 

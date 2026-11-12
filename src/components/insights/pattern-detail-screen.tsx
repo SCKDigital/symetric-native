@@ -6,6 +6,8 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { dateToString, formatShortDate, parseDateString } from '@/lib/date-utils';
 import { DOMAIN_ORDER, domainHeadingLabel, getDomainColorFromProfile } from '@/lib/domains';
+import { OfflineUnavailable } from '@/components/shared/offline-gate';
+import { readThrough } from '@/lib/offline/read-through';
 import { supabase } from '@/lib/supabase';
 import type { ContextTag, DetectedCluster, DomainType } from '@/lib/supabase';
 import type { VolatilityGroup } from '@/lib/volatility-aggregation';
@@ -92,6 +94,7 @@ export default function PatternDetailScreen({
   const [days, setDays] = useState<DayScores[]>([]);
   const [dayMinMax, setDayMinMax] = useState<Map<string, Partial<Record<DomainType, { min: number; max: number }>>>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
 
   const clusterEnd = cluster.ongoing ? today() : (cluster.end_date ?? cluster.start_date);
   const effectiveStart = volatilityGroup?.startDate ?? cluster.start_date;
@@ -110,16 +113,24 @@ export default function PatternDetailScreen({
     setLoading(true);
 
     (async () => {
-      const { data: checkIns } = await supabase
-        .from('check_ins')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .gte('scheduled_at', new Date(displayFrom + 'T00:00:00').toISOString())
-        .lte('scheduled_at', new Date(displayTo + 'T23:59:59').toISOString())
-        .order('scheduled_at', { ascending: true });
+      // Kept per pattern and window, so one opened online opens offline too.
+      // One never opened online has nothing to draw: the averages below would
+      // all read as empty, so the screen says it's unavailable instead.
+      const checkIns = await readThrough(`pattern.${cluster.id}.${displayFrom}.${displayTo}`, async () => {
+        const { data, error } = await supabase
+          .from('check_ins')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .gte('scheduled_at', new Date(displayFrom + 'T00:00:00').toISOString())
+          .lte('scheduled_at', new Date(displayTo + 'T23:59:59').toISOString())
+          .order('scheduled_at', { ascending: true });
+        if (error) throw error;
+        return data;
+      }).catch(() => null);
 
       if (cancelled) return;
+      setUnavailable(checkIns === null);
 
       const dayMap = new Map<string, Partial<Record<DomainType, number[]>>>();
       checkIns?.forEach((ci: Record<string, unknown>) => {
@@ -261,7 +272,10 @@ export default function PatternDetailScreen({
         </View>
       )}
 
-      <View style={styles.sections}>
+      {unavailable && (
+        <OfflineUnavailable detail="This pattern’s day-by-day scores haven’t loaded on this phone yet. They will once you’re back online." />
+      )}
+      <View style={[styles.sections, unavailable && { display: 'none' }]}>
         {primaryDomain && (
           <View>
             <Text style={styles.sectionLabel}>Primary domain</Text>

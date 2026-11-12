@@ -5,6 +5,7 @@ import BodyCycleConsentStep from '@/components/onboarding/body-cycle-consent-ste
 import MindConsentStep from '@/components/onboarding/mind-consent-step';
 import { useAuth } from '@/contexts/auth-context';
 import { trackOnboardingAbandoned, trackOnboardingCompleted, trackOnboardingStarted, trackOnboardingStepCompleted } from '@/lib/analytics';
+import { isOnline } from '@/lib/offline/connectivity';
 import { supabase } from '@/lib/supabase';
 
 export type OnboardingData = {
@@ -81,6 +82,11 @@ export default function Onboarding() {
 
   const completeOnboarding = async () => {
     if (!user) throw new Error('No authenticated user found. Please sign in again.');
+    // Consent is recorded by the server (it stamps the request's IP), so it
+    // can't be queued. The answers stay on screen for a retry.
+    if (!isOnline()) {
+      throw new Error('Unavailable offline. Finishing setup needs a connection; your answers are kept, so try again once you’re back online.');
+    }
 
     const {
       data: { session },

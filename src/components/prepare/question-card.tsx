@@ -73,7 +73,7 @@ export default function QuestionCard({ question, onChange, onDelete, onTogglePri
     }
     setSaving(true);
     try {
-      const updated = await updateQuestion(question.id, { question_text: editText.trim() });
+      const updated = await updateQuestion(question, { question_text: editText.trim() });
       onChange(updated);
       setEditing(false);
     } finally {
@@ -84,7 +84,7 @@ export default function QuestionCard({ question, onChange, onDelete, onTogglePri
   async function handleDelete() {
     setDeleting(true);
     try {
-      await deleteQuestion(question.id);
+      await deleteQuestion(question);
       onDelete(question.id);
     } finally {
       setDeleting(false);
@@ -92,7 +92,7 @@ export default function QuestionCard({ question, onChange, onDelete, onTogglePri
   }
 
   async function handleToggleAddressed() {
-    const updated = await markQuestionAddressed(question.id, !question.is_addressed);
+    const updated = await markQuestionAddressed(question, !question.is_addressed);
     onChange(updated);
   }
 

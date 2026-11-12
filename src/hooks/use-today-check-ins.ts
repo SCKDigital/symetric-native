@@ -3,6 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { resolveActiveDomains } from '@/lib/domains';
 import { RESCUE_WINDOW_MS } from '@/lib/constants';
+import { readCache, writeCache } from '@/lib/offline/cache';
+import { isOnline, subscribeOnline } from '@/lib/offline/connectivity';
+import { onSynced, pendingPayloads } from '@/lib/offline/outbox';
+import { overlayCheckIns } from '@/lib/offline/overlays';
 import { ensureTodayCheckIns } from '@/lib/scheduler';
 import { Baseline, CheckIn, CheckInSettings, DomainType, supabase } from '@/lib/supabase';
 import type { TimeFormat } from '@/lib/time-format';
@@ -41,6 +45,17 @@ interface State {
    *  empty window. Shown on Today so a scheduling problem is visible instead of
    *  looking like the day simply hasn't started. */
   schedulingError: string | null;
+  /** Today's check-ins couldn't be read and none were saved for today: the
+   *  empty day on screen is "don't know", not "nothing scheduled". */
+  checkInsUnavailable: boolean;
+}
+
+/** The last day's reads that all came back, kept for when the next ones can't. */
+interface TodayCache {
+  date: string;
+  checkIns: CheckIn[];
+  settings: CheckInSettings | null;
+  baselines: Baseline[];
 }
 
 const EMPTY: State = {
@@ -60,6 +75,7 @@ const EMPTY: State = {
   timeFormat: '12hr',
   checkInSettings: null,
   schedulingError: null,
+  checkInsUnavailable: false,
 };
 
 /**
@@ -107,7 +123,10 @@ export function useTodayCheckIns() {
       timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
     }).format(new Date());
     let schedulingError: string | null = null;
-    if (scheduledForDay.current !== todayKey || lastLoadFoundNothing.current) {
+    // Offline, scheduling can only fail, and the failure isn't worth showing:
+    // the server's own hourly job schedules the day regardless. The day key
+    // isn't claimed, so the first load back online schedules as usual.
+    if (isOnline() && (scheduledForDay.current !== todayKey || lastLoadFoundNothing.current)) {
       scheduledForDay.current = todayKey;
       try {
         await ensureTodayCheckIns(user.id, timezone);
@@ -130,14 +149,35 @@ export function useTodayCheckIns() {
       supabase.from('check_ins').select('id').eq('user_id', user.id).eq('status', 'completed').limit(1),
     ]);
 
-    const activeDomains = resolveActiveDomains(settingsRes.data);
+    // Offline, or a read that failed: fall back to the last copy that came
+    // back whole. Check-ins only from the same day — yesterday's would be
+    // offered as due — but settings and baselines carry over, because without
+    // them the form has no domains to ask about.
+    const anyFailed = !!(checkInsRes.error || settingsRes.error || baselinesRes.error);
+    const cached = anyFailed ? await readCache<TodayCache>(user.id, 'today') : null;
+    const checkInRows: CheckIn[] = checkInsRes.error
+      ? (cached?.date === todayLocal ? cached.checkIns : [])
+      : ((checkInsRes.data as CheckIn[] | null) ?? []);
+    const settingsRow: CheckInSettings | null = settingsRes.error
+      ? (cached?.settings ?? null)
+      : ((settingsRes.data as CheckInSettings | null) ?? null);
+    const baselineRows: Baseline[] = baselinesRes.error
+      ? (cached?.baselines ?? [])
+      : ((baselinesRes.data as Baseline[] | null) ?? []);
+    if (!anyFailed) {
+      writeCache(user.id, 'today', { date: todayLocal, checkIns: checkInRows, settings: settingsRow, baselines: baselineRows } satisfies TodayCache);
+    }
+
+    const activeDomains = resolveActiveDomains(settingsRow);
 
     const baselines = {} as Record<DomainType, number>;
-    (baselinesRes.data as Baseline[] | null)?.forEach(b => {
+    baselineRows.forEach(b => {
       if (baselines[b.domain] === undefined) baselines[b.domain] = b.baseline_score;
     });
 
-    const fetched = (checkInsRes.data as CheckIn[] | null) ?? [];
+    // Answers still waiting in the outbox count as answered: a check-in done
+    // offline must not come back as due, or be marked expired below.
+    const fetched = overlayCheckIns(checkInRows);
     // The clock is read here (data-fetch time), not during render, so these
     // stay off-limits to the "impure during render" lint rule — a snapshot per
     // load() call rather than a live-ticking clock.
@@ -184,7 +224,9 @@ export function useTodayCheckIns() {
       }
     }
 
-    if (fullyExpiredIds.size > 0) {
+    // Not queued: expiry is recomputed from the clock on every load, so a
+    // write missed offline is simply made by the next load that's online.
+    if (fullyExpiredIds.size > 0 && isOnline()) {
       await Promise.all([...fullyExpiredIds].map(id =>
         supabase.from('check_ins').update({ status: 'expired' }).eq('id', id)));
     }
@@ -227,16 +269,29 @@ export function useTodayCheckIns() {
       // A failed query reads as "has checked in before", which at worst hides
       // a first-run prompt — the opposite default would put that prompt in
       // front of a long-standing user every time the network hiccuped.
-      hasEverCompletedCheckIn: everRes.error ? true : (everRes.data?.length ?? 0) > 0,
-      timeFormat: (settingsRes.data?.time_format as TimeFormat | undefined) ?? '12hr',
-      checkInSettings: (settingsRes.data as CheckInSettings | null) ?? null,
+      hasEverCompletedCheckIn: everRes.error
+        || pendingPayloads('checkIn.complete').length > 0
+        || pendingPayloads('checkIn.bonus').length > 0
+        ? true
+        : (everRes.data?.length ?? 0) > 0,
+      timeFormat: (settingsRow?.time_format as TimeFormat | undefined) ?? '12hr',
+      checkInSettings: settingsRow,
       // Only worth showing when it actually left the day empty.
       schedulingError: totalCount === 0 ? schedulingError : null,
+      checkInsUnavailable: !!checkInsRes.error && cached?.date !== todayLocal,
     });
   }, [user, profile?.timezone]);
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Back online, and after the outbox has sent something: re-read, so the
+  // day moves from the offline copy to what the server now holds.
+  useEffect(() => {
+    const offOnline = subscribeOnline(() => { if (isOnline()) load(); });
+    const offSynced = onSynced(() => { load(); });
+    return () => { offOnline(); offSynced(); };
   }, [load]);
 
   return { ...state, refresh: load };

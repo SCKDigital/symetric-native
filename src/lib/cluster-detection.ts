@@ -379,3 +379,18 @@ export async function fetchClustersForDateRange(userId: string, from: string, to
     .order('start_date', { ascending: false });
   return data ?? [];
 }
+
+/** The same read, but a failure throws instead of reading as "no clusters" —
+ *  for callers that keep the result for offline use and must not replace a
+ *  good copy with an empty one. */
+export async function fetchClustersForDateRangeOrThrow(userId: string, from: string, to: string) {
+  const { data, error } = await supabase
+    .from('detected_clusters')
+    .select('*, context_tags(tag)')
+    .eq('user_id', userId)
+    .lte('start_date', to)
+    .or(`end_date.gte.${from},end_date.is.null`)
+    .order('start_date', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}

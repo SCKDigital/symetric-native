@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import DayCard from '@/components/history/day-card';
 import AppLogoHeader from '@/components/shared/app-logo-header';
+import { OfflineUnavailable } from '@/components/shared/offline-gate';
+import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
 import MarkerModal from '@/components/marker-modal';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { useAuth } from '@/contexts/auth-context';
@@ -35,7 +37,7 @@ function formatFullDate(dateStr: string): string {
 // specific scoping notes.
 export default function HistoryScreen() {
   const { profile } = useAuth();
-  const { loading, days, timeFormat, refresh } = useHistory();
+  const { loading, days, timeFormat, refresh, offlineUnavailable, offlineCopy } = useHistory();
   const [editingMarker, setEditingMarker] = useState<InterventionMarker | null>(null);
 
   if (loading) return <PulseLoadingScreen />;
@@ -52,6 +54,10 @@ export default function HistoryScreen() {
           <>
             <AppLogoHeader />
             <Text style={styles.heading}>History</Text>
+            {offlineUnavailable && (
+              <OfflineUnavailable detail="Your history hasn’t loaded on this phone yet. It will once you’re back online. Anything you log now still shows here." />
+            )}
+            {offlineCopy && <OfflineSnapshotNote what="your history" extra="Entries you log offline are included." />}
           </>
         }
         renderItem={({ item }: { item: DayData }) => (
