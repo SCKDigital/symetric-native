@@ -6,7 +6,10 @@ import {
   type CorrelationGroup, type CorrelationGrouping,
 } from '@/lib/correlation-groups';
 import { CONFIDENCE_COPY, factorLabel, isBodyDomain } from '@/lib/pattern-findings';
-import { CYCLE_WINDOW_DAYS, type CycleProximityResult } from '@/lib/detection/cycle-proximity';
+import {
+  CYCLE_WINDOW_DAYS, MAX_CYCLE_LENGTH, MIN_CYCLE_LENGTH, PRE_DAY_ONE_WINDOW_DAYS,
+  type CompletedCycle, type CycleProximityResult,
+} from '@/lib/detection/cycle-proximity';
 import type { DayOfWeekPattern } from '@/lib/detection/day-of-week-patterns';
 import type { CircadianPattern } from '@/lib/circadian-detection';
 import type { DomainConnection } from '@/lib/report/chart-coordinates';
@@ -47,13 +50,50 @@ interface ContextConnectionsData {
   /** Symptoms near a recorded cycle day 1. Empty when cycle tracking is off,
    *  or when too few cycles fall in the range to compare. */
   cycleProximity: CycleProximityResult[];
+  /** Symptoms in the week before each Day 1 that ends a completed cycle. */
+  preDayOne: CycleProximityResult[];
+  /** Every gap between consecutive Day 1s in the period, unusual ones
+   *  included. Empty when cycle tracking is off or excluded. */
+  cycleIntervals: (CompletedCycle & { usable: boolean })[];
   /** Pairs that were compared and showed nothing — rendered by its own
    *  module, passed in as HTML. */
   checkedNotFoundHtml: string;
 }
 
+interface CycleSectionData {
+  /** Around Day 1, either side. */
+  proximity: CycleProximityResult[];
+  /** The week before each Day 1 that ends a completed cycle. */
+  preDayOne: CycleProximityResult[];
+  /** Every gap between consecutive Day 1s in the period. */
+  intervals: (CompletedCycle & { usable: boolean })[];
+}
+
+function cycleTable(results: CycleProximityResult[], nearHeading: string, otherHeading: string, maxRows: number): string {
+  const rows = results.slice(0, maxRows).map(r => `<tr>
+    <td>${esc(factorLabel(r.domain))}</td>
+    <td class="center">${r.nearMean.toFixed(1)}</td>
+    <td class="center">${r.otherMean.toFixed(1)}</td>
+    <td class="center">${r.difference > 0 ? '+' : ''}${r.difference.toFixed(1)}</td>
+    <td class="center">${r.nearDays}/${r.otherDays}</td>
+  </tr>`).join('');
+  const hidden = results.length - Math.min(results.length, maxRows);
+  return `<table class="domain-table">
+      <thead><tr>
+        <th>Factor</th>
+        <th class="center">${nearHeading}</th>
+        <th class="center">${otherHeading}</th>
+        <th class="center">Difference</th>
+        <th class="center">Days compared</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${hidden > 0 ? `<p class="overflow-note">${hidden} further factor${hidden !== 1 ? 's' : ''} with a smaller difference not listed.</p>` : ''}`;
+}
+
 /**
- * Symptoms in the week around a recorded cycle day 1.
+ * Cycle lengths as recorded, and symptoms around a recorded cycle day 1 and
+ * in the week before it.
  *
  * Day 1 has been drawn on the charts as a "C" since cycle tracking shipped
  * and never once compared against anything. In this population hormonal
@@ -61,31 +101,39 @@ interface ContextConnectionsData {
  * and — by the account of most of the people using this app — routinely
  * waved away. A dated, counted comparison is harder to wave away than a
  * recollection.
+ *
+ * The lengths come first and are listed whole, unusual ones included: an
+ * irregular cycle is itself a finding, and the reader is the one placed to
+ * say whether a long gap was a missed log or a long cycle.
  */
-function buildCycleHtml(results: CycleProximityResult[]): string {
-  if (results.length === 0) return '';
-  const cycles = results[0].cycles;
-  const rows = results.slice(0, CYCLE_MAX_ROWS).map(r => `<tr>
-    <td>${esc(factorLabel(r.domain))}</td>
-    <td class="center">${r.nearMean.toFixed(1)}</td>
-    <td class="center">${r.otherMean.toFixed(1)}</td>
-    <td class="center">${r.difference > 0 ? '+' : ''}${r.difference.toFixed(1)}</td>
-    <td class="center">${r.nearDays}/${r.otherDays}</td>
-  </tr>`).join('');
+function buildCycleHtml({ proximity, preDayOne, intervals }: CycleSectionData): string {
+  if (proximity.length === 0 && preDayOne.length === 0 && intervals.length === 0) return '';
+
+  const unusual = intervals.filter(c => !c.usable);
+  const lengthsHtml = intervals.length > 0
+    ? `<p class="sleep-note">Days between logged Day 1s: ${intervals.map(c => `${c.lengthDays}${c.usable ? '' : '*'}`).join(', ')}.${unusual.length > 0 ? ` *Outside ${MIN_CYCLE_LENGTH}-${MAX_CYCLE_LENGTH} days, so possibly a missed or repeated log; left out of the week-before comparison.` : ''}</p>`
+    : '';
+
+  // One row budget across both tables, so the column is the same height
+  // whichever of them has findings; a table that exists keeps at least one.
+  const preRows = preDayOne.length === 0 ? 0 : Math.max(1, CYCLE_MAX_ROWS - Math.min(proximity.length, 2));
+  const proximityRows = CYCLE_MAX_ROWS - preRows;
+
+  const proximityHtml = proximity.length > 0
+    ? `${cycleTable(proximity, `Within ${CYCLE_WINDOW_DAYS} days`, 'Other days', Math.max(1, proximityRows))}
+       <p class="empty-muted chart-note">${proximity[0].cycles} cycle start${proximity[0].cycles !== 1 ? 's' : ''} &middot; the ${CYCLE_WINDOW_DAYS} days either side of each Day 1 against every other day</p>`
+    : '';
+  const preHtml = preDayOne.length > 0
+    ? `${cycleTable(preDayOne, `${PRE_DAY_ONE_WINDOW_DAYS} days before`, 'Rest of cycle', preRows)}
+       <p class="empty-muted chart-note">${preDayOne[0].cycles} completed cycle${preDayOne[0].cycles !== 1 ? 's' : ''} &middot; counted back from the Day 1 that ends each, against the rest of the same cycles</p>`
+    : '';
 
   return `<div class="section-gap">
     <p class="section-label">Around cycle day 1</p>
-    <table class="domain-table">
-      <thead><tr>
-        <th>Factor</th>
-        <th class="center">Within ${CYCLE_WINDOW_DAYS} days</th>
-        <th class="center">Other days</th>
-        <th class="center">Difference</th>
-        <th class="center">Days compared</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <p class="empty-muted chart-note">${cycles} cycle start${cycles !== 1 ? 's' : ''} recorded in this period &middot; a mean comparison across the ${CYCLE_WINDOW_DAYS} days either side of each, against every other day with a reading &middot; no phase is inferred, and this is not a test of cause</p>
+    ${lengthsHtml}
+    ${proximityHtml}
+    ${preHtml}
+    <p class="empty-muted chart-note">Mean comparisons only &middot; no phase is inferred, and this is not a test of cause</p>
   </div>`;
 }
 
@@ -140,7 +188,7 @@ function groupBlock(group: CorrelationGroup): string {
 // could never produce because it only ever saw mind check-ins. The in-report
 // pairs remain as a fallback for a range the weekly detector has not covered.
 export function buildContextConnectionsHtml(data: ContextConnectionsData): string {
-  const { dayOfWeekPatterns, circadianPatterns, grouping, domainConnections, cycleProximity, checkedNotFoundHtml } = data;
+  const { dayOfWeekPatterns, circadianPatterns, grouping, domainConnections, cycleProximity, preDayOne, cycleIntervals, checkedNotFoundHtml } = data;
   const strongest = findStrongestTimePattern(dayOfWeekPatterns, circadianPatterns);
 
   let timePatternsHtml: string;
@@ -227,7 +275,7 @@ export function buildContextConnectionsHtml(data: ContextConnectionsData): strin
   // Cycle proximity and checked-not-found are two independent, individually
   // short sections — side by side uses the landscape width instead of each
   // paying for its own section-label and gap in a second stacked block.
-  const cycleHtml = buildCycleHtml(cycleProximity);
+  const cycleHtml = buildCycleHtml({ proximity: cycleProximity, preDayOne, intervals: cycleIntervals });
   const bottomHtml = cycleHtml && checkedNotFoundHtml
     ? `<div class="two-col"><div class="chart-col">${cycleHtml}</div><div class="chart-col">${checkedNotFoundHtml}</div></div>`
     : `${cycleHtml}${checkedNotFoundHtml}`;

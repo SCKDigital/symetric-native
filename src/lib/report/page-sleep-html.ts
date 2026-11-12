@@ -1,4 +1,5 @@
 import type { LagRelationship } from '@/lib/detection/lag-relationships';
+import { fmtHours, type SleepHoursConnection } from '@/lib/detection/sleep-hours-connections';
 import type { SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import type { ChartDomain, ChartMarker, SleepConnection } from '@/lib/report/chart-coordinates';
 import { renderHoursSleptSvg, summariseHoursSlept, type HoursSleptPoint } from '@/lib/report/hours-slept-svg';
@@ -11,6 +12,11 @@ import type { DetectedCluster } from '@/lib/supabase';
  *  note. Ten keeps the page inside a sheet under the wider Android-like font,
  *  measured with scripts/report-layout. */
 const SLEEP_TABLE_MAX_ROWS = 10;
+/** Rows in "What follows a short night". Its rows, plus its heading, header
+ *  row and caption (counted as HOURS_TABLE_OVERHEAD_ROWS), come off the
+ *  quality table's cap so the two together fit the same sheet. */
+const HOURS_TABLE_MAX_ROWS = 4;
+const HOURS_TABLE_OVERHEAD_ROWS = 5;
 
 // Sleep's own page.
 //
@@ -43,6 +49,9 @@ interface SleepPageData {
   persistedConnections: SleepSymptomConnection[];
   /** The in-report fallback: a plain mean split, no significance testing. */
   fallbackConnections: SleepConnection[];
+  /** Duration's comparison: shortest vs longest third of nights. Already
+   *  filtered to domains that differ, largest gap first. */
+  hoursConnections: SleepHoursConnection[];
   lagRelationships: LagRelationship[];
 }
 
@@ -61,7 +70,7 @@ function label(domain: string): string {
 export function buildSleepPageHtml(data: SleepPageData): string {
   const {
     qualityDomain, dates, baselineMap, currentRollingMedians, chartMarkers, flaggedClusters,
-    hoursPoints, medianHours, persistedConnections, fallbackConnections, lagRelationships,
+    hoursPoints, medianHours, persistedConnections, fallbackConnections, hoursConnections, lagRelationships,
   } = data;
 
   const sleepBaseline = baselineMap['sleep'] ?? 3;
@@ -115,7 +124,12 @@ export function buildSleepPageHtml(data: SleepPageData): string {
   // body domains measured at 104% of a sheet here, spilling onto an unnumbered
   // blank page. Rows arrive largest difference first, so the cap drops the
   // ones closest to no difference at all.
-  const shownConnections = persistedConnections.slice(0, SLEEP_TABLE_MAX_ROWS);
+  //
+  // The duration table below shares the same budget: both tables on one page,
+  // so the rows it takes come off this one's cap rather than off the sheet.
+  const hoursRowsShown = Math.min(hoursConnections.length, HOURS_TABLE_MAX_ROWS);
+  const qualityCap = SLEEP_TABLE_MAX_ROWS - hoursRowsShown - (hoursRowsShown > 0 ? HOURS_TABLE_OVERHEAD_ROWS : 0);
+  const shownConnections = persistedConnections.slice(0, qualityCap);
   const hiddenConnections = persistedConnections.length - shownConnections.length;
   const connectionsSection = persistedConnections.length > 0
     ? `<div class="section-gap">
@@ -149,6 +163,40 @@ export function buildSleepPageHtml(data: SleepPageData): string {
         </div>`
       : '';
 
+  // ── Duration relationships ────────────────────────────────────────────────
+  // The same question asked of hours slept rather than the rating. "Short"
+  // and "long" are this patient's own lower and upper third of nights, so
+  // the cut-offs are printed in the column headers — without them a reader
+  // would assume a population threshold.
+  const shownHours = hoursConnections.slice(0, hoursRowsShown);
+  const hiddenHours = hoursConnections.length - shownHours.length;
+  const first = hoursConnections[0];
+  const hoursConnectionsSection = first
+    ? `<div class="section-gap">
+        <p class="section-label">What follows a short night</p>
+        <table class="domain-table">
+          <thead><tr>
+            <th>Domain</th>
+            <th class="center">After &le;${fmtHours(first.shortCutoff)} h</th>
+            <th class="center">After &ge;${fmtHours(first.longCutoff)} h</th>
+            <th class="center">Difference</th>
+            <th class="center">Nights</th>
+          </tr></thead>
+          <tbody>
+            ${shownHours.map(c => `<tr>
+              <td>${esc(label(c.domain))}</td>
+              <td class="center">${fmtVal(c.shortMean)}</td>
+              <td class="center">${fmtVal(c.longMean)}</td>
+              <td class="center">${c.difference > 0 ? '+' : ''}${fmtVal(c.difference)}</td>
+              <td class="center">${c.shortDays}/${c.longDays}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        ${hiddenHours > 0 ? `<p class="overflow-note">${hiddenHours} further domain${hiddenHours !== 1 ? 's' : ''} with a smaller difference not listed.</p>` : ''}
+        <p class="sleep-chart-caption">Short and long are this patient's own shortest and longest third of ${first.nights} nights. Nights: short/long compared.</p>
+      </div>`
+    : '';
+
   const sleepLag = lagRelationships.find(r => r.predictor === 'sleep');
   const lagHtml = sleepLag
     ? `<p class="sleep-note">Lag relationship: ${esc(label(sleepLag.predictor as string))} predicts ${esc(label(sleepLag.outcome as string))} ${sleepLag.lagDays} day${sleepLag.lagDays !== 1 ? 's' : ''} later, on ${Math.round(sleepLag.instanceRate * 100)}% of occasions.</p>`
@@ -166,6 +214,7 @@ export function buildSleepPageHtml(data: SleepPageData): string {
     </div>
 
     ${connectionsSection}
+    ${hoursConnectionsSection}
     ${lagHtml}
 
     <div class="explainer-box">

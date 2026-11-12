@@ -26,6 +26,9 @@ import { dailyBodyValue } from '@/lib/detection/body-daily-value';
 import { detectBodyEventFrequency, BodyEventFrequencyPattern } from '@/lib/detection/body-event-frequency';
 import { detectBodyEventImpacts, BodyEventMindImpact } from '@/lib/detection/body-event-impact';
 import { detectBodyTimeOfDayPatterns, MorningEveningPair, BodyTimeOfDayPattern } from '@/lib/detection/body-time-of-day';
+import { median } from '@/lib/baseline-stats';
+import { CycleProximityResult, detectCycleProximity, detectPreDayOneWindow } from '@/lib/detection/cycle-proximity';
+import { detectSleepHoursConnections, hoursSleptByDate, SleepHoursConnection } from '@/lib/detection/sleep-hours-connections';
 import { DayOfWeekPattern, detectDayOfWeekPatterns } from '@/lib/detection/day-of-week-patterns';
 import { detectInterventionImpacts, InterventionImpact, isAwaitingData, readsAsEvent } from '@/lib/detection/intervention-impact';
 import { detectLagRelationships, LagRelationship } from '@/lib/detection/lag-relationships';
@@ -37,7 +40,7 @@ import { type SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import {
   Area, BodyMindConnectionRow, PatternFinding,
   bodyEventFrequencyFindings, bodyEventImpactFindings, bodyMindConnectionFindings, bodyTimeOfDayFindings,
-  clusterFindings, dayOfWeekFindings, factorLabel, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings, sleepConnectionFindings,
+  clusterFindings, cycleProximityFindings, preDayOneFindings, dayOfWeekFindings, factorLabel, interventionImpactFindings, isBodyDomain, lagRelationshipFindings, patternEvolutionFindings, rareEventFindings, sleepConnectionFindings, sleepHoursFindings,
 } from '@/lib/pattern-findings';
 import { fetchMarkersInRange } from '@/lib/queries/markers';
 import { buildBodyEventOccurrences, computeBodySiteFrequency, computeBodySummaries } from '@/lib/report/body-summary';
@@ -330,6 +333,11 @@ export default function InsightsScreen() {
   const [sleepConnections, setSleepConnections] = useState<SleepSymptomConnection[]>([]);
   const [avgSleepScore, setAvgSleepScore] = useState<number | null>(null);
   const [sleepDaysLogged, setSleepDaysLogged] = useState(0);
+  const [sleepHoursConnections, setSleepHoursConnections] = useState<SleepHoursConnection[]>([]);
+  const [medianHoursSlept, setMedianHoursSlept] = useState<number | null>(null);
+  const [hoursNightsLogged, setHoursNightsLogged] = useState(0);
+  const [cycleProximity, setCycleProximity] = useState<CycleProximityResult[]>([]);
+  const [preDayOne, setPreDayOne] = useState<CycleProximityResult[]>([]);
   const [days, setDays] = useState<DayScores[]>([]);
   const [days90dCount, setDays90dCount] = useState(0);
   const [contextTags, setContextTags] = useState<ContextTag[]>([]);
@@ -351,6 +359,7 @@ export default function InsightsScreen() {
   // equal.
   const bodyTrackingEnabled = profile?.body_tracking_enabled ?? false;
   const bodyDomainsActiveKey = ((profile?.body_domains_active as string[] | null) ?? []).join(',');
+  const cycleTrackingEnabled = profile?.cycle_tracking_enabled ?? false;
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -697,9 +706,31 @@ export default function InsightsScreen() {
     setAvgSleepScore(sleepDaysList.length > 0 ? sleepDaysList.reduce((s, d) => s + d.scores['sleep']!, 0) / sleepDaysList.length : null);
     setSleepDaysLogged(sleepDaysList.length);
 
+    // ── Hours slept ─────────────────────────────────────────────────────────
+    // The weekly detector above only reads the 1-5 quality score. Duration is
+    // compared here, over the selected window like the other windowed
+    // detectors, against the merged mind+body days. Its own 21-night floor
+    // means a 30-day range only answers once most nights have a duration.
+    const rangeHours = hoursSleptByDate(rangeSleepLogs);
+    const hoursList = [...rangeHours.values()];
+    setMedianHoursSlept(hoursList.length > 0 ? median(hoursList) : null);
+    setHoursNightsLogged(hoursList.length);
+    setSleepHoursConnections(windowed ? detectSleepHoursConnections(rangeHours, mergedRange, combinedDomains) : []);
+
+    // ── Cycle Day 1 ─────────────────────────────────────────────────────────
+    // Over the full 90 days rather than the range: the detector needs two
+    // Day 1s, and a 30-day window rarely holds two. The sentence says how
+    // many cycles it saw, so the window is never left implicit.
+    const cycleDays = merged90d as { date: string; scores: Record<string, number | undefined> }[];
+    const dayOneDates = markersData.filter(m => m.marker_type === 'cycle_phase').map(m => m.marker_date);
+    setCycleProximity(cycleTrackingEnabled ? detectCycleProximity(cycleDays, combinedDomains, dayOneDates) : []);
+    // The week before each Day 1 that closes a completed cycle. Needs three
+    // Day 1s for its two cycles, which 90 days holds for a typical cycle.
+    setPreDayOne(cycleTrackingEnabled ? detectPreDayOneWindow(cycleDays, combinedDomains, dayOneDates) : []);
+
     hasLoadedOnce.current = true;
     setLoading(false);
-  }, [user, bodyTrackingEnabled, bodyDomainsActiveKey, range]);
+  }, [user, bodyTrackingEnabled, bodyDomainsActiveKey, cycleTrackingEnabled, range]);
 
   // Detection used to be awaited at the top of load(), so every Insights mount
   // — and every range change — waited on a round trip (and, on the day the
@@ -776,6 +807,7 @@ export default function InsightsScreen() {
 
   const nothingDetected = clusters.length === 0 && circadianPatterns.length === 0 && dayOfWeekPatterns.length === 0
     && lagRelationships.length === 0 && rareEvents.length === 0 && interventionImpacts.length === 0
+    && sleepHoursConnections.length === 0 && cycleProximity.length === 0 && preDayOne.length === 0
     && bodyPatternEvolutions.length === 0 && bodyRareEvents.length === 0 && bodyTimeOfDayPatterns.length === 0
     && bodyEventFrequencyPatterns.length === 0 && bodyEventImpacts.length === 0 && bodyMindConnectionRows.length === 0;
 
@@ -832,9 +864,11 @@ export default function InsightsScreen() {
   ];
   const sleepFindings = [
     ...sleepConnectionFindings(sleepConnections),
+    ...sleepHoursFindings(sleepHoursConnections),
     ...allLagFindings.filter(f => f.areas.includes('sleep')),
   ];
-  const medicationFindings = interventionImpactFindings(interventionImpacts);
+  const cycleFindings = [...cycleProximityFindings(cycleProximity), ...preDayOneFindings(preDayOne)];
+  const medicationFindings = [...interventionImpactFindings(interventionImpacts), ...cycleFindings];
   const eligibleMarkerCount = markers.filter(readsAsEvent).length;
 
   // Day-of-week and what-follows-what run over merged mind+body days, so their
@@ -922,7 +956,14 @@ export default function InsightsScreen() {
   if (activeArea === 'sleep') {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
-        <SleepAreaDetail onBack={() => setActiveArea(null)} findings={sleepFindings} avgSleepScore={avgSleepScore} nightsLogged={sleepDaysLogged} />
+        <SleepAreaDetail
+          onBack={() => setActiveArea(null)}
+          findings={sleepFindings}
+          avgSleepScore={avgSleepScore}
+          nightsLogged={sleepDaysLogged}
+          medianHours={medianHoursSlept}
+          hoursNightsLogged={hoursNightsLogged}
+        />
       </SafeAreaView>
     );
   }
@@ -935,7 +976,8 @@ export default function InsightsScreen() {
           impacts={interventionImpacts}
           awaitingMarkers={awaitingMarkers}
           onEventsChanged={load}
-          cycleTrackingEnabled={profile?.cycle_tracking_enabled ?? false}
+          cycleTrackingEnabled={cycleTrackingEnabled}
+          cycleFindings={cycleFindings}
         />
       </SafeAreaView>
     );

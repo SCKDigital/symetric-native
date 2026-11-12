@@ -21,25 +21,36 @@ interface Props {
   findings: PatternFinding[];
   avgSleepScore: number | null;
   nightsLogged: number;
+  medianHours: number | null;
+  hoursNightsLogged: number;
 }
 
-export default function SleepAreaDetail({ onBack, findings, avgSleepScore, nightsLogged }: Props) {
+export default function SleepAreaDetail({ onBack, findings, avgSleepScore, nightsLogged, medianHours, hoursNightsLogged }: Props) {
   const shown = findings.filter(f => f.grade !== 'limited');
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <BackRow label="Sleep" onBack={onBack} />
 
-      <View style={styles.statCard}>
-        <Text style={styles.statLabel}>Average sleep score</Text>
-        <Text style={styles.statValue}>{avgSleepScore != null ? `${avgSleepScore.toFixed(1)} / 5` : '-'}</Text>
-        <Text style={styles.statMeta}>{nightsLogged} night{nightsLogged !== 1 ? 's' : ''} logged in this window</Text>
+      {/* Quality and duration side by side, as on the report's Sleep page:
+          two measurements on two scales, which can move apart. */}
+      <View style={styles.statRow}>
+        <View style={[styles.statCard, styles.statCardHalf]}>
+          <Text style={styles.statLabel}>Average sleep score</Text>
+          <Text style={styles.statValue}>{avgSleepScore != null ? `${avgSleepScore.toFixed(1)} / 5` : '-'}</Text>
+          <Text style={styles.statMeta}>{nightsLogged} night{nightsLogged !== 1 ? 's' : ''} rated</Text>
+        </View>
+        <View style={[styles.statCard, styles.statCardHalf]}>
+          <Text style={styles.statLabel}>Median hours slept</Text>
+          <Text style={styles.statValue}>{medianHours != null ? `${(Math.round(medianHours * 10) / 10).toFixed(1)} h` : '-'}</Text>
+          <Text style={styles.statMeta}>{hoursNightsLogged} night{hoursNightsLogged !== 1 ? 's' : ''} with hours</Text>
+        </View>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Connections</Text>
         {shown.length === 0 ? (
-          <Text style={styles.emptyText}>No clear sleep connections yet. This usually needs a few weeks of both sleep and check-in data.</Text>
+          <Text style={styles.emptyText}>No clear sleep connections yet. This usually needs a few weeks of both sleep and check-in data, and hours slept recorded on most nights.</Text>
         ) : (
           <View style={styles.list}>
             {shown.map(f => {
@@ -62,6 +73,8 @@ export default function SleepAreaDetail({ onBack, findings, avgSleepScore, night
 
 const styles = StyleSheet.create({
   content: { padding: 20, gap: 24 },
+  statRow: { flexDirection: 'row', gap: 10 },
+  statCardHalf: { flex: 1, padding: 14 },
   statCard: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderLeftWidth: 4, borderLeftColor: DOMAIN_COLORS.sleep, borderRadius: 14, padding: 18 },
   statLabel: { fontSize: 11, color: '#8892a4', textTransform: 'uppercase', letterSpacing: 1.1, fontWeight: '600', marginBottom: 6 },
   statValue: { fontSize: 24, fontWeight: '600', color: '#e2e8f0', marginBottom: 4, fontVariant: ['tabular-nums'] },

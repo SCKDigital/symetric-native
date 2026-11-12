@@ -97,6 +97,14 @@ This is the one place Symetric runs inferential statistics, not just descriptive
 
 **Sleep is handled differently, deliberately** (`sleepConnections.ts`): rather than correlating a continuous sleep score against a domain, it's a **mean-difference comparison** — average domain score on good-sleep days (felt-rested ≥4, or ≥21 sleep logs and ≥5 days in each group) vs. poor-sleep days (≤2), flagged as "affected by sleep" if the two group averages differ by ≥1.5 points. This is closer to a simple two-group comparison than a correlation, chosen because the question being asked ("does this get worse after bad sleep nights") is naturally binary, not "how linearly does this track with sleep quality."
 
+**Hours slept is compared the same way, separately** (`sleep-hours-connections.ts`, native only, added 2026-11-13). The quality comparison above reads only the 1-5 rating; duration is its own question, because a long night can still be rated poorly. Each domain's mean on days after the person's *shortest third* of recorded nights is compared with its mean after their *longest third*. The cut-offs are the person's own 33rd and 67th percentile durations, rounded to the quarter hour, not a population figure like 7 hours: someone who needs ten hours would otherwise have every night counted as long. Needs ≥21 nights with a duration, ≥1 hour between the two cut-offs (otherwise the nights are all roughly the same length), ≥5 days in each group, and a gap of ≥1 point. The threshold is lower than quality's 1.5 because a third-vs-third split is a milder contrast than rated-4+ vs rated-2-. Not persisted: Insights runs it over the selected range (30 days and up) and the report over its own range, both on merged mind+body days. The cut-offs are printed with every result.
+
+**Cycle Day 1 proximity** (`cycle-proximity.ts`, native only). Each domain's mean over the days within 3 of a logged cycle Day 1 is compared with every other day. Needs ≥2 distinct Day 1s, ≥6 near days, ≥10 other days, and a gap of ≥0.5 points. No phase is inferred from the single logged date. The report runs it over its range, and Insights runs it over the last 90 days (a 30-day window rarely holds two Day 1s), only when cycle tracking is on.
+
+**The week before Day 1** (`detectPreDayOneWindow`, same file). Two consecutive logged Day 1s bound a *completed* cycle whose length is known rather than predicted. Each domain's mean over the 7 days before the Day 1 that ends each completed cycle is compared with the rest of those same cycles. Counting back from a known end is used instead of counting forward to a "day 14", because the second half of a cycle varies far less in length than the first, so the window lands on comparable days whatever the cycle's length. A fixed day 14 would only fit a regular 28-day cycle, and would be inferred, not observed. Only gaps of 15-45 days count as a cycle: shorter is likely a duplicate log, and longer is likely a missed Day 1, from which counting back would read the wrong week. Needs ≥2 completed cycles (so three Day 1s), with the same day and difference floors as above. The cycle in progress never takes part. Shown in Insights (Events, last 90 days) and on the report's Context & Connections page.
+
+**Cycle lengths** (`dayOneIntervals`, report only). The report lists every gap between consecutive logged Day 1s in the period, unusual ones included and marked, because an irregular cycle is itself clinically relevant and only the reader can tell a long cycle from a missed log.
+
 ---
 
 ## 7. Why multi-domain patterns get shown first: the priority score
@@ -153,5 +161,9 @@ Worth stating as plainly on a methodology page as anywhere else in the product:
 | Correlation consistency tolerance | \|Δr\| ≤ 0.15 vs. prior window | `domainConnections.ts` |
 | Sleep-effect group minimums | ≥21 sleep logs; ≥5 days per group (≥2 for in-cluster check) | `sleepConnections.ts`, `clusterDetection.ts` |
 | Sleep-effect threshold | ≥1.5 point group difference | `sleepConnections.ts` |
+| Hours-slept groups | shortest vs longest third of own nights; ≥21 nights, ≥1 h between cut-offs, ≥5 days per group | `sleep-hours-connections.ts` |
+| Hours-slept threshold | ≥1 point group difference | `sleep-hours-connections.ts` |
+| Cycle proximity | ±3 days of Day 1; ≥2 cycles, ≥6 near / ≥10 other days, ≥0.5 point difference | `cycle-proximity.ts` |
+| Week before Day 1 | 7 days before each closing Day 1; completed cycles of 15-45 days only; ≥2 cycles, same day/difference floors | `cycle-proximity.ts` |
 | Sustained deviation coverage floor | ≥40% coverage, ≥1.5 check-ins/day | `dataQualityChecks.ts` |
 | Rapid cycling coverage floor | ≥5/7 days with data, no gap >2 days | `dataQualityChecks.ts` |

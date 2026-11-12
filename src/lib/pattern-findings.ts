@@ -27,6 +27,8 @@ import { BODY_DOMAINS, BODY_EVENTS } from '@/lib/body/constants';
 import { movesTogetherForReader } from '@/lib/domain-polarity';
 import { BodyDomainType, DetectedCluster, PatternSource } from '@/lib/supabase';
 import type { SleepSymptomConnection } from '@/lib/queries/sleep-connections';
+import { fmtHours, type SleepHoursConnection } from '@/lib/detection/sleep-hours-connections';
+import { CYCLE_WINDOW_DAYS, PRE_DAY_ONE_WINDOW_DAYS, type CycleProximityResult } from '@/lib/detection/cycle-proximity';
 
 /** True for any of the body-tracking domains (fatigue, pain, joint_instability, orthostatic, gut, exhaustion, ...). */
 export function isBodyDomain(d: string): d is BodyDomainType {
@@ -333,6 +335,87 @@ export function sleepConnectionFindings(conns: SleepSymptomConnection[]): Patter
         evidenceLine: `${c.sample_size} day${c.sample_size !== 1 ? 's' : ''} with sleep data`,
       };
     });
+}
+
+// ── Hours slept × domain (computed in Insights, not persisted) ───────────────
+
+/**
+ * One finding per domain that differs after the person's shorter nights.
+ * The sentence names the cut-offs in hours: "short" is relative to this
+ * person's own nights (see sleep-hours-connections.ts), so without the
+ * numbers it would read as a population threshold it isn't.
+ */
+export function sleepHoursFindings(conns: SleepHoursConnection[], onsetDate = today()): PatternFinding[] {
+  return conns.map(c => {
+    const compared = c.shortDays + c.longDays;
+    const grade: Grade = compared >= 30 ? 'solid' : compared >= 14 ? 'partial' : 'limited';
+    const label = factorLabel(c.domain);
+    const direction = c.difference > 0 ? 'higher' : 'lower';
+    return {
+      id: `sleephours-${c.domain}`,
+      patternSource: null,
+      patternId: null,
+      areas: ['sleep', c.domain in BODY_DOMAINS ? 'body' : 'mind'] as Area[],
+      grade,
+      onsetDate,
+      effectSize: Math.abs(c.difference),
+      sentence: `Your ${label} tends to be ${direction} after nights of ${fmtHours(c.shortCutoff)} hours or less than after nights of ${fmtHours(c.longCutoff)} or more.`,
+      sentenceHighlights: [{ text: label, factor: c.domain }],
+      evidenceLine: `${c.shortDays} short and ${c.longDays} long nights compared`,
+    };
+  });
+}
+
+// ── Cycle Day 1 proximity (computed in Insights, not persisted) ──────────────
+
+/**
+ * One finding per domain that differs in the week centred on a recorded
+ * Day 1. Filed under Events, where Day 1 is logged. Two cycles is the
+ * detector's own floor, so the grade only asks for more of them.
+ */
+export function cycleProximityFindings(results: CycleProximityResult[], onsetDate = today()): PatternFinding[] {
+  return results.map(r => {
+    const label = factorLabel(r.domain);
+    const direction = r.difference > 0 ? 'higher' : 'lower';
+    const grade: Grade = r.cycles >= 3 && r.nearDays >= 14 ? 'solid' : 'partial';
+    return {
+      id: `cycle-${r.domain}`,
+      patternSource: null,
+      patternId: null,
+      areas: ['medication'] as Area[],
+      grade,
+      onsetDate,
+      effectSize: Math.abs(r.difference),
+      sentence: `Your ${label} tends to be ${direction} in the days around cycle Day 1, across ${r.cycles} cycles.`,
+      sentenceHighlights: [{ text: label, factor: r.domain }],
+      evidenceLine: `${r.nearDays} days within ${CYCLE_WINDOW_DAYS} days of Day 1 · ${r.otherDays} other days`,
+    };
+  });
+}
+
+/**
+ * The week before Day 1, counted back from the Day 1 that ends each
+ * completed cycle. Same shape as cycleProximityFindings; the sentence names
+ * completed cycles, since the one in progress never takes part.
+ */
+export function preDayOneFindings(results: CycleProximityResult[], onsetDate = today()): PatternFinding[] {
+  return results.map(r => {
+    const label = factorLabel(r.domain);
+    const direction = r.difference > 0 ? 'higher' : 'lower';
+    const grade: Grade = r.cycles >= 3 && r.nearDays >= 14 ? 'solid' : 'partial';
+    return {
+      id: `cycle-pre-${r.domain}`,
+      patternSource: null,
+      patternId: null,
+      areas: ['medication'] as Area[],
+      grade,
+      onsetDate,
+      effectSize: Math.abs(r.difference),
+      sentence: `Your ${label} tends to be ${direction} in the ${PRE_DAY_ONE_WINDOW_DAYS} days before Day 1, across ${r.cycles} completed cycles.`,
+      sentenceHighlights: [{ text: label, factor: r.domain }],
+      evidenceLine: `${r.nearDays} days in the week before · ${r.otherDays} other days of those cycles`,
+    };
+  });
 }
 
 // ── Body × mind: same-day correlations (persisted to domain_connections) ─────

@@ -28,7 +28,8 @@ import { buildSleepPageHtml } from '@/lib/report/page-sleep-html';
 import { buildCharacterEntries, buildCharacterSectionHtml } from '@/lib/report/symptom-character';
 import { buildPeriodNotes, buildPeriodNotesHtml } from '@/lib/report/period-notes';
 import { buildCheckedNotFoundHtml, computeCheckedNotFound } from '@/lib/report/checked-not-found';
-import { detectCycleProximity } from '@/lib/detection/cycle-proximity';
+import { dayOneIntervals, detectCycleProximity, detectPreDayOneWindow } from '@/lib/detection/cycle-proximity';
+import { detectSleepHoursConnections, hoursSleptByDate } from '@/lib/detection/sleep-hours-connections';
 import { detectEventProximity } from '@/lib/detection/event-proximity';
 import { groupConnections, type ConnectionRow, type CorrelationGrouping } from '@/lib/correlation-groups';
 import { fetchLatestSleepConnections } from '@/lib/queries/sleep-connections';
@@ -549,6 +550,13 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     medianHours: sleepMedianHours,
     persistedConnections,
     fallbackConnections: sleepConnections,
+    // Duration's own comparison, mind and body, over this report's range —
+    // the same function Insights runs, so the two agree on the same window.
+    hoursConnections: detectSleepHoursConnections(
+      hoursSleptByDate(sleepLogs),
+      mergedDayScores as { date: string; scores: Record<string, number | undefined> }[],
+      [...activeDomains, ...bodyTrackedDomains],
+    ),
     lagRelationships,
   });
 
@@ -578,6 +586,11 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     ...detectCycleProximity(mindDayScoresForCycle, activeDomains, cycleDayOneDates),
     ...detectCycleProximity(bodyDayScoresForCycle, bodyTrackedDomains, cycleDayOneDates),
   ].sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+  const preDayOne = [
+    ...detectPreDayOneWindow(mindDayScoresForCycle, activeDomains, cycleDayOneDates),
+    ...detectPreDayOneWindow(bodyDayScoresForCycle, bodyTrackedDomains, cycleDayOneDates),
+  ].sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+  const cycleIntervals = dayOneIntervals(cycleDayOneDates);
 
   // Stated negatives, so the positives above have a denominator.
   const foundPairKeys = new Set(domainConnections.map(c => `${c.domainA}|${c.domainB}`));
@@ -587,6 +600,8 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
 
   const contextConnectionsBody = buildContextConnectionsHtml({
     cycleProximity,
+    preDayOne,
+    cycleIntervals,
     checkedNotFoundHtml,
     grouping: connectionGrouping,
     dayOfWeekPatterns,

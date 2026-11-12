@@ -156,7 +156,17 @@ const pages = [
         sample_size: 40, good_sleep_count: 22, poor_sleep_count: 18,
         window_start: dateFrom, window_end: dateTo, detected_at: dateTo,
       })) as never[],
-      fallbackConnections: [], lagRelationships: [],
+      fallbackConnections: [],
+      hoursConnections: [...MIND, ...BODY].map(domain => ({
+        domain, shortMean: 6.4, longMean: 4.2, difference: 2.2, shortDays: 24, longDays: 26,
+        shortCutoff: 6.75, longCutoff: 8.25, nights: 75,
+      })),
+      // Saturated, as every other list here: the lag sentence sits under both
+      // tables and is the line most likely to tip the page.
+      lagRelationships: [{
+        predictor: 'sleep', outcome: 'pain_mechanical', lagDays: 1, correlation: -0.6,
+        instanceRate: 0.82, instanceCount: 41, totalPairs: 50,
+      }],
     } as never),
   },
   {
@@ -188,6 +198,17 @@ const pages = [
       cycleProximity: BODY.slice(0, 5).map(domain => ({
         domain, nearMean: 6.8, otherMean: 4.6, difference: 2.2, nearDays: 14, otherDays: 62, cycles: 2,
       })),
+      preDayOne: BODY.slice(0, 5).map(domain => ({
+        domain, nearMean: 7.1, otherMean: 4.4, difference: 2.7, nearDays: 21, otherDays: 60, cycles: 3,
+      })),
+      // Saturated: a 90-day report holds about three intervals; two unusual
+      // ones add the footnote, which is the longest the line gets.
+      cycleIntervals: [
+        { start: dates[0], nextDayOne: dates[28], lengthDays: 28, usable: true },
+        { start: dates[28], nextDayOne: dates[40], lengthDays: 12, usable: false },
+        { start: dates[40], nextDayOne: dates[70], lengthDays: 30, usable: true },
+        { start: dates[70], nextDayOne: dates[89], lengthDays: 52, usable: false },
+      ],
       checkedNotFoundHtml: buildCheckedNotFoundHtml(
         computeCheckedNotFound(dates, dailyMeans, MIND, new Set(['anxiety|concentration'])),
       ),

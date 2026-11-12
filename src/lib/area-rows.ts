@@ -97,13 +97,15 @@ function buildSleepRow({ findings }: SleepInput): AreaRow {
 }
 
 function buildMedicationRow({ markerCount, tooRecentLabel, findings }: MedicationInput): AreaRow {
-  if (markerCount === 0) {
+  // Cycle Day 1 findings are filed here but their markers aren't counted as
+  // events (readsAsEvent), so a finding can exist with no events in range.
+  const count = countFindings(findings);
+  if (markerCount === 0 && count === 0) {
     return { area: 'medication', label: 'Events', subtitle: 'No events in this range', state: 'empty' };
   }
-  if (tooRecentLabel) {
+  if (tooRecentLabel && count === 0) {
     return { area: 'medication', label: 'Events', subtitle: tooRecentLabel, state: 'muted' };
   }
-  const count = countFindings(findings);
   if (count === 0) {
     return { area: 'medication', label: 'Events', subtitle: 'No standout effects yet', state: 'empty' };
   }

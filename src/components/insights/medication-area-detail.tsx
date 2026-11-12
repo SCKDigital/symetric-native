@@ -5,7 +5,7 @@ import BackRow from '@/components/insights/back-row';
 import HighlightedSentence from '@/components/shared/highlighted-sentence';
 import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import { parseDateString } from '@/lib/date-utils';
-import { interventionImpactFindings } from '@/lib/pattern-findings';
+import { CONFIDENCE_COPY, interventionImpactFindings, type PatternFinding } from '@/lib/pattern-findings';
 import type { InterventionMarker } from '@/types/marker';
 import { makeAccentStyles } from '@/lib/accent-styles';
 
@@ -28,9 +28,12 @@ interface Props {
   /** Re-runs Insights' load after an event is added, edited or deleted. */
   onEventsChanged: () => void;
   cycleTrackingEnabled: boolean;
+  /** Domains that differ around a recorded cycle Day 1, over the last 90
+   *  days. Always empty when cycle tracking is off. */
+  cycleFindings: PatternFinding[];
 }
 
-export default function MedicationAreaDetail({ onBack, impacts, awaitingMarkers: noImpactYet, onEventsChanged, cycleTrackingEnabled }: Props) {
+export default function MedicationAreaDetail({ onBack, impacts, awaitingMarkers: noImpactYet, onEventsChanged, cycleTrackingEnabled, cycleFindings }: Props) {
   const styles = useStyles();
   const findings = interventionImpactFindings(impacts);
 
@@ -69,6 +72,26 @@ export default function MedicationAreaDetail({ onBack, impacts, awaitingMarkers:
               <Text key={m.id} style={styles.tooEarlyText}>{m.label}, {fmtDate(m.marker_date)}: too early to read</Text>
             ))}
           </View>
+        </View>
+      )}
+
+      {cycleTrackingEnabled && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Around cycle Day 1</Text>
+          {cycleFindings.length === 0 ? (
+            <Text style={styles.emptyText}>Nothing standing out around Day 1 yet. This looks at the three days either side of each logged Day 1, and at the week before each Day 1 that ends a cycle, over the last 90 days. It needs at least two logged Day 1s, and three for the week before.</Text>
+          ) : (
+            <View style={styles.list}>
+              {cycleFindings.map(f => (
+                <View key={f.id} style={styles.impactCard}>
+                  <Text style={styles.impactSentence}>
+                    <HighlightedSentence sentence={f.sentence} highlights={f.sentenceHighlights} />
+                  </Text>
+                  <Text style={styles.impactEvidence}>{f.evidenceLine} · {CONFIDENCE_COPY[f.grade].short}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       )}
 
