@@ -7,6 +7,7 @@ import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
 import { dateToTimeString, timeStringToDate } from '@/lib/date-utils';
+import { clampToWindow, defaultQuietHours, fitQuietHours, quietHoursProblem, type TimeRange } from '@/lib/quiet-hours';
 
 // The scheduling and preference sheets, ported from the web app's
 // ActiveWindowSheet.tsx, FrequencySheet.tsx and sheets/SettingsSheets.tsx.
@@ -128,20 +129,31 @@ export function FrequencySheet({ current, onSave, onClose }: {
 
 // ── Do not disturb hours ─────────────────────────────────────────────────────
 
-export function DndSheet({ dndStartTime, dndEndTime, timeFormat, onTimeChange, onClose }: {
-  dndStartTime: string; dndEndTime: string; timeFormat: TimeFormat;
+/**
+ * Quiet hours, limited to waking hours (2026-11-14). A pair saved before that
+ * rule, possibly overnight, opens already fitted to the window.
+ */
+export function DndSheet({ dndStartTime, dndEndTime, window, timeFormat, onTimeChange, onClose }: {
+  dndStartTime: string; dndEndTime: string; window: TimeRange; timeFormat: TimeFormat;
   onTimeChange: (start: string, end: string) => void; onClose: () => void;
 }) {
   const styles = useStyles();
-  const [start, setStart] = useState(dndStartTime);
-  const [end, setEnd] = useState(dndEndTime);
+  const [initial] = useState(() => fitQuietHours({ start: dndStartTime, end: dndEndTime }, window) ?? defaultQuietHours(window));
+  const [start, setStart] = useState(initial.start);
+  const [end, setEnd] = useState(initial.end);
+  const problem = quietHoursProblem({ start, end }, window);
   return (
-    <SheetShell title="Do not disturb hours" description="No notifications during these hours. Check-ins still appear when you open the app." onClose={onClose}>
+    <SheetShell
+      title="Do not disturb hours"
+      description={`No notifications during these hours. They sit inside your waking hours (${formatWindowTime(window.start, timeFormat)} to ${formatWindowTime(window.end, timeFormat)}). Check-ins still appear when you open the app.`}
+      onClose={onClose}>
       <View style={styles.timeRow}>
-        <TimeField label="From" value={start} timeFormat={timeFormat} onChange={setStart} />
-        <TimeField label="Until" value={end} timeFormat={timeFormat} onChange={setEnd} />
+        {/* Clamped on the way in: Android's time dialog can't be limited. */}
+        <TimeField label="From" value={start} timeFormat={timeFormat} onChange={v => setStart(clampToWindow(v, window))} />
+        <TimeField label="Until" value={end} timeFormat={timeFormat} onChange={v => setEnd(clampToWindow(v, window))} />
       </View>
-      <SheetButton label="Save" onPress={() => { onTimeChange(start, end); onClose(); }} />
+      {problem && <Text style={styles.error}>{problem}</Text>}
+      <SheetButton label="Save" disabled={!!problem} onPress={() => { onTimeChange(start, end); onClose(); }} />
       <SheetCancel onPress={onClose} />
     </SheetShell>
   );

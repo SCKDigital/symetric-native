@@ -57,6 +57,11 @@ export interface SetupCardState {
   /** The user's clock preference, so the setup sheets show times the way the
    *  rest of the app will. Read here because this hook already holds the row. */
   timeFormat: TimeFormat;
+  /** The mind waking window and check-ins per day, drawn faintly behind the
+   *  body check-ins on body setup's day bar. */
+  windowStart: string;
+  windowEnd: string;
+  checkInsPerDay: number;
   refresh: () => void;
 }
 
@@ -71,6 +76,9 @@ const EMPTY: Omit<SetupCardState, 'refresh'> = {
   anyOutstanding: false,
   anyCardVisible: false,
   timeFormat: '12hr',
+  windowStart: '09:00',
+  windowEnd: '21:00',
+  checkInsPerDay: 3,
 };
 
 export function useSetupCards(): SetupCardState {
@@ -89,7 +97,7 @@ export function useSetupCards(): SetupCardState {
       asResult(readThrough('setup.settings', async () => {
         const r = await supabase
           .from('check_in_settings')
-          .select('active_domains, quick_checkin_domains, setup_times_confirmed_at, setup_notifications_ack_at, setup_preferences_ack_at, time_format')
+          .select('active_domains, quick_checkin_domains, setup_times_confirmed_at, setup_notifications_ack_at, setup_preferences_ack_at, time_format, window_start, window_end, check_ins_per_day')
           .eq('user_id', user.id)
           .maybeSingle();
         if (r.error) throw r.error;
@@ -146,6 +154,9 @@ export function useSetupCards(): SetupCardState {
         needsNotifications || needsMindDomains || needsTimes || needsBodySetup
         || needsCycleDayOne || needsPreferences,
       timeFormat: (settings?.time_format as TimeFormat | undefined) ?? '12hr',
+      windowStart: (settings?.window_start as string | undefined)?.slice(0, 5) ?? EMPTY.windowStart,
+      windowEnd: (settings?.window_end as string | undefined)?.slice(0, 5) ?? EMPTY.windowEnd,
+      checkInsPerDay: (settings?.check_ins_per_day as number | undefined) ?? EMPTY.checkInsPerDay,
     });
   }, [user, profile]);
 

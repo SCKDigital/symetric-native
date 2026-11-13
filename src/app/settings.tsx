@@ -42,6 +42,7 @@ import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
 import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
 import { saveCheckInSettings, saveProfile, setBaseline } from '@/lib/offline/queued-writes';
 import { overlayCheckInSettings } from '@/lib/offline/overlays';
+import { defaultQuietHours, fitQuietHours } from '@/lib/quiet-hours';
 import { supabase } from '@/lib/supabase';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { brandTint } from '@/constants/brand';
@@ -270,6 +271,10 @@ export default function SettingsScreen() {
   const dndEnabled = checkInSettings?.dnd_enabled ?? false;
   const dndStartTime = checkInSettings?.dnd_start_time?.slice(0, 5) ?? '14:00';
   const dndEndTime = checkInSettings?.dnd_end_time?.slice(0, 5) ?? '16:00';
+  const wakingWindow = {
+    start: checkInSettings?.window_start?.slice(0, 5) ?? '09:00',
+    end: checkInSettings?.window_end?.slice(0, 5) ?? '21:00',
+  };
 
   // ── Mind domains ───────────────────────────────────────────────────────────
 
@@ -344,10 +349,12 @@ export default function SettingsScreen() {
   const handleToggleDND = async (next: boolean) => {
     if (!user) return;
     const prev = checkInSettings;
+    // Turned on, quiet hours start inside waking hours (lib/quiet-hours.ts).
+    const fitted = fitQuietHours({ start: dndStartTime, end: dndEndTime }, wakingWindow) ?? defaultQuietHours(wakingWindow);
     const patch = {
       dnd_enabled: next,
-      dnd_start_time: next ? `${dndStartTime}:00` : null,
-      dnd_end_time: next ? `${dndEndTime}:00` : null,
+      dnd_start_time: next ? `${fitted.start}:00` : null,
+      dnd_end_time: next ? `${fitted.end}:00` : null,
     };
     setCheckInSettings(p => (p ? { ...p, ...patch } : p));
     const { error } = await saveCheckInSettings(user.id, patch);
@@ -364,9 +371,18 @@ export default function SettingsScreen() {
 
   const handleSaveActiveWindow = async (start: string, end: string) => {
     if (!user) return;
-    const { error } = await saveCheckInSettings(user.id, { window_start: start, window_end: end });
+    // Quiet hours shrink with the window, so they can't end up outside it or
+    // covering all of it. No room left for them at all turns them off.
+    const patch: Record<string, unknown> = { window_start: start, window_end: end };
+    if (dndEnabled) {
+      const fitted = fitQuietHours({ start: dndStartTime, end: dndEndTime }, { start: start.slice(0, 5), end: end.slice(0, 5) });
+      patch.dnd_enabled = fitted !== null;
+      patch.dnd_start_time = fitted ? `${fitted.start}:00` : null;
+      patch.dnd_end_time = fitted ? `${fitted.end}:00` : null;
+    }
+    const { error } = await saveCheckInSettings(user.id, patch);
     if (error) throw error;
-    setCheckInSettings(p => (p ? { ...p, window_start: start, window_end: end } : p));
+    setCheckInSettings(p => (p ? { ...p, ...patch } as CheckInSettings : p));
   };
 
   const handleSaveFrequency = async (freq: number) => {
@@ -798,7 +814,7 @@ export default function SettingsScreen() {
       )}
       {sheet === 'dnd' && (
         <DndSheet
-          dndStartTime={dndStartTime} dndEndTime={dndEndTime} timeFormat={timeFormat}
+          dndStartTime={dndStartTime} dndEndTime={dndEndTime} timeFormat={timeFormat} window={wakingWindow}
           onTimeChange={handleDNDTimeChange} onClose={() => setSheet(null)}
         />
       )}

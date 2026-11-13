@@ -1,95 +1,84 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { OnboardingBackButton, OnboardingCheckbox, OnboardingPrimaryButton } from '@/components/onboarding/onboarding-controls';
-import { DOMAIN_COPY, DOMAIN_ORDER } from '@/lib/domains';
+import { FooterRow, SelectTile, SetupScreen, SuggestRow, TileGrid, Note } from '@/components/setup/setup-kit';
+import { DOMAIN_ORDER, getDomainColor } from '@/lib/domains';
 import { DomainType } from '@/lib/supabase';
 
 interface DomainSelectionStepProps {
   selectedDomains: DomainType[];
   onUpdate: (domains: DomainType[]) => void;
   onNext: () => void;
-  onBack: () => void;
-  /** A save failure from the caller, shown above the buttons. */
+  onClose: () => void;
+  /** e.g. "Step 1 of 3". */
+  stepLabel: string;
+  progress: number;
+  /** A save failure from the caller. */
   error?: string | null;
   saving?: boolean;
 }
 
-const domains = DOMAIN_ORDER.map(type => ({ type, ...DOMAIN_COPY[type] }));
-
 const MIN_DOMAINS = 2;
-const MAX_DOMAINS = 8;
 
-// Ported from the web app's DomainSelectionStep.tsx — straight layout port,
-// no native-only mechanics.
-export default function DomainSelectionStep({ selectedDomains, onUpdate, onNext, onBack, error, saving }: DomainSelectionStepProps) {
-  const handleToggle = (domain: DomainType) => {
-    if (selectedDomains.includes(domain)) {
-      onUpdate(selectedDomains.filter(d => d !== domain));
-    } else if (selectedDomains.length < MAX_DOMAINS) {
-      onUpdate([...selectedDomains, domain]);
-    }
+/** The three the old copy recommended in a sentence; now a button. */
+const SUGGESTED: DomainType[] = ['mood', 'energy', 'anxiety'];
+
+/**
+ * Short enough for a half-width tile. The full sentences in DOMAIN_COPY stay
+ * for Settings and the check-in form.
+ */
+const TILE_COPY: Record<DomainType, { label: string; description: string }> = {
+  anxiety: { label: 'Anxiety', description: 'Tension, worry or unease' },
+  concentration: { label: 'Concentration', description: 'How easy it is to focus' },
+  energy: { label: 'Energy', description: 'How much fuel you have' },
+  irritability: { label: 'Irritability', description: 'How on-edge you feel' },
+  mood: { label: 'Mood', description: 'Your overall emotional tone' },
+  motivation: { label: 'Motivation', description: 'Drive to do things' },
+  sensory_sensitivity: { label: 'Sensory overwhelm', description: 'How much input is affecting you' },
+  social_battery: { label: 'Social depletion', description: 'How drained by people' },
+};
+
+/**
+ * What to track, redesigned 2026-11-14 to be less intimidating.
+ *
+ * It used to open with about 80 words of explanation above eight full-width
+ * cards, with Continue under the last one, and told people "this is the only
+ * time you'll need to do this" one sentence before saying they could add more
+ * in Settings. Now: one true line, all eight as two columns of tiles that fit
+ * without scrolling, a one-tap suggestion, and Continue always in view.
+ *
+ * Each tile's circle is the domain's own chart colour, so the key that History
+ * and Insights use is learned here.
+ */
+export default function DomainSelectionStep({ selectedDomains, onUpdate, onNext, onClose, stepLabel, progress, error, saving }: DomainSelectionStepProps) {
+  const toggle = (domain: DomainType) => {
+    onUpdate(selectedDomains.includes(domain)
+      ? selectedDomains.filter(d => d !== domain)
+      : [...selectedDomains, domain]);
   };
 
-  const canProceed = selectedDomains.length >= MIN_DOMAINS;
-  const showError = !canProceed && selectedDomains.length === 1;
-
-  const helperText =
-    selectedDomains.length === 0
-      ? 'Select at least 2 domains to continue'
-      : selectedDomains.length === 1
-        ? 'Select 1 more to continue'
-        : `${selectedDomains.length} selected`;
+  const n = selectedDomains.length;
+  const note = n === 0 ? 'Pick 2 or more' : n === 1 ? '1 picked, 1 more to go' : `${n} picked`;
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.heading}>What do you want to track?</Text>
-        <Text style={styles.subheading}>
-          Choose the symptoms and experiences you want to pay attention to - as few as 2, as many as all 8. This is
-          the only time you’ll need to do this: every check-in after today only shows what you pick right now, so
-          there’s nothing to scroll past and nothing to hide later.
-        </Text>
-        <Text style={styles.hint}>
-          Not sure where to start? Mood, energy, and anxiety are commonly tracked together. You can always add more
-          domains later from Settings.
-        </Text>
-
-        <View style={styles.domainList}>
-          {domains.map(domain => (
-            <OnboardingCheckbox key={domain.type} checked={selectedDomains.includes(domain.type)} onToggle={() => handleToggle(domain.type)}>
-              <Text style={styles.domainLabel}>{domain.label}</Text>
-              <Text style={styles.domainDescription}>{domain.description}</Text>
-            </OnboardingCheckbox>
-          ))}
-        </View>
-
-        {showError && <Text style={styles.errorText}>Please select at least 2 domains to track.</Text>}
-        <Text style={styles.helperText}>{helperText}</Text>
-        {error && <Text style={styles.errorText}>{error}</Text>}
-
-        <View style={styles.buttonRow}>
-          <OnboardingBackButton onPress={onBack} />
-          <View style={styles.primaryButtonFlex}>
-            <OnboardingPrimaryButton label={saving ? 'Saving…' : 'Continue'} onPress={onNext} disabled={!canProceed || saving} />
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <SetupScreen
+      stepLabel={stepLabel}
+      progress={progress}
+      title="What do you want to keep an eye on?"
+      lede="Pick at least 2. You can change these any time."
+      onClose={onClose}
+      footer={<FooterRow note={note} label="Continue" onPress={onNext} disabled={n < MIN_DOMAINS} busy={saving} />}>
+      <SuggestRow title="Not sure? Start with three" detail="Mood, Energy and Anxiety" onUse={() => onUpdate(SUGGESTED)} />
+      <TileGrid>
+        {DOMAIN_ORDER.map(d => (
+          <SelectTile
+            key={d}
+            label={TILE_COPY[d].label}
+            description={TILE_COPY[d].description}
+            color={getDomainColor(d)}
+            selected={selectedDomains.includes(d)}
+            onPress={() => toggle(d)}
+          />
+        ))}
+      </TileGrid>
+      {error ? <Note tone="error">{error}</Note> : null}
+    </SetupScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0f1117' },
-  content: { maxWidth: 480, width: '100%', alignSelf: 'center', paddingHorizontal: 24, paddingTop: 40, paddingBottom: 32 },
-  heading: { fontSize: 24, fontWeight: '300', color: '#e2e8f0', marginBottom: 16 },
-  subheading: { fontSize: 15, color: '#94a3b8', lineHeight: 24, marginBottom: 8 },
-  hint: { fontSize: 14, color: '#64748b', lineHeight: 22, marginBottom: 28 },
-  domainList: { gap: 8, marginBottom: 28 },
-  domainLabel: { fontSize: 15, fontWeight: '500', color: '#e2e8f0', marginBottom: 3 },
-  domainDescription: { fontSize: 13, color: '#64748b', lineHeight: 19 },
-  errorText: { fontSize: 13, color: '#f87171', marginBottom: 16 },
-  helperText: { fontSize: 13, color: '#4a5568', marginBottom: 24 },
-  buttonRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  primaryButtonFlex: { flex: 1 },
-});

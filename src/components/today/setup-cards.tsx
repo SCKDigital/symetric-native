@@ -1,61 +1,61 @@
-import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
-import MarkerModal from '@/components/marker-modal';
 import CheckInPreferencesStep from '@/components/onboarding/check-in-preferences-step';
 import DomainSelectionStep from '@/components/onboarding/domain-selection-step';
+import { BodySetupFlow } from '@/components/setup/body-setup-flow';
+import { CycleDayOneScreen } from '@/components/setup/cycle-day-one-screen';
+import { ConfirmDialog } from '@/components/setup/setup-kit';
 import { useModalTopPadding } from '@/components/shared/modal-keyboard-view';
 import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
 import { Toggle } from '@/components/settings/settings-primitives';
 import { useAuth } from '@/contexts/auth-context';
+import { useAccent } from '@/contexts/accent-context';
 import { useAppLockSettings } from '@/hooks/use-app-lock-settings';
-import { useBodyTrackingSettings } from '@/hooks/use-body-tracking-settings';
 import { useComfort } from '@/hooks/use-comfort';
 import type { SetupCardState } from '@/hooks/use-setup-cards';
-import { PIN_LENGTH } from '@/lib/app-lock';
-import {
-  BODY_DOMAINS, CHECKIN_BODY_DOMAIN_ORDER, MORNING_CAPABLE_DOMAIN_ORDER, MORNING_DOMAIN_LIMIT,
-} from '@/lib/body/constants';
-import { BODY_COLOR } from '@/lib/domains';
-import { subscribeToPushNotifications } from '@/lib/push-notifications';
-import { createMarker } from '@/lib/queries/markers';
-import { recordFirstCheckinsScheduledMilestone } from '@/lib/milestones';
-import { ensureTodayCheckIns } from '@/lib/scheduler';
-import { saveCheckInSettings, saveProfile, seedBaselines } from '@/lib/offline/queued-writes';
-import { isOnline } from '@/lib/offline/connectivity';
-import { type BodyDomainType, type DomainType } from '@/lib/supabase';
-import { todayDateString } from '@/lib/date-utils';
-import { TimeField } from '@/components/today/time-field';
-import type { TimeFormat } from '@/lib/time-format';
 import { makeAccentStyles } from '@/lib/accent-styles';
-import { useAccent } from '@/contexts/accent-context';
+import { PIN_LENGTH } from '@/lib/app-lock';
+import { deviceTimeFormat } from '@/lib/device-clock';
+import { BODY_COLOR } from '@/lib/domains';
+import { recordFirstCheckinsScheduledMilestone } from '@/lib/milestones';
+import { isOnline } from '@/lib/offline/connectivity';
+import { saveCheckInSettings, saveProfile, seedBaselines } from '@/lib/offline/queued-writes';
+import { subscribeToPushNotifications } from '@/lib/push-notifications';
+import type { TimeRange } from '@/lib/quiet-hours';
+import { ensureTodayCheckIns } from '@/lib/scheduler';
+import { type DomainType } from '@/lib/supabase';
 
 /**
  * First-run setup, as cards on Today rather than a wizard in front of it.
  *
- * Onboarding now stops after consent. The things that used to block entry —
- * domains, check-in times, body symptoms — are asked for here, inside the app,
- * in whatever order the person wants, with the app visible behind them. Each
- * card disappears the moment its job is done.
+ * Onboarding stops after consent. Everything the app needs before it can
+ * check in is asked here, inside the app, with the app visible behind it.
  *
- * Reminders come first deliberately. Check-ins are scheduled at unpredictable
- * times inside the chosen window; without a notification there is nothing to
- * tell you one is due, so it is the single thing the product most depends on.
+ * ── One card at a time (2026-11-14) ────────────────────────────────────────
  *
- * Every option the app has is offered here, not only the ones it needs. The
- * morning body check-in, quiet hours, the 12/24-hour clock, the app-lock PIN
- * and comfort mode all used to exist solely in Settings, which assumes someone
- * will go and look. This app's users are frequently exhausted and frequently
- * new to being believed about any of this; "it was in Settings" is not an
- * answer. What stays out of these cards is the things that act on data rather
- * than shape how it is collected — export, delete a range, reset baselines,
- * delete the account — none of which mean anything on day one.
+ * This used to stack every outstanding card at once: up to five equal cards
+ * with five equal buttons, so nothing said where to start, and the last ones
+ * fell below the fold. Now Today shows only the next step, under a
+ * "Getting started · 1 of 3" line, and finishing it brings up the one after.
+ *
+ * The order is what to track, then when, then reminders, then body and cycle
+ * for whoever opted in at consent. Reminders used to come first, because
+ * without them nothing says a check-in is due; they still come before any
+ * check-in is scheduled to be due, since today's check-ins are only scheduled
+ * once both domains and hours exist (see scheduleTodayIfReady).
+ *
+ * Body and cycle each end with a way out ("I don't want to track my body"),
+ * which turns that tracking off exactly as the Settings switch does and says
+ * so in a confirmation.
+ *
+ * The privacy-and-comfort card stays last and outside the count: it asks for
+ * nothing the app needs.
  *
  * No baseline questions. The app works its own baselines out from the first
- * fortnight of check-ins, and asking someone to estimate their usual anxiety
- * before they have logged anything produced a number nobody could stand behind.
- * Choosing domains seeds a neutral row per domain instead, which
- * rolling-baseline-recalc.ts supersedes once there is enough history.
+ * fortnight of check-ins. Choosing domains seeds a neutral row per domain
+ * instead, which rolling-baseline-recalc.ts supersedes once there is enough
+ * history.
  */
 
 interface Props {
@@ -63,6 +63,15 @@ interface Props {
   /** Re-runs the card query and Today's own data after any card completes. */
   onChanged: () => void;
 }
+
+type Step = 'domains' | 'times' | 'notifications' | 'body' | 'cycle';
+type Sheet = null | 'domains' | 'times' | 'body' | 'cycle' | 'preferences';
+type OptOut = 'body' | 'cycle';
+
+const OPT_OUT_COPY: Record<OptOut, { title: string; field: 'body_tracking_enabled' | 'cycle_tracking_enabled' }> = {
+  body: { title: 'You will no longer be asked about body tracking.', field: 'body_tracking_enabled' },
+  cycle: { title: 'You will no longer be asked about cycle tracking.', field: 'cycle_tracking_enabled' },
+};
 
 function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, tone = 'indigo' }: {
   title: string;
@@ -81,7 +90,7 @@ function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, 
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardBody}>{body}</Text>
       <View style={styles.cardActions}>
-        <Pressable onPress={onPress} style={({ pressed }) => [styles.cardButton, { backgroundColor: accent }, pressed && styles.pressed]}>
+        <Pressable onPress={onPress} style={({ pressed }) => [styles.cardButton, pressed && styles.pressed]}>
           <Text style={styles.cardButtonText}>{action}</Text>
         </Pressable>
         {onSecondary && secondaryLabel && (
@@ -96,28 +105,62 @@ function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, 
 
 export default function SetupCards({ state, onChanged }: Props) {
   const styles = useStyles();
+  const accent = useAccent();
   const sheetPaddingTop = useModalTopPadding(60);
   const { user, profile, refreshProfile } = useAuth();
-  const [sheet, setSheet] = useState<null | 'domains' | 'times' | 'body' | 'cycle' | 'preferences'>(null);
+  const [sheet, setSheet] = useState<Sheet>(null);
   const [pinSheet, setPinSheet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<OptOut | null>(null);
+  // iOS can't present a modal while another is still animating away, so the
+  // confirmation waits for the sheet's onDismiss there.
+  const pendingConfirm = useRef<OptOut | null>(null);
 
   const comfort = useComfort();
   const appLock = useAppLockSettings();
-  const body = useBodyTrackingSettings(user?.id, profile, refreshProfile, {
-    defaultDomains: CHECKIN_BODY_DOMAIN_ORDER,
-    onError: setError,
-  });
-  const [bodyFrom, setBodyFrom] = useState<string | null>(null);
-  const [bodyRemind, setBodyRemind] = useState<string | null>(null);
-  const [bodyMorning, setBodyMorning] = useState<string | null>(null);
+
+  // ── The steps, in order ───────────────────────────────────────────────────
+  const steps: { key: Step; outstanding: boolean }[] = [
+    { key: 'domains', outstanding: state.needsMindDomains },
+    { key: 'times', outstanding: state.needsTimes },
+    { key: 'notifications', outstanding: state.needsNotifications },
+    ...(profile?.body_tracking_enabled ? [{ key: 'body' as const, outstanding: state.needsBodySetup }] : []),
+    ...(profile?.cycle_tracking_enabled
+      ? [{ key: 'cycle' as const, outstanding: state.needsCycleDayOne }]
+      : []),
+  ];
+  // A cycle step already answered by an existing Day 1 still counts as done.
+  const total = steps.length;
+  const current = steps.find(s => s.outstanding)?.key ?? null;
+  const done = steps.filter(s => !s.outstanding).length;
+  const stepLabel = `Step ${done + 1} of ${total}`;
+  const progress = total ? done / total : 1;
 
   const markAcked = async (patch: Record<string, unknown>) => {
     if (!user) return;
     const { error: e } = await saveCheckInSettings(user.id, patch);
     if (e) { setError('Could not save that. Try again.'); return; }
     onChanged();
+  };
+
+  /**
+   * Today's check-ins need both what to track and when. Whichever of the two
+   * steps finishes second schedules them, so they're never laid out on the
+   * database's default hours before she has set her own.
+   */
+  const scheduleTodayIfReady = async (otherStepDone: boolean) => {
+    if (!user || !otherStepDone || !isOnline()) return;
+    const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      await ensureTodayCheckIns(user.id, timezone);
+      await recordFirstCheckinsScheduledMilestone(user.id);
+    } catch (e) {
+      // The step saved; only scheduling failed. Say so rather than implying
+      // the whole thing went wrong. Today's next load schedules them.
+      console.error('[SetupCards] scheduling after setup:', e);
+      setError("Your choices saved, but today's check-ins couldn't be scheduled. Pull to refresh.");
+    }
   };
 
   // ── Reminders ─────────────────────────────────────────────────────────────
@@ -176,121 +219,111 @@ export default function SetupCards({ state, onChanged }: Props) {
     // downstream has to care whether one exists, and the weekly rolling recalc
     // (which is append-only, and expects a prior row) takes over from day 14.
     // baselines.source is the baseline_source enum in production — only
-    // 'onboarding' and 'rolling_median' exist. Anything else is rejected.
+    // 'onboarding', 'rolling_median' and 'manual_reset' exist.
     const { error: baselineError } = await seedBaselines(user.id, pickedDomains, 5, 'onboarding');
     if (baselineError) { setError('Could not set up your baselines. Try again.'); setBusy(false); return; }
 
     const { error: settingsError } = await saveCheckInSettings(user.id, { active_domains: pickedDomains });
     if (settingsError) { setError('Could not save your domains. Try again.'); setBusy(false); return; }
 
-    const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    // Offline the domains are queued, and today's check-ins are scheduled by
-    // the first load back online (use-today-check-ins.ts) — nothing to report.
-    if (isOnline()) {
-      try {
-        await ensureTodayCheckIns(user.id, timezone);
-        await recordFirstCheckinsScheduledMilestone(user.id);
-      } catch (e) {
-        // The domains saved; only scheduling failed. Say so rather than implying
-        // the whole thing went wrong.
-        console.error('[SetupCards] scheduling after domain selection:', e);
-        setError("Your domains saved, but today's check-ins couldn't be scheduled. Pull to refresh.");
-      }
-    }
-
+    await scheduleTodayIfReady(!state.needsTimes);
     setBusy(false);
     setSheet(null);
     onChanged();
   };
 
-  // ── Body ──────────────────────────────────────────────────────────────────
-  const saveBody = async () => {
-    if (!user || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await body.handleSaveBodyTiming(
-        bodyFrom ?? body.bodyAvailableFrom,
-        bodyRemind ?? body.bodyReminderTime,
-        body.bodyMorningEnabled,
-        bodyMorning ?? body.bodyMorningTime,
-      );
-      const { error: e } = await saveProfile(user.id, { body_setup_complete: true });
-      if (e) throw e;
-      await refreshProfile();
-      setSheet(null);
-      onChanged();
-    } catch {
-      setError('Could not save your body settings. Try again.');
+  // ── Opting out of body or cycle ───────────────────────────────────────────
+  // The same switch as Settings › Body tracking / Cycle tracking. Turning it
+  // off is what retires the card: use-setup-cards only asks while it's on.
+  // Anything already logged is kept.
+  const optOut = async (kind: OptOut) => {
+    if (!user) return;
+    const { error: e } = await saveProfile(user.id, { [OPT_OUT_COPY[kind].field]: false });
+    if (e) { setError('Could not save that. Try again.'); return; }
+    if (Platform.OS === 'ios') pendingConfirm.current = kind;
+    else setConfirm(kind);
+    setSheet(null);
+    await refreshProfile();
+    onChanged();
+  };
+  const onSheetDismissed = () => {
+    if (pendingConfirm.current) {
+      setConfirm(pendingConfirm.current);
+      pendingConfirm.current = null;
     }
-    setBusy(false);
   };
 
-  if (state.loading || !state.anyCardVisible) return null;
+  const cardsReady = !state.loading && state.anyCardVisible;
+  const showPreferences = cardsReady && current === null && state.needsPreferences;
 
   return (
-    <View style={styles.stack}>
-      {error && <Text style={styles.error}>{error}</Text>}
+    <View style={(cardsReady && (current || showPreferences)) ? styles.stack : undefined}>
+      {cardsReady && current && (
+        <>
+          <View style={styles.progress}>
+            <View style={styles.progressMeta}>
+              <Text style={styles.progressLabel}>GETTING STARTED</Text>
+              <Text style={styles.progressLabel}>{done + 1} OF {total}</Text>
+            </View>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${Math.round(((done + 0.5) / total) * 100)}%`, backgroundColor: accent.text }]} />
+            </View>
+          </View>
+          {error && <Text style={styles.error}>{error}</Text>}
 
-      {state.needsNotifications && (
-        <SetupCard
-          title="Turn on reminders"
-          body="Symetric nudges you at different times during your chosen hours, so we need to be able to send you notifications."
-          action={busy ? 'Working…' : 'Turn on'}
-          onPress={() => handleNotifications(true)}
-          onSecondary={() => handleNotifications(false)}
-          secondaryLabel="Not now"
-        />
+          {current === 'domains' && (
+            <SetupCard
+              title="What do you want to track?"
+              body="Pick 2 to 8. Your check-ins only ever ask about these."
+              action="Choose domains"
+              onPress={() => { setPickedDomains([]); setError(null); setSheet('domains'); }}
+            />
+          )}
+
+          {current === 'times' && (
+            <SetupCard
+              title="When should check-ins happen?"
+              body="Your waking hours, and how many check-ins a day. All changeable later."
+              action="Set my hours"
+              onPress={() => { setError(null); setSheet('times'); }}
+            />
+          )}
+
+          {current === 'notifications' && (
+            <SetupCard
+              title="Turn on reminders"
+              body="Symetric nudges you at different times during your chosen hours, so we need to be able to send you notifications."
+              action={busy ? 'Working…' : 'Turn on'}
+              onPress={() => handleNotifications(true)}
+              onSecondary={() => handleNotifications(false)}
+              secondaryLabel="Not now"
+            />
+          )}
+
+          {current === 'body' && (
+            <SetupCard
+              tone="body"
+              title="Set up body tracking"
+              body="Choose which physical symptoms to track, and when to be asked."
+              action="Set up Body"
+              onPress={() => { setError(null); setSheet('body'); }}
+            />
+          )}
+
+          {current === 'cycle' && (
+            <SetupCard
+              title="Know when your last period started?"
+              body="Recording it means day counts work straight away, instead of waiting for your next one."
+              action="Add it"
+              onPress={() => { setError(null); setSheet('cycle'); }}
+            />
+          )}
+        </>
       )}
 
-      {state.needsMindDomains && (
-        <SetupCard
-          title="What do you want to track?"
-          body="Pick as few as 2 or as many as 8. Every check-in only ever shows what you choose here, so there's nothing to scroll past later."
-          action="Choose domains"
-          onPress={() => { setPickedDomains([]); setError(null); setSheet('domains'); }}
-        />
-      )}
-
-      {state.needsTimes && (
-        <SetupCard
-          title="When should check-ins happen?"
-          body="Your waking hours, how often to ask, how times are shown, and any quiet hours. All changeable later."
-          action="Set my hours"
-          onPress={() => setSheet('times')}
-        />
-      )}
-
-      {state.needsBodySetup && (
-        <SetupCard
-          tone="body"
-          title="Set up body tracking"
-          body="Choose which physical symptoms to track, when each check-in opens, and when to be reminded."
-          action="Set up Body"
-          onPress={() => setSheet('body')}
-        />
-      )}
-
-      {state.needsCycleDayOne && (
-        <SetupCard
-          title="Know when your last period started?"
-          body="Recording it means day counts work straight away, instead of waiting for your next one."
-          action="Add it"
-          onPress={() => setSheet('cycle')}
-          onSecondary={async () => {
-            if (!user) return;
-            await saveProfile(user.id, { cycle_day_one_prompt_ack_at: new Date().toISOString() });
-            await refreshProfile();
-            onChanged();
-          }}
-          secondaryLabel="Skip — I'd rather not"
-        />
-      )}
-
-      {/* Last, and only once the necessary cards are done. Six cards on a first
-          open is a wall, and this is the one that can wait — it asks for
-          nothing the app needs in order to work. */}
-      {state.needsPreferences && !state.anyOutstanding && (
+      {/* Last, and only once every step is done. It asks for nothing the app
+          needs in order to work. */}
+      {showPreferences && (
         <SetupCard
           title="Lock it, or quieten it"
           body="A PIN to open Symetric, and a mode that takes the brightness and the countdowns out of it. Both optional, both changeable later."
@@ -308,9 +341,9 @@ export default function SetupCards({ state, onChanged }: Props) {
           selectedDomains={pickedDomains}
           onUpdate={setPickedDomains}
           onNext={saveDomains}
-          onBack={() => setSheet(null)}
-          // The card stack's own error line is behind this full-screen sheet,
-          // so a failed save looked like a dead button. Show it here too.
+          onClose={() => setSheet(null)}
+          stepLabel={stepLabel}
+          progress={progress}
           error={error}
           saving={busy}
         />
@@ -318,87 +351,39 @@ export default function SetupCards({ state, onChanged }: Props) {
 
       <Modal visible={sheet === 'times'} animationType="slide" onRequestClose={() => setSheet(null)}>
         <TimesSheet
-          initialTimeFormat={state.timeFormat}
+          stepLabel={stepLabel}
+          progress={progress}
           onClose={() => setSheet(null)}
-          onSaved={() => { setSheet(null); onChanged(); }}
+          onSaved={async () => {
+            await scheduleTodayIfReady(!state.needsMindDomains);
+            setSheet(null);
+            onChanged();
+          }}
           onError={setError}
         />
       </Modal>
 
-      <Modal visible={sheet === 'body'} animationType="slide" onRequestClose={() => setSheet(null)}>
-        <ScrollView contentContainerStyle={[styles.sheet, { paddingTop: sheetPaddingTop }]}>
-          <Text style={styles.sheetTitle}>Set up body tracking</Text>
+      <Modal visible={sheet === 'body'} animationType="slide" onRequestClose={() => setSheet(null)} onDismiss={onSheetDismissed}>
+        {sheet === 'body' && (
+          <BodySetupFlow
+            timeFormat={state.timeFormat}
+            mindWindow={{ start: state.windowStart, end: state.windowEnd }}
+            mindPerDay={state.checkInsPerDay}
+            onClose={() => setSheet(null)}
+            onDone={() => { setSheet(null); onChanged(); }}
+            onOptOut={() => optOut('body')}
+          />
+        )}
+      </Modal>
 
-          <Text style={styles.sheetLabel}>WHICH SYMPTOMS</Text>
-          <View style={styles.pillRow}>
-            {CHECKIN_BODY_DOMAIN_ORDER.filter(d => !BODY_DOMAINS[d].required).map(d => {
-              const active = body.bodyDomainsActive.includes(d as BodyDomainType);
-              return (
-                <Pressable key={d} onPress={() => body.handleToggleBodyDomain(d as BodyDomainType)}
-                  style={[styles.pill, active && styles.pillActive]}>
-                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{BODY_DOMAINS[d].label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={styles.sheetLabel}>THE EVENING CHECK-IN OPENS AT</Text>
-          <TimeField value={bodyFrom ?? body.bodyAvailableFrom} timeFormat={state.timeFormat} onChange={setBodyFrom} />
-
-          <Text style={styles.sheetLabel}>REMIND ME AT</Text>
-          <TimeField value={bodyRemind ?? body.bodyReminderTime} timeFormat={state.timeFormat} onChange={setBodyRemind} />
-
-          {/* The morning check-in was written by this card from the moment it
-              shipped — saveBody has always passed body_morning_enabled through
-              — but never asked about, so it saved its own default of off and
-              the card then marked body setup complete. The one place it could
-              be found was Settings. It is the reading that makes morning-vs-
-              evening patterns possible at all, so it is offered here. */}
-          <View style={styles.sheetToggleRow}>
-            <Text style={styles.sheetToggleLabel}>Morning check-in</Text>
-            <Toggle value={body.bodyMorningEnabled} onValueChange={body.setBodyMorningEnabled} />
-          </View>
-          <Text style={styles.sheetHelper}>
-            Optional. Fatigue, pain and dizziness before the day starts — it is what lets Symetric tell a morning
-            pattern from an evening one.
-          </Text>
-
-          {body.bodyMorningEnabled && (
-            <>
-              <Text style={styles.sheetLabel}>
-                WHAT TO ASK IN THE MORNING · {body.bodyMorningDomains.length} OF {MORNING_DOMAIN_LIMIT}
-              </Text>
-              <View style={styles.pillRow}>
-                {MORNING_CAPABLE_DOMAIN_ORDER
-                  .filter(d => body.bodyDomainsActive.includes(d))
-                  .map(d => {
-                    const active = body.bodyMorningDomains.includes(d);
-                    const disabled = !active && body.bodyMorningDomains.length >= MORNING_DOMAIN_LIMIT;
-                    return (
-                      <Pressable key={d} onPress={() => body.handleToggleMorningDomain(d)} disabled={disabled}
-                        style={[styles.pill, active && styles.pillActive, disabled && styles.pillDisabled]}>
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{BODY_DOMAINS[d].label}</Text>
-                      </Pressable>
-                    );
-                  })}
-              </View>
-              <Text style={styles.sheetHelper}>
-                Only symptoms you already track in the evening — a morning reading is worth having because it can be
-                compared with one.
-              </Text>
-
-              <Text style={styles.sheetLabel}>THE MORNING CHECK-IN OPENS AT</Text>
-              <TimeField value={bodyMorning ?? body.bodyMorningTime} timeFormat={state.timeFormat} onChange={setBodyMorning} />
-            </>
-          )}
-
-          <Pressable onPress={saveBody} style={({ pressed }) => [styles.sheetSave, pressed && styles.pressed]}>
-            <Text style={styles.sheetSaveText}>{busy ? 'Saving…' : 'Done'}</Text>
-          </Pressable>
-          <Pressable onPress={() => setSheet(null)}>
-            <Text style={styles.sheetCancel}>Cancel</Text>
-          </Pressable>
-        </ScrollView>
+      <Modal visible={sheet === 'cycle'} animationType="slide" onRequestClose={() => setSheet(null)} onDismiss={onSheetDismissed}>
+        {sheet === 'cycle' && (
+          <CycleDayOneScreen
+            onClose={() => setSheet(null)}
+            onSaved={() => { setSheet(null); onChanged(); }}
+            onOptOut={() => optOut('cycle')}
+          />
+        )}
       </Modal>
 
       <Modal visible={sheet === 'preferences'} animationType="slide" onRequestClose={() => setSheet(null)}>
@@ -463,60 +448,53 @@ export default function SetupCards({ state, onChanged }: Props) {
         )}
       </Modal>
 
-
-      {sheet === 'cycle' && (
-        <MarkerModal
-          defaultDate={todayDateString()}
-          cycleTrackingEnabled
-          onClose={() => setSheet(null)}
-          onSave={async input => {
-            await createMarker(input);
-            setSheet(null);
-            onChanged();
-          }}
-        />
-      )}
+      <ConfirmDialog
+        visible={confirm !== null}
+        title={confirm ? OPT_OUT_COPY[confirm].title : ''}
+        body="You can turn it on or off in Settings at any time."
+        onDone={() => setConfirm(null)}
+      />
     </View>
   );
 }
 
 /**
- * Wraps the onboarding preferences step so it saves and stamps the card done.
+ * Saves the times step and stamps its card done.
  *
- * Also carries the clock format and quiet hours, which used to exist only in
- * Settings. Quiet hours write their times only when enabled, matching
- * settings.tsx's handleToggleDND — dnd_start_time and dnd_end_time are nullable
- * and the edge function reads them as a pair.
+ * The clock format isn't asked any more: it's taken from the phone and saved,
+ * so every time shown afterwards matches what she's used to. Settings can
+ * still change it. Quiet hours write their times only when set, matching
+ * settings.tsx's handleToggleDND — dnd_start_time and dnd_end_time are
+ * nullable and the edge function reads them as a pair.
  */
-function TimesSheet({ initialTimeFormat, onClose, onSaved, onError }: {
-  initialTimeFormat: TimeFormat; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
+function TimesSheet({ stepLabel, progress, onClose, onSaved, onError }: {
+  stepLabel: string; progress: number; onClose: () => void; onSaved: () => void | Promise<void>; onError: (m: string) => void;
 }) {
   const { user } = useAuth();
-  // Seeded from the table's own defaults so the card is a confirm, not a blank
-  // form — check_in_settings defaults to 3 a day between 09:00 and 21:00.
+  // Seeded as a confirm, not a blank form: three a day between 09:00 and 21:00.
   const [perDay, setPerDay] = useState(3);
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('21:00');
-  const [timeFormat, setTimeFormat] = useState<TimeFormat>(initialTimeFormat);
-  const [dndEnabled, setDndEnabled] = useState(false);
-  // Same fallbacks Settings shows before anything is chosen.
-  const [dndStart, setDndStart] = useState('14:00');
-  const [dndEnd, setDndEnd] = useState('16:00');
+  const [quiet, setQuiet] = useState<TimeRange | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [timeFormat] = useState(deviceTimeFormat);
 
   const save = async () => {
-    if (!user) return;
+    if (!user || saving) return;
+    setSaving(true);
     const { error } = await saveCheckInSettings(user.id, {
       check_ins_per_day: perDay,
       window_start: start,
       window_end: end,
       time_format: timeFormat,
-      dnd_enabled: dndEnabled,
-      dnd_start_time: dndEnabled ? `${dndStart}:00` : null,
-      dnd_end_time: dndEnabled ? `${dndEnd}:00` : null,
+      dnd_enabled: quiet !== null,
+      dnd_start_time: quiet ? `${quiet.start}:00` : null,
+      dnd_end_time: quiet ? `${quiet.end}:00` : null,
       setup_times_confirmed_at: new Date().toISOString(),
     });
-    if (error) { onError('Could not save your hours. Try again.'); return; }
-    onSaved();
+    if (error) { onError('Could not save your hours. Try again.'); setSaving(false); return; }
+    await onSaved();
+    setSaving(false);
   };
 
   return (
@@ -525,20 +503,18 @@ function TimesSheet({ initialTimeFormat, onClose, onSaved, onError }: {
       windowStart={start}
       windowEnd={end}
       timeFormat={timeFormat}
-      dndEnabled={dndEnabled}
-      dndStart={dndStart}
-      dndEnd={dndEnd}
+      quiet={quiet}
       onUpdate={u => {
         if (u.checkInsPerDay !== undefined) setPerDay(u.checkInsPerDay);
         if (u.windowStart !== undefined) setStart(u.windowStart);
         if (u.windowEnd !== undefined) setEnd(u.windowEnd);
-        if (u.timeFormat !== undefined) setTimeFormat(u.timeFormat);
-        if (u.dndEnabled !== undefined) setDndEnabled(u.dndEnabled);
-        if (u.dndStart !== undefined) setDndStart(u.dndStart);
-        if (u.dndEnd !== undefined) setDndEnd(u.dndEnd);
+        if (u.quiet !== undefined) setQuiet(u.quiet);
       }}
       onNext={save}
-      onBack={onClose}
+      onClose={onClose}
+      stepLabel={stepLabel}
+      progress={progress}
+      saving={saving}
     />
   );
 }
@@ -546,6 +522,13 @@ function TimesSheet({ initialTimeFormat, onClose, onSaved, onError }: {
 const useStyles = makeAccentStyles(b => ({
   stack: { gap: 12, marginBottom: 24 },
   error: { fontSize: 13, color: '#f87171', lineHeight: 19 },
+
+  progress: { gap: 8 },
+  progressMeta: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressLabel: { fontSize: 11, color: '#8892a4', fontWeight: '600', letterSpacing: 0.8 },
+  progressBar: { height: 4, borderRadius: 2, backgroundColor: '#1e2533', overflow: 'hidden' },
+  progressFill: { height: 4, borderRadius: 2 },
+
   card: {
     backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533',
     borderLeftWidth: 3, borderRadius: 12, padding: 16, gap: 8,
@@ -553,28 +536,20 @@ const useStyles = makeAccentStyles(b => ({
   cardTitle: { fontSize: 15, fontWeight: '600', color: '#e2e8f0' },
   cardBody: { fontSize: 13.5, color: '#8892a4', lineHeight: 20 },
   cardActions: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 4 },
-  cardButton: { borderRadius: 9, paddingVertical: 10, paddingHorizontal: 16 },
-  cardButtonText: { fontSize: 14, fontWeight: '600', color: '#0a0c12' },
+  cardButton: { borderRadius: 9, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: b.fill },
+  cardButtonText: { fontSize: 14, fontWeight: '600', color: b.onFill },
   cardSecondary: { fontSize: 13, color: '#6b7a99' },
   pressed: { opacity: 0.7 },
 
   // paddingTop comes from useModalTopPadding.
   sheet: { padding: 24, paddingBottom: 60, gap: 10, backgroundColor: '#0a0c12', flexGrow: 1 },
   sheetTitle: { fontSize: 22, fontWeight: '600', color: '#e2e8f0', marginBottom: 12 },
-  sheetLabel: { fontSize: 11, color: '#6b7a99', letterSpacing: 0.9, marginTop: 14 },
   sheetToggleRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 22,
   },
   sheetToggleLabel: { fontSize: 15, color: '#e2e8f0', fontWeight: '500' },
   sheetHelper: { fontSize: 13, color: '#8892a4', lineHeight: 19, marginTop: 6 },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pill: { borderWidth: 1, borderColor: '#1e2533', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 13 },
-  pillActive: { borderColor: BODY_COLOR, backgroundColor: 'rgba(188,129,47,0.12)' },
-  pillDisabled: { opacity: 0.35 },
-  pillText: { fontSize: 13, color: '#8892a4' },
-  pillTextActive: { color: '#e2c08a' },
   sheetSave: { marginTop: 28, backgroundColor: b.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   sheetSaveText: { fontSize: 15, fontWeight: '600', color: b.onFill },
-  sheetCancel: { fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 14 },
 }));

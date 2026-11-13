@@ -1,236 +1,200 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, Text, View } from 'react-native';
 
-import { Toggle } from '@/components/settings/settings-primitives';
+import { DayBar, FieldLabel, FooterRow, Note, Segmented, SetupScreen } from '@/components/setup/setup-kit';
 import { PlatformPicker } from '@/components/shared/platform-picker';
-import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { makeAccentStyles } from '@/lib/accent-styles';
 import { dateToTimeString, timeStringToDate } from '@/lib/date-utils';
+import {
+  approxQuietCount, clampToWindow, defaultQuietHours, fitQuietHours, quietHoursProblem, toMinutes, type TimeRange,
+} from '@/lib/quiet-hours';
+import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 
 export interface CheckInPreferencesUpdate {
   checkInsPerDay?: number;
   windowStart?: string;
   windowEnd?: string;
-  timeFormat?: TimeFormat;
-  dndEnabled?: boolean;
-  dndStart?: string;
-  dndEnd?: string;
+  /** null removes quiet hours. */
+  quiet?: TimeRange | null;
 }
 
 interface CheckInPreferencesStepProps {
   checkInsPerDay: number;
   windowStart: string;
   windowEnd: string;
+  /** How times are shown. Setup takes this from the phone rather than asking. */
   timeFormat: TimeFormat;
-  dndEnabled: boolean;
-  dndStart: string;
-  dndEnd: string;
+  quiet: TimeRange | null;
   onUpdate: (updates: CheckInPreferencesUpdate) => void;
   onNext: () => void;
-  onBack: () => void;
+  onClose: () => void;
+  stepLabel: string;
+  progress: number;
+  saving?: boolean;
 }
 
-type PickerField = 'start' | 'end' | 'dndStart' | 'dndEnd';
+const MIN_WINDOW_MINUTES = 360;
 
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
-// Ported from the web app's CheckInPreferencesStep.tsx — same copy, same
-// 6-hour-minimum window validation. Mechanic swap: <input type="time"> has no
-// RN equivalent, so this uses @react-native-community/datetimepicker in
-// mode="time" (the same native module the age gate uses in mode="date").
-//
-// Since extended past that port with the two settings that answer the same
-// question and were reachable only from Settings: the 12/24-hour clock, and
-// quiet hours. Clock format comes first on the screen deliberately — every
-// other time below it is then shown the way the reader has just asked for, so
-// the choice demonstrates itself rather than being described. Quiet hours come
-// last because they are the exception to everything above them.
-//
-// The content scrolls now rather than sitting in a centred View: four sections
-// do not fit on a phone, and a vertically-centred layout that overflows pushes
-// its own buttons off the bottom of the screen with no way to reach them.
+/**
+ * When to check in, redesigned 2026-11-14.
+ *
+ * Four sections became one picture. A day bar shows waking hours, roughly
+ * where check-ins land and any quiet stretch. The clock-format question is
+ * gone (setup uses the phone's own setting; Settings can still change it), and
+ * quiet hours fold away behind one line because they're optional.
+ *
+ * Quiet hours can only sit inside waking hours: their pickers clamp to the
+ * window, and narrowing the window shrinks them to fit. See lib/quiet-hours.ts.
+ */
 export default function CheckInPreferencesStep({
-  checkInsPerDay,
-  windowStart,
-  windowEnd,
-  timeFormat,
-  dndEnabled,
-  dndStart,
-  dndEnd,
-  onUpdate,
-  onNext,
-  onBack,
+  checkInsPerDay, windowStart, windowEnd, timeFormat, quiet, onUpdate, onNext, onClose, stepLabel, progress, saving,
 }: CheckInPreferencesStepProps) {
   const styles = useStyles();
-  const [activePicker, setActivePicker] = useState<PickerField | null>(null);
+  const window = { start: windowStart, end: windowEnd };
+  const windowOk = toMinutes(windowEnd) - toMinutes(windowStart) >= MIN_WINDOW_MINUTES;
+  const quietProblem = quiet && windowOk ? quietHoursProblem(quiet, window) : null;
 
-  // Matches ActiveWindowSheet's rule for editing this later — reversed or too-short
-  // windows silently break circadian detection and can schedule a check-in before
-  // the window even opens.
-  const isWindowValid = timeToMinutes(windowEnd) - timeToMinutes(windowStart) >= 360;
-
-  const pickerValueFor = (field: PickerField): string => {
-    if (field === 'start') return windowStart;
-    if (field === 'end') return windowEnd;
-    return field === 'dndStart' ? dndStart : dndEnd;
+  // Changing waking hours carries quiet hours along, so the two can't drift
+  // apart. Only applied once the window is itself valid.
+  const setWindow = (next: TimeRange) => {
+    const update: CheckInPreferencesUpdate = { windowStart: next.start, windowEnd: next.end };
+    if (quiet && toMinutes(next.end) - toMinutes(next.start) >= MIN_WINDOW_MINUTES) update.quiet = fitQuietHours(quiet, next);
+    onUpdate(update);
   };
 
-  const handleTimePick = (field: PickerField) => (selectedDate: Date) => {
-    const value = dateToTimeString(selectedDate);
-    if (field === 'start') onUpdate({ windowStart: value });
-    else if (field === 'end') onUpdate({ windowEnd: value });
-    else if (field === 'dndStart') onUpdate({ dndStart: value });
-    else onUpdate({ dndEnd: value });
-  };
-
-  const timePicker = (field: PickerField) => activePicker === field && (
-    <PlatformPicker
-      style={styles.pickerWrap}
-      dividerColor="#334155"
-      mode="time"
-      value={timeStringToDate(pickerValueFor(field))}
-      onPick={handleTimePick(field)}
-      onClose={() => setActivePicker(null)}
-    />
-  );
+  const muted = quiet ? approxQuietCount(window, checkInsPerDay, quiet) : 0;
+  const legend = `Around ${checkInsPerDay} times a day, at different times.`
+    + (muted ? ' One may land in quiet hours. It will still be waiting when you open the app.' : " You'll see each one coming.");
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>Mind check-in preferences</Text>
+    <SetupScreen
+      stepLabel={stepLabel}
+      progress={progress}
+      title="When are you usually awake?"
+      lede="We'll only check in between these times."
+      onClose={onClose}
+      footer={(
+        <FooterRow
+          note="Times follow your phone's clock"
+          label="Continue"
+          onPress={onNext}
+          disabled={!windowOk || !!quietProblem}
+          busy={saving}
+        />
+      )}>
+      <DayBar window={window} checkIns={checkInsPerDay} quiet={quiet} timeFormat={timeFormat}>
+        <TimePair
+          left={{ label: 'Up by', value: windowStart }}
+          right={{ label: 'Winding down', value: windowEnd }}
+          timeFormat={timeFormat}
+          onChange={(side, v) => setWindow(side === 'left' ? { start: v, end: windowEnd } : { start: windowStart, end: v })}
+        />
+      </DayBar>
+      {!windowOk && <Note tone="error">Your waking hours need to be at least 6 hours, with winding down after waking up.</Note>}
 
-        <View style={styles.section}>
-          <Text style={styles.label}>How should times be shown?</Text>
-          <View style={styles.countRow}>
-            {([
-              { value: '12hr' as const, label: '12-hour' },
-              { value: '24hr' as const, label: '24-hour' },
-            ]).map(option => (
-              <Pressable
-                key={option.value}
-                onPress={() => onUpdate({ timeFormat: option.value })}
-                style={[styles.countButton, timeFormat === option.value && styles.countButtonActive]}>
-                <Text style={[styles.countButtonText, timeFormat === option.value && styles.countButtonTextActive]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
+      <FieldLabel>How many check-ins a day?</FieldLabel>
+      <Segmented
+        options={[2, 3, 4].map(n => ({ value: n, label: String(n) }))}
+        value={checkInsPerDay}
+        onChange={n => onUpdate({ checkInsPerDay: n })}
+      />
+      <Note>{legend}</Note>
+
+      {quiet ? (
+        <View style={styles.quietBox}>
+          <View style={styles.quietHead}>
+            <Text style={styles.quietTitle}>Quiet hours</Text>
+            <Pressable onPress={() => onUpdate({ quiet: null })} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.remove}>Remove</Text>
+            </Pressable>
           </View>
+          <TimePair
+            left={{ label: 'From', value: quiet.start }}
+            right={{ label: 'Until', value: quiet.end }}
+            timeFormat={timeFormat}
+            // Clamped as well as limited: Android's time dialog ignores
+            // minimum and maximum, so the limit is enforced on the value.
+            limit={window}
+            onChange={(side, v) => {
+              const t = clampToWindow(v, window);
+              onUpdate({ quiet: side === 'left' ? { start: t, end: quiet.end } : { start: quiet.start, end: t } });
+            }}
+          />
+          <Text style={styles.quietNote}>Inside your waking hours only. Check-ins still happen; you just aren&apos;t notified.</Text>
+          {quietProblem && <Note tone="error">{quietProblem}</Note>}
         </View>
+      ) : (
+        <Pressable onPress={() => onUpdate({ quiet: defaultQuietHours(window) })} disabled={!windowOk} accessibilityRole="button" hitSlop={6}>
+          <Text style={[styles.addQuiet, !windowOk && styles.addQuietOff]}>+ Add quiet hours</Text>
+        </Pressable>
+      )}
+    </SetupScreen>
+  );
+}
 
-        <View style={styles.section}>
-          <Text style={styles.label}>How many check-ins per day?</Text>
-          <View style={styles.countRow}>
-            {[2, 3, 4].map(num => (
-              <Pressable
-                key={num}
-                onPress={() => onUpdate({ checkInsPerDay: num })}
-                style={[styles.countButton, checkInsPerDay === num && styles.countButtonActive]}>
-                <Text style={[styles.countButtonText, checkInsPerDay === num && styles.countButtonTextActive]}>{num}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={styles.helper}>
-            We’ll spread these across your day. You can see when they’re coming and shift one if you need to.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>What are your waking hours?</Text>
-
-          <Text style={styles.sublabel}>I’m usually up by...</Text>
-          <Pressable onPress={() => setActivePicker('start')} style={styles.timeInput}>
-            <Text style={styles.timeInputText}>{formatWindowTime(windowStart, timeFormat)}</Text>
-          </Pressable>
-          {timePicker('start')}
-
-          <Text style={[styles.sublabel, styles.sublabelSpaced]}>I’m usually winding down by...</Text>
-          <Pressable onPress={() => setActivePicker('end')} style={styles.timeInput}>
-            <Text style={styles.timeInputText}>{formatWindowTime(windowEnd, timeFormat)}</Text>
-          </Pressable>
-          {timePicker('end')}
-
-          {!isWindowValid && <Text style={styles.errorText}>Your window needs to be at least 6 hours, with winding-down after waking-up.</Text>}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.toggleRow}>
-            <Text style={styles.labelInline}>Quiet hours</Text>
-            <Toggle value={dndEnabled} onValueChange={v => onUpdate({ dndEnabled: v })} />
-          </View>
-          <Text style={styles.helper}>
-            No notifications during these hours. Check-ins still appear when you open the app — nothing is skipped, you just aren’t interrupted.
-          </Text>
-
-          {dndEnabled && (
-            <>
-              <Text style={[styles.sublabel, styles.sublabelSpaced]}>From</Text>
-              <Pressable onPress={() => setActivePicker('dndStart')} style={styles.timeInput}>
-                <Text style={styles.timeInputText}>{formatWindowTime(dndStart, timeFormat)}</Text>
-              </Pressable>
-              {timePicker('dndStart')}
-
-              <Text style={[styles.sublabel, styles.sublabelSpaced]}>Until</Text>
-              <Pressable onPress={() => setActivePicker('dndEnd')} style={styles.timeInput}>
-                <Text style={styles.timeInputText}>{formatWindowTime(dndEnd, timeFormat)}</Text>
-              </Pressable>
-              {timePicker('dndEnd')}
-            </>
-          )}
-        </View>
-
-        <View style={styles.buttonRow}>
-          <Pressable onPress={onBack} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-            <Text style={styles.backButtonText}>Back</Text>
-          </Pressable>
-          <Pressable
-            onPress={onNext}
-            disabled={!isWindowValid}
-            style={({ pressed }) => [styles.nextButtonFlex, pressed && isWindowValid && styles.pressed]}>
-            <View style={[styles.nextButton, !isWindowValid && styles.nextButtonDisabled]}>
-              <Text style={[styles.nextButtonText, !isWindowValid && styles.nextButtonTextDisabled]}>Continue</Text>
-            </View>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+/**
+ * Two times side by side, sharing one picker that opens full width beneath
+ * them. Each field owning its own picker squeezed the iOS spinner into half
+ * the screen.
+ */
+export function TimePair({ left, right, timeFormat, limit, onChange }: {
+  left: { label: string; value: string };
+  /** Omit for a single time. */
+  right?: { label: string; value: string };
+  timeFormat: TimeFormat;
+  /** Limits the iOS spinner. Callers still clamp, for Android. */
+  limit?: TimeRange;
+  onChange: (side: 'left' | 'right', value: string) => void;
+}) {
+  const styles = useStyles();
+  const [open, setOpen] = useState<'left' | 'right' | null>(null);
+  const field = (side: 'left' | 'right', f: { label: string; value: string }) => (
+    <Pressable
+      onPress={() => setOpen(open === side ? null : side)}
+      accessibilityRole="button"
+      accessibilityLabel={`${f.label}, ${formatWindowTime(f.value, timeFormat)}`}
+      style={[styles.tf, open === side && styles.tfOpen]}>
+      <Text style={styles.tfLabel}>{f.label.toUpperCase()}</Text>
+      <Text style={styles.tfValue}>{formatWindowTime(f.value, timeFormat)}</Text>
+    </Pressable>
+  );
+  const current = open === 'left' ? left.value : open === 'right' && right ? right.value : null;
+  return (
+    <View style={styles.pairWrap}>
+      <View style={styles.pair}>
+        {field('left', left)}
+        {right ? field('right', right) : <View style={styles.tfSpacer} />}
+      </View>
+      {open && current && (
+        <PlatformPicker
+          mode="time"
+          value={timeStringToDate(current)}
+          is24Hour={timeFormat === '24hr'}
+          minimumDate={limit ? timeStringToDate(limit.start) : undefined}
+          maximumDate={limit ? timeStringToDate(limit.end) : undefined}
+          onPick={d => onChange(open, dateToTimeString(d))}
+          onClose={() => setOpen(null)}
+          dividerColor="#1e2533"
+        />
+      )}
+    </View>
   );
 }
 
 const useStyles = makeAccentStyles(b => ({
-  root: { flex: 1, backgroundColor: '#0f1117' },
-  content: {
-    maxWidth: 480, width: '100%', alignSelf: 'center',
-    paddingHorizontal: 24, paddingVertical: 32, flexGrow: 1, justifyContent: 'center',
-  },
-  heading: { fontSize: 24, fontWeight: '300', color: '#e2e8f0', marginBottom: 32 },
-  section: { marginBottom: 32 },
-  label: { fontSize: 15, color: '#cbd5e1', marginBottom: 16 },
-  labelInline: { fontSize: 15, color: '#cbd5e1' },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  countRow: { flexDirection: 'row', gap: 16 },
-  countButton: { flex: 1, paddingVertical: 16, borderRadius: 10, borderWidth: 1, borderColor: '#334155', backgroundColor: '#1a1d28', alignItems: 'center' },
-  countButtonActive: { backgroundColor: '#334155', borderColor: '#475569' },
-  countButtonText: { fontSize: 16, color: '#cbd5e1' },
-  countButtonTextActive: { color: '#e2e8f0', fontWeight: '600' },
-  helper: { fontSize: 13, color: '#94a3b8', marginTop: 12, lineHeight: 19 },
-  sublabel: { fontSize: 13, color: '#94a3b8', marginBottom: 8 },
-  sublabelSpaced: { marginTop: 16 },
-  timeInput: { paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#1a1d28', borderWidth: 1, borderColor: '#334155', borderRadius: 10 },
-  timeInputText: { fontSize: 15, color: '#e2e8f0' },
-  pickerWrap: { marginTop: 12, backgroundColor: '#1a1d28' },
-  errorText: { fontSize: 13, color: '#f87171', marginTop: 12, lineHeight: 19 },
-  buttonRow: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-  backButton: { paddingVertical: 12, paddingHorizontal: 24 },
-  backButtonText: { fontSize: 15, color: '#94a3b8' },
-  nextButtonFlex: { flex: 1 },
-  nextButton: { paddingVertical: 12, borderRadius: 10, backgroundColor: '#334155', alignItems: 'center' },
-  nextButtonDisabled: { backgroundColor: '#1e293b' },
-  nextButtonText: { fontSize: 15, fontWeight: '600', color: '#e2e8f0' },
-  nextButtonTextDisabled: { color: '#64748b' },
-  pressed: { opacity: 0.7 },
+  pairWrap: { gap: 8 },
+  pair: { flexDirection: 'row', gap: 8 },
+  tf: { flex: 1, backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#1e2533', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, gap: 2 },
+  tfOpen: { borderColor: b.fillAlt },
+  tfSpacer: { flex: 1 },
+  tfLabel: { fontSize: 11, color: '#6b7a99', fontWeight: '600', letterSpacing: 0.5 },
+  tfValue: { fontSize: 17, color: '#e2e8f0', fontVariant: ['tabular-nums'] },
+
+  addQuiet: { fontSize: 15, fontWeight: '600', color: b.text, paddingVertical: 6 },
+  addQuietOff: { color: '#4a5568' },
+  quietBox: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 14, padding: 14, gap: 10 },
+  quietHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  quietTitle: { fontSize: 15, fontWeight: '600', color: '#e2e8f0' },
+  remove: { fontSize: 13, color: '#6b7a99' },
+  quietNote: { fontSize: 12.5, color: '#8892a4', lineHeight: 18 },
 }));
