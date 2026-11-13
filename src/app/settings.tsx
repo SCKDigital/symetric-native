@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { useOutbox } from '@/lib/offline/outbox';
 import { useIsOnline } from '@/lib/offline/connectivity';
@@ -9,6 +10,7 @@ import { guardOnline } from '@/components/shared/offline-gate';
 import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
 
 import BodyTrackingSheet from '@/components/body/body-tracking-sheet';
+import NotificationTroubleshootSheet from '@/components/notification-troubleshoot-sheet';
 import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
 import { DeleteAllSheet, DeleteRangeSheet, ExportSheet, ResetBaselineSheet } from '@/components/settings/data-sheets';
@@ -36,8 +38,8 @@ import { AccentPicker } from '@/components/settings/accent-picker';
 import { useComfort } from '@/hooks/use-comfort';
 import { analyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled } from '@/lib/analytics';
 import { resolveActiveDomains } from '@/lib/domains';
-import { openPrivacyPolicy, openTermsOfUse } from '@/lib/legal-links';
-import { subscribeToPushNotifications, syncPushToken, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
+import { openAnalyticsPolicy, openPrivacyPolicy, openTermsOfUse } from '@/lib/legal-links';
+import { subscribeToPushNotifications, unsubscribeFromPushNotifications } from '@/lib/push-notifications';
 import { ALL_DOMAINS, MIN_DOMAINS } from '@/lib/settings-domains';
 import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib/supabase';
 import { saveCheckInSettings, saveProfile, setBaseline } from '@/lib/offline/queued-writes';
@@ -48,6 +50,7 @@ import { supabase } from '@/lib/supabase';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
+import { sendTestNotification } from '@/lib/test-notification';
 
 // Rebuilt against the web app's SettingsScreen.tsx. This screen previously
 // carried four of its controls (markers, body tracking, app lock, push) in a
@@ -70,48 +73,6 @@ import { makeAccentStyles } from '@/lib/accent-styles';
 
 type SheetType = 'activeWindow' | 'frequency' | 'bodyTracking' | 'dnd' | 'timeFormat'
   | 'export' | 'deleteRange' | 'deleteAll' | 'resetBaseline' | null;
-
-/**
- * Turns a failed send-test-notification call into something that says what
- * went wrong. It used to read "Failed to send. Try toggling notifications off
- * and on." for every possible cause — a device that was never registered, a
- * token the push service has retired, missing FCM/APNs credentials on the
- * server, and a plain network drop all produced the same sentence, and only
- * one of them was fixable by toggling anything.
- *
- * supabase-js reports a non-2xx response as a FunctionsHttpError whose
- * `context` is the raw Response, so the function's own error code is only
- * reachable by reading that body.
- */
-async function describeTestFailure(error: unknown): Promise<string> {
-  let code = '';
-  const context = (error as { context?: unknown })?.context;
-  if (context instanceof Response) {
-    try {
-      const body = await context.json();
-      code = String(body?.error ?? '');
-    } catch {
-      // Non-JSON body (a gateway error page, say) — fall through to the
-      // generic message below rather than showing HTML to the user.
-    }
-  }
-
-  if (code === 'no_subscription') {
-    return 'This device isn’t registered for notifications. Turn Push notifications off, then on again.';
-  }
-  if (code === 'DeviceNotRegistered' || code === 'subscription_expired') {
-    return 'This device’s registration has expired. Turn Push notifications off, then on again.';
-  }
-  if (code === 'InvalidCredentials' || code === 'MismatchSenderId') {
-    // Nothing the user can do — the app's own push credentials are wrong.
-    return `Notifications aren’t set up correctly for this build (${code}). This needs fixing in the app, not on your device.`;
-  }
-  if (code === 'MessageRateExceeded') {
-    return 'Too many test notifications just now. Wait a minute and try again.';
-  }
-  if (code) return `Failed to send: ${code}`;
-  return 'Failed to send. Check your connection and try again.';
-}
 
 function DomainPills({ activeDomains, onToggle }: { activeDomains: DomainType[]; onToggle: (d: DomainType) => void }) {
   const styles = useStyles();
@@ -222,6 +183,8 @@ export default function SettingsScreen() {
   const [showMoreExpanded, setShowMoreExpanded] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
   const [testPushResult, setTestPushResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [showTroubleshoot, setShowTroubleshoot] = useState(false);
+
 
   // Device-local, like PostHog's own opt-out it mirrors.
   const [analyticsOn, setAnalyticsOn] = useState(true);
@@ -329,6 +292,21 @@ export default function SettingsScreen() {
   // Whether the body times sheet opens with the morning check-in switched on
   // (it does when opened from the Morning check-in switch, below).
   const [bodySheetMorning, setBodySheetMorning] = useState(false);
+
+  // Today's tips link straight to the sheet they describe ("Export or delete",
+  // the morning body check-in), rather than dropping someone at the top of
+  // Settings to hunt for it. Consumed once, then cleared, so returning to
+  // this tab later doesn't reopen it.
+  const { open } = useLocalSearchParams<{ open?: string }>();
+  const router = useRouter();
+  useEffect(() => {
+    if (!open) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (open === 'export') setSheet('export');
+    if (open === 'bodyMorning') { setBodySheetMorning(true); setSheet('bodyTracking'); }
+    /* eslint-enable react-hooks/set-state-in-effect */
+    router.setParams({ open: undefined });
+  }, [open, router]);
   const openBodySheet = (withMorning: boolean) => {
     setBodySheetMorning(withMorning);
     setSheet('bodyTracking');
@@ -449,15 +427,7 @@ export default function SettingsScreen() {
     if (!user || testingPush) return;
     setTestingPush(true);
     setTestPushResult(null);
-    // Register this device's token first. A test that fails only because the
-    // stored token is stale is the single most common way this reports a
-    // problem the user cannot act on, and re-registering is what "toggle it
-    // off and on" was really doing.
-    await syncPushToken(user.id);
-    const { error } = await supabase.functions.invoke('send-test-notification');
-    setTestPushResult(error
-      ? { ok: false, message: await describeTestFailure(error) }
-      : { ok: true, message: 'Notification sent - check your device.' });
+    setTestPushResult(await sendTestNotification(user.id));
     setTestingPush(false);
   };
 
@@ -664,6 +634,13 @@ export default function SettingsScreen() {
                   <InlineMessage type={testPushResult.ok ? 'info' : 'error'}>{testPushResult.message}</InlineMessage>
                 </View>
               )}
+              {/* Always offered, not only after a failure: a send the push
+                  service accepted can still never appear on the phone. */}
+              <View style={styles.inlineWrap}>
+                <Pressable onPress={() => setShowTroubleshoot(true)} accessibilityRole="button" hitSlop={8}>
+                  <Text style={styles.openSettings}>Not arriving?</Text>
+                </Pressable>
+              </View>
             </>
           )}
         </SectionCard>
@@ -781,6 +758,14 @@ export default function SettingsScreen() {
                   }}
                 />}
               />
+              <RowDivider />
+              {/* Its own row because the one above is a switch: straight to
+                  the policy's analytics section, not the top of the policy. */}
+              <SettingsRow
+                icon={<DocumentIcon />} label="How usage analytics are used"
+                subtitle="What's sent, what never is, and where it goes"
+                right={<ChevronRight />} onPress={guardOnline(openAnalyticsPolicy, 'The privacy policy')}
+              />
             </>
           )}
           <RowDivider />
@@ -874,6 +859,9 @@ export default function SettingsScreen() {
         <BaselineModal domainLabel={pendingEnableLabel} onSubmit={handleBaselineSubmit} onClose={() => setPendingEnable(null)} />
       )}
 
+      {showTroubleshoot && (
+        <NotificationTroubleshootSheet onClose={() => setShowTroubleshoot(false)} />
+      )}
       {toastMessage && <Toast message={toastMessage} onDone={() => setToastMessage(null)} />}
     </SafeAreaView>
   );

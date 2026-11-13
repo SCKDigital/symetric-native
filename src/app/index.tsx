@@ -15,6 +15,7 @@ import AppointmentReminderCard, { daysUntil } from '@/components/today/appointme
 import BonusCheckInCard from '@/components/today/bonus-check-in-card';
 import { ComfortBanner, ComfortButton, ComfortSheet } from '@/components/today/comfort-controls';
 import SetupCards from '@/components/today/setup-cards';
+import TipCard from '@/components/today/tip-card';
 import { RescheduleListSheet, RescheduleTimePickerSheet } from '@/components/today/reschedule-sheets';
 import SleepCard from '@/components/today/sleep-card';
 import { useAuth } from '@/contexts/auth-context';
@@ -340,6 +341,16 @@ function TodayHome() {
         <ComfortBanner comfort={comfort} timeFormat={timeFormat} onTurnOff={comfort.disarm} />
 
         <SetupCards state={setupCards} onChanged={() => { setupCards.refresh(); refresh(); }} />
+
+        {/* One tip per app open, from the day after sign-up, once setup is
+            done. Never above a snoozed check-in, or in comfort mode. */}
+        <TipCard
+          setup={setupCards}
+          comfort={comfort}
+          hidden={!!snoozedCheckIn}
+          onAddEvent={() => { setMarkerError(null); setShowMarkerModal(true); }}
+          onCheckInNow={() => setOpenBonus(true)}
+        />
 
         {snoozedCheckIn && (
           <PendingCheckInCard

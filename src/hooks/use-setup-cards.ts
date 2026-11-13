@@ -44,8 +44,10 @@ export interface SetupCardState {
   /** Only ever true when cycle tracking was opted into at consent. Optional:
    *  it backfills Day-N context rather than enabling anything. */
   needsCycleDayOne: boolean;
-  /** App lock and comfort mode: the two things the app offers rather than
-   *  needs. Shown last, and dismissing counts as answering. */
+  /** Whether the old "Lock it, or quieten it" setup card is still unanswered.
+   *  The card is gone (those offers are tips now, tip-card.tsx); this is read
+   *  only so people who already answered it don't get the lock and comfort
+   *  tips as well. Not part of anyCardVisible. */
   needsPreferences: boolean;
   /** True while setup the app actually needs is still outstanding. Today reads
    *  this to suppress its "check in now" nudge, which is why the optional
@@ -152,7 +154,7 @@ export function useSetupCards(): SetupCardState {
         needsNotifications || needsMindDomains || needsTimes || needsBodySetup || needsCycleDayOne,
       anyCardVisible:
         needsNotifications || needsMindDomains || needsTimes || needsBodySetup
-        || needsCycleDayOne || needsPreferences,
+        || needsCycleDayOne,
       timeFormat: (settings?.time_format as TimeFormat | undefined) ?? '12hr',
       windowStart: (settings?.window_start as string | undefined)?.slice(0, 5) ?? EMPTY.windowStart,
       windowEnd: (settings?.window_end as string | undefined)?.slice(0, 5) ?? EMPTY.windowEnd,

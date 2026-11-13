@@ -1,21 +1,16 @@
 import { useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, Text, View } from 'react-native';
 
 import CheckInPreferencesStep from '@/components/onboarding/check-in-preferences-step';
 import DomainSelectionStep from '@/components/onboarding/domain-selection-step';
 import { BodySetupFlow } from '@/components/setup/body-setup-flow';
 import { CycleDayOneScreen } from '@/components/setup/cycle-day-one-screen';
 import { ConfirmDialog } from '@/components/setup/setup-kit';
-import { useModalTopPadding } from '@/components/shared/modal-keyboard-view';
-import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
-import { Toggle } from '@/components/settings/settings-primitives';
+import NotificationTestCard from '@/components/today/notification-test-card';
 import { useAuth } from '@/contexts/auth-context';
 import { useAccent } from '@/contexts/accent-context';
-import { useAppLockSettings } from '@/hooks/use-app-lock-settings';
-import { useComfort } from '@/hooks/use-comfort';
 import type { SetupCardState } from '@/hooks/use-setup-cards';
 import { makeAccentStyles } from '@/lib/accent-styles';
-import { PIN_LENGTH } from '@/lib/app-lock';
 import { deviceTimeFormat } from '@/lib/device-clock';
 import { BODY_COLOR } from '@/lib/domains';
 import { recordFirstCheckinsScheduledMilestone } from '@/lib/milestones';
@@ -49,8 +44,13 @@ import { type DomainType } from '@/lib/supabase';
  * which turns that tracking off exactly as the Settings switch does and says
  * so in a confirmation.
  *
- * The privacy-and-comfort card stays last and outside the count: it asks for
- * nothing the app needs.
+ * Turning reminders on is followed by a test notification and "Did it
+ * arrive?" (notification-test-card.tsx), so a phone that silently drops them
+ * is found now rather than after a missed day.
+ *
+ * Nothing else is asked on day one. App lock, comfort mode and the accent
+ * used to follow as a last "Lock it, or quieten it" card; they are now tips,
+ * shown one per app open from the next day (tip-card.tsx).
  *
  * No baseline questions. The app works its own baselines out from the first
  * fortnight of check-ins. Choosing domains seeds a neutral row per domain
@@ -65,7 +65,7 @@ interface Props {
 }
 
 type Step = 'domains' | 'times' | 'notifications' | 'body' | 'cycle';
-type Sheet = null | 'domains' | 'times' | 'body' | 'cycle' | 'preferences';
+type Sheet = null | 'domains' | 'times' | 'body' | 'cycle';
 type OptOut = 'body' | 'cycle';
 
 const OPT_OUT_COPY: Record<OptOut, { title: string; field: 'body_tracking_enabled' | 'cycle_tracking_enabled' }> = {
@@ -106,19 +106,17 @@ function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, 
 export default function SetupCards({ state, onChanged }: Props) {
   const styles = useStyles();
   const accent = useAccent();
-  const sheetPaddingTop = useModalTopPadding(60);
   const { user, profile, refreshProfile } = useAuth();
   const [sheet, setSheet] = useState<Sheet>(null);
-  const [pinSheet, setPinSheet] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Shown in the reminders step's place once reminders are on. Local, because
+  // the step itself is already recorded as done by then.
+  const [testingNotifications, setTestingNotifications] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<OptOut | null>(null);
   // iOS can't present a modal while another is still animating away, so the
   // confirmation waits for the sheet's onDismiss there.
   const pendingConfirm = useRef<OptOut | null>(null);
-
-  const comfort = useComfort();
-  const appLock = useAppLockSettings();
 
   // ── The steps, in order ───────────────────────────────────────────────────
   const steps: { key: Step; outstanding: boolean }[] = [
@@ -190,17 +188,14 @@ export default function SetupCards({ state, onChanged }: Props) {
         setBusy(false);
         return;
       }
+      // Before the ack, so the test card is already in place when the step
+      // drops out of the list — no frame of the next step in between.
+      setTestingNotifications(true);
       await refreshProfile();
     }
     await markAcked({ setup_notifications_ack_at: new Date().toISOString() });
     setBusy(false);
   };
-
-  // ── Privacy and comfort ───────────────────────────────────────────────────
-  // Both buttons ack. This card asks for nothing the app needs, so "Not now"
-  // has to be a real answer — a card that reappears after being declined is a
-  // nag, and this audience is being nagged by enough already.
-  const ackPreferences = () => markAcked({ setup_preferences_ack_at: new Date().toISOString() });
 
   // ── Mind domains ──────────────────────────────────────────────────────────
   const [pickedDomains, setPickedDomains] = useState<DomainType[]>([]);
@@ -254,23 +249,34 @@ export default function SetupCards({ state, onChanged }: Props) {
   };
 
   const cardsReady = !state.loading && state.anyCardVisible;
-  const showPreferences = cardsReady && current === null && state.needsPreferences;
+  // The test stands in for the reminders step, so the header keeps that
+  // step's number rather than jumping ahead while it's on screen.
+  const testIndex = steps.findIndex(s => s.key === 'notifications');
+  const showTest = testingNotifications && testIndex >= 0;
+  const shownIndex = showTest ? testIndex : done;
+  const showSteps = showTest || (cardsReady && current !== null);
 
   return (
-    <View style={(cardsReady && (current || showPreferences)) ? styles.stack : undefined}>
-      {cardsReady && current && (
+    <View style={showSteps ? styles.stack : undefined}>
+      {showSteps && (
         <>
           <View style={styles.progress}>
             <View style={styles.progressMeta}>
               <Text style={styles.progressLabel}>GETTING STARTED</Text>
-              <Text style={styles.progressLabel}>{done + 1} OF {total}</Text>
+              <Text style={styles.progressLabel}>{shownIndex + 1} OF {total}</Text>
             </View>
             <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${Math.round(((done + 0.5) / total) * 100)}%`, backgroundColor: accent.text }]} />
+              <View style={[styles.progressFill, { width: `${Math.round(((shownIndex + 0.5) / total) * 100)}%`, backgroundColor: accent.text }]} />
             </View>
           </View>
           {error && <Text style={styles.error}>{error}</Text>}
 
+          {showTest && <NotificationTestCard onDone={() => setTestingNotifications(false)} />}
+        </>
+      )}
+
+      {showSteps && !showTest && (
+        <>
           {current === 'domains' && (
             <SetupCard
               title="What do you want to track?"
@@ -321,19 +327,6 @@ export default function SetupCards({ state, onChanged }: Props) {
         </>
       )}
 
-      {/* Last, and only once every step is done. It asks for nothing the app
-          needs in order to work. */}
-      {showPreferences && (
-        <SetupCard
-          title="Lock it, or quieten it"
-          body="A PIN to open Symetric, and a mode that takes the brightness and the countdowns out of it. Both optional, both changeable later."
-          action="Take a look"
-          onPress={() => setSheet('preferences')}
-          onSecondary={ackPreferences}
-          secondaryLabel="Not now"
-        />
-      )}
-
       {/* ── Sheets ───────────────────────────────────────────────────────── */}
 
       <Modal visible={sheet === 'domains'} animationType="slide" onRequestClose={() => setSheet(null)}>
@@ -382,68 +375,6 @@ export default function SetupCards({ state, onChanged }: Props) {
             onClose={() => setSheet(null)}
             onSaved={() => { setSheet(null); onChanged(); }}
             onOptOut={() => optOut('cycle')}
-          />
-        )}
-      </Modal>
-
-      <Modal visible={sheet === 'preferences'} animationType="slide" onRequestClose={() => setSheet(null)}>
-        <ScrollView contentContainerStyle={[styles.sheet, { paddingTop: sheetPaddingTop }]}>
-          <Text style={styles.sheetTitle}>Lock it, or quieten it</Text>
-
-          <View style={styles.sheetToggleRow}>
-            <Text style={styles.sheetToggleLabel}>App lock</Text>
-            <Toggle
-              value={profile?.app_lock_enabled ?? false}
-              onValueChange={async on => {
-                if (on) { setPinSheet(true); return; }
-                try { await appLock.disable(); } catch { setError('Could not turn that off. Try again.'); }
-              }}
-            />
-          </View>
-          <Text style={styles.sheetHelper}>
-            A {PIN_LENGTH}-digit PIN every time you open the app. Worth it if your phone is ever handed around —
-            what you log here is the kind of thing you choose who sees.
-          </Text>
-
-          <View style={styles.sheetToggleRow}>
-            <Text style={styles.sheetToggleLabel}>Comfort mode</Text>
-            <Toggle value={comfort.standing} onValueChange={on => comfort.setStanding(on)} />
-          </View>
-          <Text style={styles.sheetHelper}>
-            One quiet colour, larger check-in text, no countdown. Leave it off if you like — there is a button on
-            this screen, top right, that turns it on for a couple of hours whenever a day calls for it.
-          </Text>
-
-          <View style={styles.sheetToggleRow}>
-            <Text style={styles.sheetToggleLabel}>Pause reminders with it</Text>
-            <Toggle value={comfort.pausesReminders} onValueChange={comfort.setPausesReminders} />
-          </View>
-          <Text style={styles.sheetHelper}>
-            Applies to the two-hour and rest-of-today versions from that button, not the switch above. Off means
-            the app still nudges you on a bad day — some people want the quiet, others would rather not lose the day
-            from their record.
-          </Text>
-          {comfort.error && <Text style={styles.error}>{comfort.error}</Text>}
-
-          <Pressable onPress={async () => { await ackPreferences(); setSheet(null); }}
-            style={({ pressed }) => [styles.sheetSave, pressed && styles.pressed]}>
-            <Text style={styles.sheetSaveText}>Done</Text>
-          </Pressable>
-        </ScrollView>
-
-        {/* Inside this Modal, not beside it. Two sibling Modals visible at once
-            is undefined on Android; a Modal rendered within another Modal's
-            children is the supported way to stack them. */}
-        {pinSheet && (
-          <AppLockPinSheet
-            mode="enable"
-            onClose={() => setPinSheet(false)}
-            onSetPin={async pin => {
-              try { await appLock.setPin(pin); } catch { setError('Could not set your PIN. Try again.'); }
-            }}
-            onDisable={async () => {
-              try { await appLock.disable(); } catch { setError('Could not turn that off. Try again.'); }
-            }}
           />
         )}
       </Modal>
@@ -541,15 +472,4 @@ const useStyles = makeAccentStyles(b => ({
   cardSecondary: { fontSize: 13, color: '#6b7a99' },
   pressed: { opacity: 0.7 },
 
-  // paddingTop comes from useModalTopPadding.
-  sheet: { padding: 24, paddingBottom: 60, gap: 10, backgroundColor: '#0a0c12', flexGrow: 1 },
-  sheetTitle: { fontSize: 22, fontWeight: '600', color: '#e2e8f0', marginBottom: 12 },
-  sheetToggleRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginTop: 22,
-  },
-  sheetToggleLabel: { fontSize: 15, color: '#e2e8f0', fontWeight: '500' },
-  sheetHelper: { fontSize: 13, color: '#8892a4', lineHeight: 19, marginTop: 6 },
-  sheetSave: { marginTop: 28, backgroundColor: b.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  sheetSaveText: { fontSize: 15, fontWeight: '600', color: b.onFill },
 }));

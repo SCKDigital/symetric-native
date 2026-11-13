@@ -6,6 +6,10 @@ import * as WebBrowser from 'expo-web-browser';
 
 export const PRIVACY_POLICY_URL = 'https://symetric.app/privacy';
 export const TERMS_OF_USE_URL = 'https://symetric.app/terms';
+/** The privacy policy's own section on usage analytics (section 14). The
+ *  anchor is the heading's slug, so renaming or renumbering that heading on
+ *  the website breaks this link. */
+export const ANALYTICS_POLICY_URL = 'https://symetric.app/privacy#14-analytics';
 
 export function openPrivacyPolicy() {
   return WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL);
@@ -13,4 +17,8 @@ export function openPrivacyPolicy() {
 
 export function openTermsOfUse() {
   return WebBrowser.openBrowserAsync(TERMS_OF_USE_URL);
+}
+
+export function openAnalyticsPolicy() {
+  return WebBrowser.openBrowserAsync(ANALYTICS_POLICY_URL);
 }
