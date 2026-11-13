@@ -94,13 +94,14 @@ export function buildCheckedNotFoundSection(result: CheckedNotFound): FlowSectio
   const caption = 'A null result is not proof of no connection - only that none was visible in this period, at this amount of data.';
   return {
     title: 'Compared, nothing found',
-    open: { html: `<p class="group-claim">${esc(claim)}</p>`, heightPt: 16 },
-    rows: result.pairs.map(p => ({
-      html: `<div class="group-standalone">
+    // The claim leads the first row rather than opening the section, so a
+    // continuation page doesn't print it again.
+    rows: result.pairs.map((p, i) => ({
+      html: `${i === 0 ? `<p class="group-claim">${esc(claim)}</p>` : ''}<div class="group-standalone">
         <span class="standalone-text">${esc(factorLabel(p.a))} and ${esc(factorLabel(p.b))}</span>
         <span class="standalone-meta">${p.overlap} days &middot; no relationship</span>
       </div>`,
-      heightPt: 16,
+      heightPt: 15 + (i === 0 ? 16 : 0),
     })),
     empty: { html: `<p class="group-claim">${esc(claim)}</p><p class="empty-muted">Every pair with enough overlapping days showed a relationship.</p>`, heightPt: 32 },
     footer: { html: `<p class="sleep-chart-caption">${esc(caption)}</p>`, heightPt: 14 },

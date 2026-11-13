@@ -12,7 +12,9 @@ const BAR_CHART_W = Math.floor((CONTENT_WIDTH - 12) / 2);
 const BAR_CHART_H = 80;
 const BAR_PAD_L = 60;
 const BAR_PAD_R = 8;
-const BAR_PAD_T = 4;
+// Room above the tallest bar for its value label, which sits 3pt above the
+// bar's top; at 4 it was clipped by the top of the svg.
+const BAR_PAD_T = 12;
 const BAR_PAD_B = 20;
 const BAR_PLOT_W = BAR_CHART_W - BAR_PAD_L - BAR_PAD_R;
 const BAR_PLOT_H = BAR_CHART_H - BAR_PAD_T - BAR_PAD_B;

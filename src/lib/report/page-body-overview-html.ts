@@ -1,10 +1,8 @@
-import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import type { PatternEvolution } from '@/lib/detection/pattern-evolution';
 import type { RareEvent } from '@/lib/detection/rare-events';
 import { buildEpisodeTimelineSection, buildRareEventsSection } from '@/lib/report/page2-findings-html';
 import { flowPages, textHeightPt, type FlowSection } from '@/lib/report/flow-pages';
 import { BODY_MAP_HEIGHT_PT, buildBodyMapHtml } from '@/lib/report/body-map-svg';
-import type { ChartMarker } from '@/lib/report/chart-coordinates';
 import { BODY_EVENTS } from '@/lib/body/constants';
 import { CONTENT_WIDTH, MARKER_TYPE_LABELS, theme } from '@/lib/report/theme';
 import type { EventProximityResult } from '@/lib/detection/event-proximity';
@@ -12,13 +10,11 @@ import type { BodyEventOccurrence, BodySiteFrequency } from '@/lib/report/types'
 import type { DetectedCluster } from '@/lib/supabase';
 import { addDays } from '@/lib/date-utils';
 
-interface BodyOverviewData {
+export interface BodyOverviewData {
   bodyEventOccurrences: BodyEventOccurrence[];
   bodySiteFrequency: BodySiteFrequency[];
   bodyFlaggedClusters: DetectedCluster[];
-  chartMarkers: ChartMarker[];
   dates: string[];
-  interventionImpacts: InterventionImpact[];
   bodyRareEvents: RareEvent[];
   bodyPatternEvolution: PatternEvolution[];
   /** Start of the report range, for marking sites that appeared part-way
@@ -50,7 +46,7 @@ const NEW_SITE_AFTER_DAYS = 14;
  * "has she been reacting to things since the new drug" is the question
  * actually asked about a medication in this population.
  */
-function buildEventProximitySection(results: EventProximityResult[]): FlowSection {
+export function buildEventProximitySection(results: EventProximityResult[]): FlowSection {
   const rows = results.map(r => {
     const eventLabel = BODY_EVENTS[r.eventType as keyof typeof BODY_EVENTS]?.label ?? r.eventType;
     const markerLabel = r.markerLabel || (MARKER_TYPE_LABELS[r.markerType] ?? r.markerType);
@@ -97,9 +93,20 @@ function fmtDay(d: string): string {
 // doesn't: a dated event table and a ranked site-frequency list for where
 // pain/instability occurred. Returns one body per sheet.
 export function buildBodyOverviewPages(data: BodyOverviewData): string[] {
+  const s = buildBodyOverviewSections(data);
+  // Map first: it is the page's one picture, and placed after the event
+  // table it was pushed to the next sheet, leaving half a page blank.
+  return flowPages(
+    [s.map, s.sites, s.events, s.episodes, s.proximity, s.rare],
+    data.sparklinesInline ? { html: data.sparklinesInline, heightPt: 60 } : undefined,
+  );
+}
+
+/** The Body Overview's sections, for this page and the basic report's. */
+export function buildBodyOverviewSections(data: Omit<BodyOverviewData, 'sparklinesInline'>) {
   const {
-    bodyEventOccurrences, bodySiteFrequency, bodyFlaggedClusters, chartMarkers, dates,
-    interventionImpacts, bodyRareEvents, bodyPatternEvolution, sparklinesInline,
+    bodyEventOccurrences, bodySiteFrequency, bodyFlaggedClusters, dates,
+    bodyRareEvents, bodyPatternEvolution,
     dateFrom, eventProximity,
   } = data;
   const small = theme.fontSize.small;
@@ -160,14 +167,19 @@ export function buildBodyOverviewPages(data: BodyOverviewData): string[] {
     rows: mapHtml ? [{ html: mapHtml, heightPt: BODY_MAP_HEIGHT_PT + 36 }] : [],
   };
 
-  // Map first: it is the page's one picture, and placed after the event
-  // table it was pushed to the next sheet, leaving half a page blank.
-  return flowPages([
-    mapSection,
-    sitesSection,
-    eventsSection,
-    buildEpisodeTimelineSection({ clusters: bodyFlaggedClusters, chartMarkers, dates, interventionImpacts }),
-    buildEventProximitySection(eventProximity),
-    buildRareEventsSection(bodyRareEvents, bodyPatternEvolution),
-  ], sparklinesInline ? { html: sparklinesInline, heightPt: 60 } : undefined);
+  return {
+    map: mapSection,
+    sites: sitesSection,
+    events: eventsSection,
+    // Body episodes only. The events and interventions are already listed,
+    // with their effects, in the Mind Overview's timeline; this used to print
+    // that whole list a second time.
+    episodes: {
+      ...buildEpisodeTimelineSection({ clusters: bodyFlaggedClusters, chartMarkers: [], dates, interventionImpacts: [] }),
+      title: 'Body episodes',
+      empty: undefined,
+    } as FlowSection,
+    proximity: buildEventProximitySection(eventProximity),
+    rare: buildRareEventsSection(bodyRareEvents, bodyPatternEvolution),
+  };
 }

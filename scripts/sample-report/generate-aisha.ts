@@ -105,7 +105,7 @@ async function main() {
   await generateReport({
     userId: USER_ID, userName: 'Aisha', dateFrom: DATE_FROM, dateTo: DATE_TO, rangeLabel: `Last ${N_DAYS} days`,
     clusters, appointmentId: APPOINTMENT_ID, bodyTrackingEnabled: true,
-    includeMind: true, includeBody: true, includeCycle: true, includeBodyDetail: true,
+    includeMind: true, includeBody: true, includeCycle: true, includeBodyDetail: true, reportVariant: (process.env.REPORT_VARIANT as 'basic') || undefined,
   });
   const html = (globalThis as { __reportHtml?: string }).__reportHtml;
   if (!html) throw new Error('generateReport finished without printing anything');

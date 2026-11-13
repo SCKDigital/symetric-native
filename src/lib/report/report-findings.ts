@@ -49,6 +49,23 @@ export interface UnifiedFinding {
   sortKey: number;
   domains: string[];
   kind: string;
+  /** True when a later section of the report sets this finding out in full
+   *  (the event timeline, rare events & pattern evolution, what moves with
+   *  what). Page 1 lists those only when they are firm, and points to the
+   *  sections for the rest: printing them twice put three pages in front of
+   *  the report's first chart. */
+  shownElsewhere: boolean;
+}
+
+/** A rare event's note, with domain keys ("pain_mechanical reached…")
+ *  replaced by the labels the rest of the report prints. */
+export function rareEventNote(ev: RareEvent): string {
+  let note = ev.clinical_note;
+  for (const d of ev.affected_domains as string[]) {
+    const label = DOMAIN_LABELS[d];
+    if (label) note = note.split(d).join(label);
+  }
+  return note;
 }
 
 const TIER_ORDER: Record<Tier, number> = { high: 0, moderate: 1, early: 2 };
@@ -65,8 +82,9 @@ function tierFromGrade(g: Grade): Tier {
   return 'early';
 }
 
-function toUnified(idPrefix: string, kind: string, f: PatternFinding): UnifiedFinding {
+function toUnified(idPrefix: string, kind: string, f: PatternFinding, shownElsewhere: boolean): UnifiedFinding {
   return {
+    shownElsewhere,
     id: `${idPrefix}:${f.id}`,
     tier: tierFromGrade(f.grade),
     headline: f.sentence,
@@ -144,6 +162,7 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
       sortKey: c.severity_score ?? 0,
       domains: c.domains_involved ?? [],
       kind: plainPatternHeadline(c).split(' - ')[1] ?? 'Pattern detected',
+      shownElsewhere: true, // event timeline
     });
   }
 
@@ -160,6 +179,7 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
       sortKey: c.n,
       domains: [c.domainA, c.domainB],
       kind: 'Domain connection',
+      shownElsewhere: true, // what moves with what
     });
   }
 
@@ -176,6 +196,7 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
       sortKey: r.instanceRate * 100,
       domains: [r.predictor as string, r.outcome as string],
       kind: 'Predictive relationship',
+      shownElsewhere: false,
     });
   }
 
@@ -194,6 +215,7 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
       sortKey: p.difference,
       domains: [p.domain],
       kind: 'Day-of-week pattern',
+      shownElsewhere: false,
     });
   }
 
@@ -208,6 +230,7 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
       sortKey: p.range,
       domains: [p.domain],
       kind: 'Time-of-day pattern',
+      shownElsewhere: false, // the time-of-day charts show at most two
     });
   }
 
@@ -219,10 +242,11 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
       id: `rare:${i}`,
       tier: highSeverity ? 'moderate' : 'early',
       headline: `${doms} - ${rareEventLabel(ev.event_type)}`,
-      statLine: ev.clinical_note,
+      statLine: rareEventNote(ev),
       sortKey: ev.frequency * 10,
       domains: ev.affected_domains as string[],
       kind: 'Rare event',
+      shownElsewhere: true,
     });
   }
 
@@ -237,6 +261,7 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
       sortKey: pe.change_magnitude,
       domains: [pe.domain],
       kind: patternEvolutionHeadline(pe),
+      shownElsewhere: true,
     });
   }
 
@@ -247,7 +272,7 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
   for (const f of interventionImpactFindings(data.interventionImpacts)) {
     const impact = impactByFindingId.get(f.id);
     const kind = impact ? `Event effect: ${impact.marker_label}, ${fmtShortDay(impact.marker_date)}` : 'Event effect';
-    findings.push(toUnified('med', kind, f));
+    findings.push(toUnified('med', kind, f, true)); // under its timeline entry
   }
 
   // 10 — Body patterns (deviations, evolution, rare events, time-of-day,
@@ -259,23 +284,23 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
   const bodyClustersForCards = bodyFlaggedClusters.filter(c => c.cluster_type === 'sustained_deviation' || c.cluster_type === 'rapid_cycling');
   clusterFindings(bodyFlaggedClusters).forEach((f, i) => {
     const kind = bodyClustersForCards[i]?.cluster_type === 'rapid_cycling' ? 'Rapid cycling' : 'Sustained deviation';
-    findings.push(toUnified('body', kind, f));
+    findings.push(toUnified('body', kind, f, true));
   });
   for (const f of patternEvolutionFindings(data.bodyPatternEvolution ?? [])) {
-    findings.push(toUnified('body', 'Evolving trend', f));
+    findings.push(toUnified('body', 'Evolving trend', f, true));
   }
   for (const f of rareEventFindings(data.bodyRareEvents ?? [], 'body')) {
-    findings.push(toUnified('body', 'Rare event', f));
+    findings.push(toUnified('body', 'Rare event', f, true));
   }
   for (const f of bodyTimeOfDayFindings(data.bodyTimeOfDayPatterns ?? [])) {
-    findings.push(toUnified('body', 'Time-of-day pattern', f));
+    findings.push(toUnified('body', 'Time-of-day pattern', f, false));
   }
   for (const f of bodyEventFrequencyFindings(data.bodyEventFrequencyPatterns ?? [])) {
-    findings.push(toUnified('body', 'Event frequency', f));
+    findings.push(toUnified('body', 'Event frequency', f, false));
   }
   for (const impact of data.bodyEventImpacts ?? []) {
     for (const f of bodyEventImpactFindings([impact])) {
-      findings.push(toUnified('body', `Cross-domain impact: after ${BODY_EVENTS[impact.eventType]?.label ?? impact.eventType}`, f));
+      findings.push(toUnified('body', `Cross-domain impact: after ${BODY_EVENTS[impact.eventType]?.label ?? impact.eventType}`, f, false));
     }
   }
 

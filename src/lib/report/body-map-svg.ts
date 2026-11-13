@@ -58,7 +58,7 @@ function figure(aspect: 'front' | 'back', layout: MarkerLayout[], countFor: (reg
  * patient's left on both views, like looking down at yourself, which is how
  * the app draws it and the opposite of a facing anatomical diagram.
  */
-export function buildBodyMapHtml(sites: BodySiteFrequency[]): string {
+export function buildBodyMapHtml(sites: BodySiteFrequency[], sideHtml?: string): string {
   if (sites.length === 0) return '';
 
   // A region logged from either view is one fact ("left knee, 6 days"), so it
@@ -85,7 +85,7 @@ export function buildBodyMapHtml(sites: BodySiteFrequency[]): string {
       <p class="body-map-note">Pain, instability and event sites logged in this period. Darker means logged on more days; an outlined hexagon was not logged.</p>
       <div class="body-map-key">${key}<span class="body-map-key-item"><span class="body-map-swatch" style="background:${UNLIT_FILL}; border-color:${UNLIT_STROKE};"></span>not logged</span></div>
       ${unplaced.length > 0 ? `<p class="body-map-note">Not on the map: ${unplaced.map(s => `${escapeHtml(s.label)} (${s.dayCount} day${s.dayCount !== 1 ? 's' : ''})`).join(', ')}.</p>` : ''}
-      <p class="body-map-note">Every site, with its first and last day, is listed below.</p>
+      ${sideHtml ?? '<p class="body-map-note">Every site, with its first and last day, is listed below.</p>'}
     </div>
   </div>`;
 }

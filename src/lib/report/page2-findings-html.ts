@@ -4,6 +4,7 @@ import { patternEvolutionHeadline, patternEvolutionStatLine } from '@/lib/report
 import type { ChartDomain, ChartMarker } from '@/lib/report/chart-coordinates';
 import { textHeightPt, type FlowSection } from '@/lib/report/flow-pages';
 import { periodTrendArrow, periodTrendColor, type DomainTrends } from '@/lib/report/period-trend';
+import { rareEventNote } from '@/lib/report/report-findings';
 import { renderSparklineSvg, sparklineMarkerXFraction, SPARKLINE_HEIGHT, SPARKLINE_WIDTH } from '@/lib/report/sparkline-svg';
 import { CONTENT_WIDTH, DOMAIN_LABELS, MARKER_TYPE_LABELS, theme } from '@/lib/report/theme';
 import type { InterventionImpact } from '@/lib/detection/intervention-impact';
@@ -80,7 +81,7 @@ export function computeMarkerDisplayNumbers(chartMarkers: ChartMarker[]): Map<nu
 
 /** Each label is about this wide (px); closer than this and two overlap. */
 const MARKER_LABEL_MIN_GAP_PX = 16;
-const MARKER_ROW_PT = 8;
+export const MARKER_ROW_PT = 8;
 
 /**
  * Stacks marker labels that would otherwise collide. Two markers a day apart
@@ -370,7 +371,7 @@ export function buildEpisodeTimelineSection(params: {
         <span class="timeline-dot-square" style="background:${clusterColor(c.cluster_type)};"></span>
         <span class="timeline-text">${esc(text)}</span>
       </div>`,
-        heightPt: textHeightPt(text, small, TIMELINE_TEXT_WIDTH_PT) + 3,
+        heightPt: textHeightPt(text, small, TIMELINE_TEXT_WIDTH_PT) + 1.5,
       };
     }
     const m = entry.marker;
@@ -392,8 +393,8 @@ export function buildEpisodeTimelineSection(params: {
       <div class="timeline-row">${dotHtml}<span class="timeline-text">${esc(text)}</span></div>
       ${impactText ? `<p class="impact-line">${esc(impactText)}</p>` : ''}
     </div>`,
-      heightPt: textHeightPt(text, small, TIMELINE_TEXT_WIDTH_PT) + 3
-        + (impactText ? textHeightPt(impactText, small, TIMELINE_TEXT_WIDTH_PT) + 3 : 0),
+      heightPt: textHeightPt(text, small, TIMELINE_TEXT_WIDTH_PT) + 1.5
+        + (impactText ? textHeightPt(impactText, small, TIMELINE_TEXT_WIDTH_PT) + 2 : 0),
     };
   });
 
@@ -416,15 +417,16 @@ export function buildRareEventsSection(rareEvents: RareEvent[], patternEvolution
     const domains = ev.affected_domains.length > 0 ? ev.affected_domains.map(d => DOMAIN_LABELS[d] ?? d).join(', ') : 'Multiple domains';
     const occurredText = ev.occurrence_dates.length > 0 ? `Occurred: ${ev.occurrence_dates.map(fmtDay).join(', ')}` : '';
     const title = `${domains} - rare event`;
+    const note = rareEventNote(ev);
     return {
       html: `<div class="rare-row">
       <div class="rare-header"><span class="rare-title">${esc(title)}</span><span class="rare-meta">${ev.frequency} occurrence${ev.frequency !== 1 ? 's' : ''}</span></div>
-      <p class="rare-body">${esc(ev.clinical_note)}</p>
+      <p class="rare-body">${esc(note)}</p>
       ${occurredText ? `<p class="rare-occurred">${esc(occurredText)}</p>` : ''}
       ${ev.consequence_pattern ? `<p class="rare-body">${esc(ev.consequence_pattern)}</p>` : ''}
     </div>`,
       heightPt: 6 + textHeightPt(title, label, CONTENT_WIDTH - 80) + 2
-        + textHeightPt(ev.clinical_note, small) + 2
+        + textHeightPt(note, small) + 2
         + (occurredText ? textHeightPt(occurredText, small) + 2 : 0)
         + (ev.consequence_pattern ? textHeightPt(ev.consequence_pattern, small) + 2 : 0),
     };

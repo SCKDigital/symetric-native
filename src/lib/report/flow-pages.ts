@@ -23,7 +23,7 @@ import { CONTENT_WIDTH, theme } from '@/lib/report/theme';
  *  the shared page header and footer, less a margin for estimate error.
  *  Fitted with scripts/report-layout/measure-report.mjs — re-run it before
  *  changing this. */
-export const PAGE_BODY_BUDGET_PT = 400;
+export const PAGE_BODY_BUDGET_PT = 425;
 
 export interface FlowRow {
   html: string;
@@ -50,7 +50,8 @@ export interface FlowSection {
 }
 
 const SECTION_GAP_PT = 9;
-const HEADING_PT = 22;
+// A section label renders 12.8–16.5pt plus its 3pt margin (measured, Noto Sans).
+const HEADING_PT = 18;
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -95,12 +96,22 @@ export function flowPages(sections: FlowSection[], lead?: FlowRow, budgetPt: num
     let started = false; // has any of this section been placed yet
     let onPage = false; // is it open on the current page
 
+    const footerPt = section.footer?.heightPt ?? 0;
+    // Height of rows i and i+1 together, with the footer if i+1 is the last.
+    const pairPt = (i: number) => rows[i].heightPt + rows[i + 1].heightPt + (i + 1 === rows.length - 1 ? footerPt : 0);
+
     rows.forEach((row, i) => {
       const isLast = i === rows.length - 1;
       const headingPt = section.title ? HEADING_PT : 0;
       const headerCost = onPage ? 0 : headingPt + (open?.heightPt ?? 0);
-      const footerCost = isLast && section.footer ? section.footer.heightPt : 0;
-      const need = headerCost + row.heightPt + footerCost;
+      const footerCost = isLast ? footerPt : 0;
+      let need = headerCost + row.heightPt + footerCost;
+      // No lone rows. A section doesn't open at the foot of a sheet with one
+      // row under its heading, and doesn't carry its last row alone onto a
+      // fresh sheet: either way the pair moves together.
+      if (rows.length >= 2 && !isLast && (!onPage || i === rows.length - 2)) {
+        need = Math.max(need, headerCost + pairPt(i));
+      }
 
       if (used > 0 && used + need > budgetPt) {
         if (onPage) parts.push(`${close}</div>`);

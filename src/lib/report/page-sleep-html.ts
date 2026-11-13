@@ -62,7 +62,9 @@ function label(domain: string): string {
 }
 
 const TABLE_HEADER_PT = 14;
-const TABLE_ROW_PT = 16;
+// Measured in Chrome under Noto Sans (the wider font the layout check
+// uses): a one-line table row renders 14.3pt.
+const TABLE_ROW_PT = 15;
 
 /** One page body per sheet: both charts, then every domain in both tables,
  *  continuing onto a second page when there are more than one holds. The

@@ -1,7 +1,7 @@
 import { buildCircadianBarChartSvg, buildDayOfWeekBarChartSvg } from '@/lib/report/bar-charts-svg';
 import { CORRELATION_MIN_ABS_R, CORRELATION_MIN_OVERLAP } from '@/lib/detection/compute-connection';
-import { DOMAIN_LABELS } from '@/lib/report/theme';
-import { flowPages, type FlowSection } from '@/lib/report/flow-pages';
+import { CONTENT_WIDTH, DOMAIN_LABELS, theme } from '@/lib/report/theme';
+import { flowPages, textHeightPt, type FlowSection } from '@/lib/report/flow-pages';
 import {
   groupClaimLine, groupEvidenceLine, groupHeadline, pairSentence,
   type CorrelationGroup, type CorrelationGrouping,
@@ -72,7 +72,9 @@ interface CycleSectionData {
 }
 
 const TABLE_HEADER_PT = 14;
-const TABLE_ROW_PT = 16;
+// Measured in Chrome under Noto Sans (the wider font the layout check
+// uses): a one-line table row renders 14.3pt.
+const TABLE_ROW_PT = 15;
 
 function cycleSection(title: string, results: CycleProximityResult[], nearHeading: string, otherHeading: string, note: string, lead = ''): FlowSection {
   return {
@@ -145,8 +147,6 @@ function buildCycleSections({ proximity, preDayOne, intervals }: CycleSectionDat
 
 /** Body factors are set in italics so a cross-system block is visible at a
  *  glance; sleep counts as neither and stays upright. */
-const STANDALONE_MAX_PAIRS = 4;
-
 function factorHtml(domain: string): string {
   const label = esc(factorLabel(domain));
   return isBodyDomain(domain) ? `<i>${label}</i>` : label;
@@ -248,11 +248,10 @@ export function buildContextConnectionsPages(data: ContextConnectionsData): stri
   const groupBlocksHtml = grouping?.groups.map(groupBlock).join('') ?? '';
   const standaloneHtml = grouping != null && grouping.pairs.length > 0
     ? `<p class="group-standalone-label">On their own</p>
-       ${grouping.pairs.slice(0, STANDALONE_MAX_PAIRS).map(pair => `<div class="group-standalone">
+       ${grouping.pairs.map(pair => `<div class="group-standalone">
          <span class="standalone-text">${esc(pairSentence(pair))}</span>
          <span class="standalone-meta">${pair.sampleSize} days &middot; ${esc(CONFIDENCE_COPY[pair.grade].short)}</span>
-       </div>`).join('')}
-       ${grouping.pairs.length > STANDALONE_MAX_PAIRS ? `<p class="overflow-note">${grouping.pairs.length - STANDALONE_MAX_PAIRS} further pair${grouping.pairs.length - STANDALONE_MAX_PAIRS !== 1 ? 's' : ''} not listed.</p>` : ''}`
+       </div>`).join('')}`
     : '';
 
   // Chains and standalone pairs are two different shapes of the same list —
@@ -281,21 +280,27 @@ export function buildContextConnectionsPages(data: ContextConnectionsData): stri
 
   const connectionsHtml = hasGrouped ? groupedHtml : fallbackHtml;
 
-  const firstPage = `
-    <div class="section-gap">
-      <p class="section-label">Time-based patterns</p>
-      ${timePatternsHtml}
-    </div>
+  // Estimated, like every flowed row: the group blocks sit in a half-width
+  // column, so their member lists wrap at half the page.
+  const halfWidth = CONTENT_WIDTH / 2 - 12;
+  const groupsPt = (grouping?.groups ?? []).reduce((sum, g) => sum + 34
+    + textHeightPt(g.members.map(factorLabel).join(' · '), theme.fontSize.small, halfWidth - 24)
+    + textHeightPt(groupClaimLine(g), theme.fontSize.small, halfWidth - 24)
+    + textHeightPt(groupEvidenceLine(g), 7, halfWidth - 24), 0);
+  const pairsPt = grouping != null && grouping.pairs.length > 0
+    ? 20 + grouping.pairs.reduce((sum, pair) => sum + 4 + textHeightPt(pairSentence(pair), theme.fontSize.small, (groupsPt > 0 ? halfWidth : CONTENT_WIDTH) - 80), 0)
+    : 0;
+  const connectionsPt = hasGrouped
+    ? (groupsPt > 0 && pairsPt > 0 ? Math.max(groupsPt, pairsPt) : groupsPt + pairsPt) + 24
+    : domainConnections.length === 0 ? 16 : 40 + domainConnections.length * 18;
 
-    <div class="section-gap">
-      <p class="section-label">What moves with what</p>
-      ${connectionsHtml}
-    </div>
-  `;
-
-  const rest = [
+  // All one flow: the cycle comparison and the pairs that showed nothing
+  // follow on the same sheet when there is room. On a sheet of their own the
+  // time patterns and connections left half of it blank.
+  return flowPages([
+    { title: 'Time-based patterns', rows: [{ html: timePatternsHtml, heightPt: strongest == null ? 16 : 120 }] },
+    { title: 'What moves with what', rows: [{ html: connectionsHtml, heightPt: connectionsPt }] },
     ...buildCycleSections({ proximity: cycleProximity, preDayOne, intervals: cycleIntervals }),
     ...(checkedNotFound ? [checkedNotFound] : []),
-  ];
-  return rest.length > 0 ? [firstPage, ...flowPages(rest)] : [firstPage];
+  ]);
 }

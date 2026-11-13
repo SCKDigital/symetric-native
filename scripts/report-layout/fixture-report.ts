@@ -3,7 +3,7 @@
 import * as fs from 'fs';
 
 import { buildReportDocument } from '@/lib/report/report-document';
-import { buildDomainSummaryHtml, buildPage1Pages } from '@/lib/report/page1-html';
+import { buildPage1Pages } from '@/lib/report/page1-html';
 import { buildPage2Pages, SPARKLINE_EXPLAINER_HTML } from '@/lib/report/page2-html';
 import { layOutSparklines } from '@/lib/report/page2-findings-html';
 import { buildSleepPages } from '@/lib/report/page-sleep-html';
@@ -152,7 +152,6 @@ const page1Input = {
 
 const pages = [
   ...buildPage1Pages(page1Input).map(bodyHtml => ({ sectionTitle: 'Executive Summary', bodyHtml })),
-  { sectionTitle: 'Domain Summary', bodyHtml: buildDomainSummaryHtml(page1Input) },
   ...buildPage2Pages({
     notesSection, chartMarkers, flaggedClusters: clusters, dates,
     interventionImpacts, rareEvents, patternEvolution, sparklinesInline: mindSparklines.inline,
@@ -195,7 +194,7 @@ const pages = [
         region: 'shoulder', side: i % 2 ? 'R' : 'L', label: `${i % 2 ? 'R' : 'L'} shoulder`, dayCount: 30 - i * 2,
         source: 'pain', firstSeen: dates[(i * 6) % 80], lastSeen: dates[80],
       })) as never[],
-      bodyFlaggedClusters: clusters, chartMarkers, dates, interventionImpacts,
+      bodyFlaggedClusters: clusters, dates,
       bodyRareEvents: rareEvents, bodyPatternEvolution: patternEvolution,
     } as never).map(bodyHtml => ({ sectionTitle: 'Body Overview', bodyHtml })),
   ...bodySparklines.pages.map(bodyHtml => ({ sectionTitle: 'Body Charts', bodyHtml })),

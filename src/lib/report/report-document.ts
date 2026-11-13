@@ -131,6 +131,7 @@ export function buildReportDocument(params: {
      starting on the next page. */
   .sleep-chart { margin: 6pt 0 2pt; page-break-inside: avoid; }
   .sleep-chart-title { font-weight: bold; font-size: ${fontSize.small}pt; color: ${colors.heading}; margin: 0 0 2pt; }
+  .deferred-note { font-size: ${fontSize.small}pt; color: ${colors.muted}; font-style: italic; line-height: 1.4; margin: 4pt 0 0; }
   .sleep-chart-caption { font-size: 7pt; color: ${colors.muted}; line-height: 1.35; margin: 1pt 0 0; }
 
   .group-block { border: 0.5pt solid ${colors.border}; border-left: 3pt solid ${colors.heading}; padding: 6pt 10pt; margin-bottom: 8pt; page-break-inside: avoid; }

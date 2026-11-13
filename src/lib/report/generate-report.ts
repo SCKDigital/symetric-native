@@ -19,10 +19,11 @@ import { isBodyDomain } from '@/lib/pattern-findings';
 import { fetchQuestionsForAppointment } from '@/lib/api/questions';
 import { fetchPatternReviewsForAppointment } from '@/lib/api/pattern-reviews';
 import { buildBodyChartDomains, buildChartCoordinates, computeDomainConnections, computeSleepConnections, type ChartDomain } from '@/lib/report/chart-coordinates';
+import { buildBasicReportPages } from '@/lib/report/basic-report';
 import { buildBodyOverviewPages } from '@/lib/report/page-body-overview-html';
 import { buildContextConnectionsPages } from '@/lib/report/page-context-connections-html';
 import { buildDataQualityHtml, buildMethodologyHtml } from '@/lib/report/page-data-quality-html';
-import { buildDomainSummaryHtml, buildPage1Pages, METHODOLOGY_PAGE_TOKEN } from '@/lib/report/page1-html';
+import { buildPage1Pages, METHODOLOGY_PAGE_TOKEN } from '@/lib/report/page1-html';
 import { buildPage2Pages, SPARKLINE_EXPLAINER_HTML } from '@/lib/report/page2-html';
 import { computeDomainTrends } from '@/lib/report/period-trend';
 import { buildSleepPages } from '@/lib/report/page-sleep-html';
@@ -75,6 +76,10 @@ export interface GenerateReportInput {
    *  chose) are left out; everything else on the body side still prints.
    *  Defaults off: those pages can run to three or four sheets. */
   includeBodyDetail?: boolean;
+  /** 'basic' is a summary sheet plus at most two sheets each of mind and
+   *  body, fitted by rank (see basic-report.ts); 'comprehensive', the
+   *  default, prints every entry. */
+  reportVariant?: 'basic' | 'comprehensive';
 }
 
 // Mirrors insights.tsx's buildBodyDays/bodyBaselineMap recipe, but scoped to
@@ -183,6 +188,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     includeMind = true,
     includeCycle = true,
     includeBodyDetail = false,
+    reportVariant = 'comprehensive',
   } = input;
   // Body content follows the include toggle when the caller sets one, and
   // otherwise whether the user tracks body at all.
@@ -562,9 +568,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     bodyEventOccurrences,
     bodySiteFrequency,
     bodyFlaggedClusters,
-    chartMarkers: coords.chartMarkers,
     dates: coords.dates,
-    interventionImpacts,
     bodyRareEvents,
     bodyPatternEvolution,
   }) : [];
@@ -610,11 +614,41 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     totalScheduled,
   });
 
+  if (reportVariant === 'basic') {
+    const basicPages = buildBasicReportPages({
+      page1: page1Input,
+      dates: coords.dates,
+      chartMarkers: coords.chartMarkers,
+      interventionImpacts,
+      sleepMedianHours,
+      mind: { chartDomains: coords.chartDomains, chartHasEnoughData: coords.chartHasEnoughData, flaggedClusters, rareEvents },
+      body: hasBodyContent ? {
+        dateFrom,
+        eventProximity: detectEventProximity(
+          (bodyEventsRaw ?? []) as unknown as { event_date: string; event_type: string }[],
+          markers,
+        ),
+        bodyEventOccurrences,
+        bodySiteFrequency,
+        bodyFlaggedClusters,
+        dates: coords.dates,
+        bodyRareEvents,
+        bodyPatternEvolution: [],
+        chartDomains: bodyChartDomains,
+        chartHasEnoughData: bodyChartHasEnoughData,
+        lineColor: BODY_COLOR,
+      } : null,
+    });
+    const basicHtml = buildReportDocument({ pages: basicPages, generationDate, dateFrom, dateTo });
+    const { printToFileAsync } = await import('expo-print');
+    const { uri } = await printToFileAsync({ html: basicHtml, base64: false });
+    return { uri };
+  }
+
   // Each list-bearing section is a run of pages now, as many as its entries
   // need, every one numbered (see flow-pages.ts).
   const pages = [
     ...page1Pages.map(bodyHtml => ({ sectionTitle: 'Executive Summary', bodyHtml })),
-    { sectionTitle: 'Domain Summary', bodyHtml: buildDomainSummaryHtml(page1Input) },
     ...page2Pages.map(bodyHtml => ({ sectionTitle: 'Mind Overview', bodyHtml })),
     // Charts follow the page that introduces them. Each one is its own
     // page in this list, so "Page 3 of 7" keeps matching the sheet it is
