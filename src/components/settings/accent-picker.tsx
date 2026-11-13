@@ -7,7 +7,7 @@ import { useAccentChoice } from '@/contexts/accent-context';
 /**
  * The accent picker.
  *
- * Three swatches inline rather than a row that opens a sheet, which is how
+ * Four swatches inline rather than a row that opens a sheet, which is how
  * every other choice in Settings works. The exception is deliberate: this is
  * the one setting whose effect is the screen you are looking at, and the whole
  * app repaints on the tap. Putting it behind a sheet would hide the result

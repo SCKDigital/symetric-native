@@ -1,5 +1,6 @@
-// The three accents the user can choose between, and the roles each one has
-// to fill.
+// The four accents the user can choose between, and the roles each one has
+// to fill. Slate is the default (see DEFAULT_ACCENT); the notes below on
+// porcelain describe why it was the default until 2026-11-14.
 //
 // ── Why this is a choice at all ────────────────────────────────────────────
 //
@@ -44,7 +45,7 @@
 // Data colours (DOMAIN_COLORS, BODY_COLOR) are a separate system and are not
 // in this file. See lib/domains.ts, and the one rule in docs/brand.md.
 
-export type AccentName = 'porcelain' | 'teal' | 'plum';
+export type AccentName = 'slate' | 'porcelain' | 'teal' | 'plum';
 
 /** Quieter versions of the accent roles, for comfort mode. Same hue, chroma
  *  and lightness pulled back, so the call to action stops being the brightest
@@ -94,6 +95,31 @@ export interface AccentTokens {
 }
 
 export const ACCENTS: Record<AccentName, AccentTokens> = {
+  // The default since 2026-11-14. A cool dark grey fill with a light label —
+  // the slate the onboarding screens were already drawn in, so the app now
+  // matches its own first screens. Like porcelain it has no hue to collide
+  // with a data colour, but it is the quieter of the two: the button is darker
+  // than its label rather than a bright block on a dark page.
+  //
+  // The text roles are NEUTRAL greys, not slate's usual blue-greys. Tailwind's
+  // slate-400 #94A3B8 measured dE 7.5 from the Sleep colour #7B9EB8, so every
+  // link would have read as Sleep data. #A6A8AB is 17 away.
+  slate: {
+    fill: '#334155',
+    onFill: '#E2E8F0',
+    // Also the Toggle's "on" track, so it has to separate from the off track
+    // #252b3b: a step lighter than the fill rather than a step darker.
+    fillAlt: '#475569',
+    text: '#A6A8AB',
+    textSoft: '#B4B6B9',
+    textFlat: '#96989C',
+    border: '#2D3748',
+    surface: '#10141C',
+    signIn: '#3B4A61',
+    tile: '#1E293B',
+    quiet: { fill: '#28303D', onFill: '#CBD5E1', text: '#8C8E92', border: '#232A36' },
+  },
+
   // A warm neutral. The fill is near-white with a near-black label, which is
   // why it is the only accent that inverts. `text` is a warm stone rather
   // than the fill's own off-white, so links stay distinguishable from prose.
@@ -155,21 +181,21 @@ export const ACCENTS: Record<AccentName, AccentTokens> = {
 };
 
 /** Stable order for the picker, and for anything that builds one style sheet
- *  per accent. Porcelain first because it is the default. */
-export const ACCENT_NAMES = ['porcelain', 'teal', 'plum'] as const;
+ *  per accent. Slate first because it is the default. */
+export const ACCENT_NAMES = ['slate', 'porcelain', 'teal', 'plum'] as const;
 
 /**
  * What the app is if nobody has chosen.
  *
- * Also what the *build-time* assets are painted with — the launcher icon, the
- * splash and the Android notification tint are baked into app.json and cannot
- * follow a runtime preference. Changing this constant without regenerating
- * those (scripts/make-icons.mjs) leaves the home screen wearing the old brand.
+ * NOT what the launcher icon is painted with any more: scripts/make-icons.mjs
+ * pins the icon tile to porcelain by name, so changing this constant leaves
+ * the icon, splash and store listing as they are.
  */
-export const DEFAULT_ACCENT: AccentName = 'porcelain';
+export const DEFAULT_ACCENT: AccentName = 'slate';
 
 /** Short labels for the Settings picker. */
 export const ACCENT_LABELS: Record<AccentName, string> = {
+  slate: 'Slate',
   porcelain: 'Porcelain',
   teal: 'Teal',
   plum: 'Plum',
@@ -177,9 +203,10 @@ export const ACCENT_LABELS: Record<AccentName, string> = {
 
 /** One line each, describing the colour rather than selling it. */
 export const ACCENT_DESCRIPTIONS: Record<AccentName, string> = {
-  porcelain: 'Warm off-white. The quietest of the three.',
+  slate: 'Cool dark grey. The quietest of the four.',
+  porcelain: 'Warm off-white. Bright buttons, no colour.',
   teal: 'The original. Matches the colour the PDF report uses for improvement.',
-  plum: 'Deep purple. The most colour of the three.',
+  plum: 'Deep purple. The most colour of the four.',
 };
 
 /** Narrows anything read back from the database. An unknown value — an older

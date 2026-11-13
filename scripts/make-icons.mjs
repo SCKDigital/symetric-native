@@ -48,13 +48,15 @@ const GRAD = logo.match(/<LinearGradient[^>]*x1="([\d.]+)" y1="([\d.]+)" x2="([\
 // icon you cannot read is worse than one that sits quietly. This also makes
 // the launcher icon and the in-app lockup the same tile for the first time.
 //
-// Resolved through DEFAULT_ACCENT rather than by taking the first `tile:` in
-// the file, so reordering the palette cannot silently repaint the icon.
-const DEFAULT_ACCENT = accents.split("DEFAULT_ACCENT: AccentName = '")[1].split("'")[0];
+// Pinned to porcelain's tile by name. This used to follow DEFAULT_ACCENT, but
+// when slate became the in-app default (2026-11-14) the launcher icon was
+// deliberately kept as it was: the icon is a brand decision of its own, and
+// changing it changes the store listing. To repaint it, change this name.
+const ICON_ACCENT = 'porcelain';
 // Sliced rather than matched: the block is delimited by its own indentation,
 // and a regex for that is harder to read than the two splits it replaces.
-const ACCENT_BLOCK = accents.split(`\n  ${DEFAULT_ACCENT}: {\n`)[1];
-if (!ACCENT_BLOCK) throw new Error(`no accent block for '${DEFAULT_ACCENT}' in accents.ts`);
+const ACCENT_BLOCK = accents.split(`\n  ${ICON_ACCENT}: {\n`)[1];
+if (!ACCENT_BLOCK) throw new Error(`no accent block for '${ICON_ACCENT}' in accents.ts`);
 const FILL = ACCENT_BLOCK.split('\n  },')[0].match(/tile: '(#[0-9A-Fa-f]{6})'/)[1];
 
 /** The mark alone, on a transparent ground, filling `scale` of the canvas. */

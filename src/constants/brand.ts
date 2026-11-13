@@ -32,7 +32,7 @@ export type { AccentName, AccentTokens, QuietTokens } from '@/constants/accents'
 /**
  * The default accent's tokens.
  *
- * Porcelain since 1.5.0. Before that the default was teal, and before 1.4.0
+ * Slate since 2026-11-14, porcelain from 1.5.0. Before that the default was teal, and before 1.4.0
  * it was #818cf8 — which was also DOMAIN_COLORS.mood, the same hex, so every
  * link and active label in the app was painted the colour that means Mood on
  * every chart. That is the mistake constants/accents.ts exists to stop

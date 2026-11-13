@@ -83,7 +83,7 @@ export function comfortTokens(accent: AccentTokens): ComfortTokens {
  * outside the React tree and so cannot read the context.
  *
  * A component should use `makeComfortStyles` or `useAccent()` instead. This
- * is porcelain's, and will be the wrong colour for anyone who has chosen
- * teal or plum.
+ * is slate's, and will be the wrong colour for anyone who has chosen another
+ * accent.
  */
 export const COMFORT_TOKENS: ComfortTokens = comfortTokens(ACCENTS[DEFAULT_ACCENT]);
