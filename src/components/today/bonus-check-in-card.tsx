@@ -33,12 +33,13 @@ function cooldownKey(userId: string) {
   return `symetric:quickMoodCooldown:${userId}`;
 }
 
+// Whole minutes, rounded up, until the last minute. A ticking "59m 55s" was
+// too wide for the row (it ran into the label) and a seconds counter is a
+// lot of motion for something nobody is waiting on.
 function formatTimeRemaining(ms: number): string {
   const totalSeconds = Math.ceil(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+  if (totalSeconds >= 60) return `${Math.ceil(totalSeconds / 60)} min`;
+  return `${totalSeconds}s`;
 }
 
 interface Props {
@@ -51,9 +52,14 @@ interface Props {
   /** Only forwarded to the edit modal, which shows each domain's baseline. */
   baselines?: Record<DomainType, number>;
   onLogged?: () => void;
+  /** Whether to draw the "Log a bonus mind check-in" row. Off for the app
+   *  session in which someone makes their first check-in, where Today's
+   *  "Check in now" card already does the same job. The sheet and the edit
+   *  row still work, because "Check in now" opens this component's sheet. */
+  showTrigger?: boolean;
 }
 
-export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, onForceOpenHandled, onLogged }: Props) {
+export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, onForceOpenHandled, onLogged, showTrigger = true }: Props) {
   const styles = useStyles();
   const sheetPaddingTop = useModalTopPadding(60);
   const { user, profile } = useAuth();
@@ -227,24 +233,26 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
 
   return (
     <>
-      <Pressable
-        onPress={() => {
-          if (isOnCooldown) return;
-          setNotes('');
-          setError('');
-          setModalOpen(true);
-        }}
-        accessibilityRole="button"
-        style={({ pressed }) => [styles.trigger, isOnCooldown && styles.triggerDisabled, pressed && !isOnCooldown && styles.pressed]}>
-        <Text style={styles.triggerText}>Log a bonus mind check-in</Text>
-        {isOnCooldown ? (
-          <Text style={styles.triggerMeta}>Available in {formatTimeRemaining(timeRemaining)}</Text>
-        ) : saved ? (
-          <Text style={styles.triggerSaved}>Saved</Text>
-        ) : (
-          <Text style={styles.triggerPlus}>+</Text>
-        )}
-      </Pressable>
+      {showTrigger && (
+        <Pressable
+          onPress={() => {
+            if (isOnCooldown) return;
+            setNotes('');
+            setError('');
+            setModalOpen(true);
+          }}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.trigger, isOnCooldown && styles.triggerDisabled, pressed && !isOnCooldown && styles.pressed]}>
+          <Text style={styles.triggerText}>Log a bonus mind check-in</Text>
+          {isOnCooldown ? (
+            <Text style={styles.triggerMeta}>Available in {formatTimeRemaining(timeRemaining)}</Text>
+          ) : saved ? (
+            <Text style={styles.triggerSaved}>Saved</Text>
+          ) : (
+            <Text style={styles.triggerPlus}>+</Text>
+          )}
+        </Pressable>
+      )}
 
       {bonusEditable && bonusCompletedAt && (
         <Pressable
@@ -326,24 +334,26 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
 
 const useStyles = makeAccentStyles(b => ({
   pressed: { opacity: 0.7 },
+  // gap + flexShrink on the label: without them the label and the right-hand
+  // meta ran into each other ("check-inAvailable in") on narrower phones.
   trigger: {
     borderWidth: 1, borderColor: '#1e2533', borderRadius: 12,
-    paddingVertical: 12, paddingHorizontal: 16, marginBottom: 12,
+    paddingVertical: 12, paddingHorizontal: 16, marginBottom: 12, gap: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   triggerDisabled: { opacity: 0.5 },
-  triggerText: { fontSize: 14, color: '#b8c4d8' },
-  triggerMeta: { fontSize: 12, color: '#9aabb8' },
-  triggerSaved: { fontSize: 12, color: b.text },
+  triggerText: { fontSize: 14, color: '#b8c4d8', flexShrink: 1 },
+  triggerMeta: { fontSize: 12, color: '#9aabb8', flexShrink: 0 },
+  triggerSaved: { fontSize: 12, color: b.text, flexShrink: 0 },
   triggerPlus: { fontSize: 18, color: '#64748b', lineHeight: 20 },
 
   editRow: {
     borderWidth: 1, borderColor: '#1e2533', borderRadius: 12,
-    paddingVertical: 12, paddingHorizontal: 16, marginTop: -4, marginBottom: 12,
+    paddingVertical: 12, paddingHorizontal: 16, marginTop: -4, marginBottom: 12, gap: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  editRowText: { fontSize: 14, color: b.text },
-  editRowMeta: { fontSize: 12, color: '#6b7690' },
+  editRowText: { fontSize: 14, color: b.text, flexShrink: 1 },
+  editRowMeta: { fontSize: 12, color: '#6b7690', flexShrink: 0 },
 
   sheet: { flex: 1, backgroundColor: '#0a0c12' },
   // paddingTop comes from useModalTopPadding.

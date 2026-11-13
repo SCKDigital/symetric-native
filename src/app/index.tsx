@@ -119,6 +119,29 @@ function TodayHome() {
     return () => sub.remove();
   }, [refresh]);
 
+  // Whether she had a check-in on record when this app session began. The
+  // bonus row only shows when she did. On the very first session, "Check in
+  // now" already offers the same thing, and the row appearing beside it, or
+  // straight after as "Available in 60 min", read as a second, different task.
+  // null until Today's first load, so the row doesn't flash in and out.
+  const [checkedInBeforeThisOpen, setCheckedInBeforeThisOpen] = useState<boolean | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!loading && checkedInBeforeThisOpen === null) setCheckedInBeforeThisOpen(hasEverCompletedCheckIn);
+  }, [loading, hasEverCompletedCheckIn, checkedInBeforeThisOpen]);
+
+  // A new session is a return from the BACKGROUND. 'active' alone also fires
+  // after iOS system dialogs, such as the notification permission prompt from
+  // setup, which would bring the row back mid-way through the first session.
+  useEffect(() => {
+    let previous = AppState.currentState;
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active' && previous === 'background') setCheckedInBeforeThisOpen(null);
+      previous = state;
+    });
+    return () => sub.remove();
+  }, []);
+
   // The appointment reminder, shown when one is within the next seven days —
   // the same rule the web app's TodayScreen applies — and the day-after
   // follow-up card. Failures are swallowed on purpose: these are FYI cards,
@@ -438,6 +461,7 @@ function TodayHome() {
           forceOpen={openBonus}
           onForceOpenHandled={() => setOpenBonus(false)}
           onLogged={refresh}
+          showTrigger={checkedInBeforeThisOpen === true}
         />
 
         {/* Body logging, in the web app's own order: the optional morning
