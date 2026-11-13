@@ -20,7 +20,7 @@ import { overlayClusters } from '@/lib/offline/overlays';
 import { useIsOnline } from '@/lib/offline/connectivity';
 import OfflineSnapshotNote from '@/components/shared/offline-snapshot-note';
 import { addDays, todayDateString } from '@/lib/date-utils';
-import { defaultRangeForPreset, loadSavedRange, saveRange, type PrepareRange } from '@/lib/prepare-range';
+import { defaultRangeForPreset, describeRangeForReport, loadSavedRange, saveRange, type PrepareRange } from '@/lib/prepare-range';
 import { buildPastVisits, type PastVisit } from '@/lib/past-visits';
 import { fetchMarkers } from '@/lib/queries/markers';
 import type { Appointment, DetectedCluster } from '@/lib/supabase';
@@ -123,6 +123,12 @@ export default function PrepareScreen() {
 
   const rangeClusters = allClusters.filter(c => c.start_date <= range.end && (c.ongoing || !c.end_date || c.end_date >= range.start));
   const mostRecentMarker = [...markers].sort((a, b) => b.marker_date.localeCompare(a.marker_date))[0] ?? null;
+  // Printed at the top of the report, so it names the appointment or event
+  // the range was started from.
+  const rangeLabel = describeRangeForReport(range, {
+    visit: range.preset === 'since_visit' ? pastVisits.find(v => v.date === range.start) : null,
+    marker: mostRecentMarker,
+  });
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -150,7 +156,7 @@ export default function PrepareScreen() {
 
             <QuestionsSection appointmentId={appointment.id} />
 
-            <GenerateReportSection clusters={rangeClusters} appointmentId={appointment.id} fromDate={range.start} toDate={range.end} />
+            <GenerateReportSection clusters={rangeClusters} appointmentId={appointment.id} fromDate={range.start} toDate={range.end} rangeLabel={rangeLabel} />
 
             <PostAppointmentSection appointment={appointment} onComplete={loadAppointment} />
           </>

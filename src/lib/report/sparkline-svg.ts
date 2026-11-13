@@ -14,8 +14,8 @@ import { CONTENT_WIDTH } from '@/lib/report/theme';
 // CONTENT_WIDTH is declared in — 0.75pt/px is the conversion both ways (see
 // page2-findings-html's own comment on this, where it first mattered).
 export const SPARKLINE_WIDTH = Math.round(CONTENT_WIDTH / 0.75);
-// Half-width variant for the two-column chart-page grid and the Sleep page's
-// side-by-side quality/duration charts. Matches .two-col's actual 12pt gap
+// Half-width variant for the Sleep page's side-by-side quality/duration
+// charts. (Chart pages are one column, full width, since November 2026.) Matches .two-col's actual 12pt gap
 // and CONTENT_WIDTH exactly, so a chart fills its chart-col instead of
 // stopping partway across it — this used to be derived from a leftover
 // portrait-era SPARKLINE_WIDTH (592px, sized for a 504pt-wide page) with a

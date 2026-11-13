@@ -92,11 +92,6 @@ export const MARKER_TYPE_LABELS: Record<string, string> = {
   cycle_phase: 'Cycle day 1',
 };
 
-// Deliberately mind-only, unlike DOMAIN_LABELS above — every body domain is
-// a severity scale (higher = worse), matching the web app's own choice to
-// pass a `() => true` override function into body sparkline rendering
-// rather than merge body domains into this mind-specific Set. Keeping that
-// as a per-call override (see buildDomainSparklineSectionHtml's
-// isLowerBetterFn param) means a future body domain addition gets the
-// correct direction automatically, with no Set update needed here.
-export const LOWER_IS_BETTER = new Set(['anxiety', 'irritability', 'sensory_sensitivity']);
+// Which way is worse for a domain lives in lib/domain-polarity.ts
+// (higherIsWorse). This file used to keep its own mind-only set, which fell
+// out of step with it.

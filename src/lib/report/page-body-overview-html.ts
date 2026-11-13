@@ -1,10 +1,12 @@
 import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import type { PatternEvolution } from '@/lib/detection/pattern-evolution';
 import type { RareEvent } from '@/lib/detection/rare-events';
-import { buildEpisodeTimelineHtml, buildRareEventsSectionHtml } from '@/lib/report/page2-findings-html';
+import { buildEpisodeTimelineSection, buildRareEventsSection } from '@/lib/report/page2-findings-html';
+import { flowPages, textHeightPt, type FlowSection } from '@/lib/report/flow-pages';
+import { BODY_MAP_HEIGHT_PT, buildBodyMapHtml } from '@/lib/report/body-map-svg';
 import type { ChartMarker } from '@/lib/report/chart-coordinates';
 import { BODY_EVENTS } from '@/lib/body/constants';
-import { MARKER_TYPE_LABELS } from '@/lib/report/theme';
+import { CONTENT_WIDTH, MARKER_TYPE_LABELS, theme } from '@/lib/report/theme';
 import type { EventProximityResult } from '@/lib/detection/event-proximity';
 import type { BodyEventOccurrence, BodySiteFrequency } from '@/lib/report/types';
 import type { DetectedCluster } from '@/lib/supabase';
@@ -31,27 +33,14 @@ interface BodyOverviewData {
   sparklinesInline: string;
 }
 
-// Capped the same way EpisodeTimeline/RareEventsSection are, for the same
-// overflow reason (the web app's Page3BodyOverview.tsx carries a KNOWN GAP
-// comment about this being the busiest page in the report). The unbounded
-// part of that gap — the sparklines, which grew with the number of tracked
-// domains and had no cap at all — is handled now: they are paginated onto
-// their own pages by layOutSparklines. These two caps stay, because a table
-// of every event ever logged is a different problem from a chart per domain.
-const BODY_EVENT_MAX_ENTRIES = 2;
-const SITE_MAX_ENTRIES = 3;
 /** A site first seen more than this many days into the range is flagged as
  *  having appeared during the period rather than run through it. */
 const NEW_SITE_AFTER_DAYS = 14;
-/** This page carries more sections than any other — an event table, a site
- *  list, intervention proximity, a timeline and rare events — so it gets a
- *  tighter rare-event cap than Mind Overview. Every list says what it is not
- *  showing. */
-const BODY_RARE_MAX_ENTRIES = 2;
-/** Capped for the same page-budget reason as the event and site lists above —
- *  the measured layout check puts this page closest to its sheet. */
-const PROXIMITY_MAX_ENTRIES = 2;
 
+// Nothing on this page is capped any more. It used to show two events, three
+// sites, two proximity rows and two rare events, each with "N not shown"
+// beneath — this was the busiest page in the report. Every list now runs in
+// full, at full width, onto continuation pages (see flow-pages.ts).
 
 /**
  * Events counted either side of a medication or therapy change.
@@ -61,31 +50,37 @@ const PROXIMITY_MAX_ENTRIES = 2;
  * "has she been reacting to things since the new drug" is the question
  * actually asked about a medication in this population.
  */
-function buildEventProximityHtml(results: EventProximityResult[]): string {
-  if (results.length === 0) return '';
-  const rows = results.slice(0, PROXIMITY_MAX_ENTRIES).map(r => {
+function buildEventProximitySection(results: EventProximityResult[]): FlowSection {
+  const rows = results.map(r => {
     const eventLabel = BODY_EVENTS[r.eventType as keyof typeof BODY_EVENTS]?.label ?? r.eventType;
     const markerLabel = r.markerLabel || (MARKER_TYPE_LABELS[r.markerType] ?? r.markerType);
-    return `<tr>
+    return {
+      html: `<tr>
       <td>${esc(eventLabel)}</td>
       <td>${esc(markerLabel)}, ${esc(fmtDay(r.markerDate))}</td>
       <td class="center">${r.before}</td>
       <td class="center">${r.after}</td>
       <td class="center">${r.change > 0 ? '+' : ''}${r.change}</td>
-    </tr>`;
-  }).join('');
-
-  return `<div class="section-gap">
-    <p class="section-label">Events around a medication or therapy change</p>
-    <table class="domain-table">
+    </tr>`,
+      heightPt: textHeightPt(`${markerLabel}, ${fmtDay(r.markerDate)}`, theme.fontSize.small, 220) + 4,
+    };
+  });
+  const note = 'Counts of logged events either side of the change, on the same 21-day window the domain comparison uses. Counts only - too few events to test, and nothing here establishes cause.';
+  return {
+    title: 'Events around a medication or therapy change',
+    rows,
+    open: {
+      html: `<table class="domain-table">
       <thead><tr>
         <th>Event</th><th>Change</th>
         <th class="center">21 days before</th><th class="center">21 days after</th><th class="center">Difference</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <p class="empty-muted chart-note">Counts of logged events either side of the change, on the same 21-day window the domain comparison uses. Counts only - too few events to test, and nothing here establishes cause.</p>
-  </div>`;
+      <tbody>`,
+      heightPt: 14,
+    },
+    close: '</tbody></table>',
+    footer: { html: `<p class="empty-muted chart-note">${esc(note)}</p>`, heightPt: textHeightPt(note) + 10 },
+  };
 }
 
 function esc(s: string): string {
@@ -97,86 +92,82 @@ function fmtDay(d: string): string {
 }
 
 // Ported from the web app's lib/report/sections/Page3BodyOverview.tsx
-// ("Body Overview") — the body counterpart to Page 2's Mind Overview: same
-// sparkline + event timeline + rare-events shape, reusing page2-findings-
-// html.ts's already-generic section builders (BODY_COLOR + `() => true`
-// passed for the sparkline color/isLowerBetterFn — every body domain is a
-// severity scale, see theme.ts's LOWER_IS_BETTER comment), plus two things
-// body has and mind doesn't: a dated event table and a ranked site-frequency
-// list for where pain/instability occurred. Domain averages live on Page 1
-// alongside the mind table (Page 1 itself stays mind-only for now — see
-// generate-report.ts's header comment for that deferral).
-export function buildBodyOverviewHtml(data: BodyOverviewData): string {
+// ("Body Overview") — the body counterpart to Mind Overview: the same
+// timeline and rare-events sections, plus two things body has and mind
+// doesn't: a dated event table and a ranked site-frequency list for where
+// pain/instability occurred. Returns one body per sheet.
+export function buildBodyOverviewPages(data: BodyOverviewData): string[] {
   const {
     bodyEventOccurrences, bodySiteFrequency, bodyFlaggedClusters, chartMarkers, dates,
     interventionImpacts, bodyRareEvents, bodyPatternEvolution, sparklinesInline,
     dateFrom, eventProximity,
   } = data;
+  const small = theme.fontSize.small;
 
-  const shownEvents = bodyEventOccurrences.slice(0, BODY_EVENT_MAX_ENTRIES);
-  const olderEventCount = bodyEventOccurrences.length - shownEvents.length;
-
-  const shownSites = bodySiteFrequency.slice(0, SITE_MAX_ENTRIES);
-  const olderSiteCount = bodySiteFrequency.length - shownSites.length;
-
-  const eventTableHtml = shownEvents.length === 0
-    ? `<p class="empty-muted">No events logged in this period.</p>`
-    : `
+  const eventsSection: FlowSection = {
+    title: 'Notable body events',
+    rows: bodyEventOccurrences.map(ev => {
+      const detail = [ev.detail, ev.context].filter(Boolean).join(' · ') || '-';
+      return {
+        html: `
+        <div class="event-table-row">
+          <span class="event-col-date">${esc(fmtDay(ev.date))}</span>
+          <span class="event-col-type">${esc(ev.label)}</span>
+          <span class="event-col-detail">${esc(detail)}</span>
+        </div>`,
+        heightPt: Math.max(textHeightPt(detail, small, CONTENT_WIDTH - 186), textHeightPt(ev.label, small, 130)) + 7,
+      };
+    }),
+    open: {
+      html: `
       <div class="event-table-header-row">
         <span class="event-col-date-h">Date</span>
         <span class="event-col-type-h">Event</span>
         <span class="event-col-detail-h">Context</span>
-      </div>
-      ${shownEvents.map(ev => `
-        <div class="event-table-row">
-          <span class="event-col-date">${esc(fmtDay(ev.date))}</span>
-          <span class="event-col-type">${esc(ev.label)}</span>
-          <span class="event-col-detail">${esc([ev.detail, ev.context].filter(Boolean).join(' · ') || '-')}</span>
-        </div>`).join('')}
-      ${olderEventCount > 0 ? `<p class="overflow-note">${olderEventCount} earlier event${olderEventCount !== 1 ? 's' : ''} not shown.</p>` : ''}
-    `;
+      </div>`,
+      heightPt: 14,
+    },
+    empty: { html: `<p class="empty-muted">No events logged in this period.</p>`, heightPt: 16 },
+  };
 
-  const siteListHtml = shownSites.length === 0
-    ? `<p class="empty-muted">No sites logged in this period.</p>`
-    : `
-      ${shownSites.map(site => {
-        // A site first reported well into the period is a joint recruited
-        // during it, not one that has hurt throughout — the distinction a
-        // ranked day-count erases, and the one that matters for a
-        // hypermobility picture.
-        const appearedLate = site.firstSeen > addDays(dateFrom, NEW_SITE_AFTER_DAYS);
-        return `
+  const sitesSection: FlowSection = {
+    title: 'Pain & instability sites',
+    rows: bodySiteFrequency.map(site => {
+      // A site first reported well into the period is a joint recruited
+      // during it, not one that has hurt throughout — the distinction a
+      // ranked day-count erases, and the one that matters for a
+      // hypermobility picture.
+      const appearedLate = site.firstSeen > addDays(dateFrom, NEW_SITE_AFTER_DAYS);
+      return {
+        html: `
         <div class="site-row">
           <span class="site-label">${esc(site.label)}${appearedLate ? ' <strong>new</strong>' : ''}</span>
           <span class="site-dates">${esc(fmtDay(site.firstSeen))} to ${esc(fmtDay(site.lastSeen))}</span>
           <span class="site-count">${site.dayCount} day${site.dayCount !== 1 ? 's' : ''}</span>
-        </div>`;
-      }).join('')}
-      ${olderSiteCount > 0 ? `<p class="overflow-note">${olderSiteCount} more region${olderSiteCount !== 1 ? 's' : ''} not shown.</p>` : ''}
-    `;
+        </div>`,
+        heightPt: 18,
+      };
+    }),
+    empty: { html: `<p class="empty-muted">No sites logged in this period.</p>`, heightPt: 16 },
+  };
 
-  return `
-    ${sparklinesInline}
+  // The app's "where it shows up" heatmap, front and back, above the list it
+  // summarises. Absent when no site was logged; the list's own empty state
+  // says so.
+  const mapHtml = buildBodyMapHtml(bodySiteFrequency);
+  const mapSection: FlowSection = {
+    title: 'Where it shows up',
+    rows: mapHtml ? [{ html: mapHtml, heightPt: BODY_MAP_HEIGHT_PT + 36 }] : [],
+  };
 
-    <div class="two-col">
-      <div class="chart-col">
-        <div class="section-gap">
-          <p class="section-label">Notable body events</p>
-          ${eventTableHtml}
-        </div>
-
-        <div class="section-gap">
-          <p class="section-label">Pain &amp; instability sites</p>
-          ${siteListHtml}
-        </div>
-      </div>
-      <div class="chart-col">
-        ${buildEpisodeTimelineHtml({ clusters: bodyFlaggedClusters, chartMarkers, dates, interventionImpacts, showMarkerNumbers: true })}
-
-        ${buildEventProximityHtml(eventProximity)}
-
-        ${buildRareEventsSectionHtml(bodyRareEvents, bodyPatternEvolution, BODY_RARE_MAX_ENTRIES)}
-      </div>
-    </div>
-  `;
+  // Map first: it is the page's one picture, and placed after the event
+  // table it was pushed to the next sheet, leaving half a page blank.
+  return flowPages([
+    mapSection,
+    sitesSection,
+    eventsSection,
+    buildEpisodeTimelineSection({ clusters: bodyFlaggedClusters, chartMarkers, dates, interventionImpacts }),
+    buildEventProximitySection(eventProximity),
+    buildRareEventsSection(bodyRareEvents, bodyPatternEvolution),
+  ], sparklinesInline ? { html: sparklinesInline, heightPt: 60 } : undefined);
 }

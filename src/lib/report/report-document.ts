@@ -86,6 +86,7 @@ export function buildReportDocument(params: {
   .name-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2pt; }
   .patient-name { font-weight: bold; font-size: ${fontSize.patientName}pt; color: ${colors.heading}; }
   .subtitle { font-size: ${fontSize.label}pt; color: ${colors.muted}; margin: 0 0 8pt; }
+  .report-period { font-weight: bold; font-size: ${fontSize.body}pt; color: ${colors.heading}; margin: 2pt 0 3pt; }
   .section-label { font-weight: bold; font-size: ${fontSize.sectionHeading}pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.7pt; padding-bottom: 3pt; margin: 0 0 3pt; border-bottom: 0.5pt solid ${colors.border}; }
   .section-label-row { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 3pt; margin: 0 0 3pt; border-bottom: 0.5pt solid ${colors.border}; }
   .section-label-row .section-label { padding-bottom: 0; margin: 0; border-bottom: none; }
@@ -110,6 +111,11 @@ export function buildReportDocument(params: {
   .pattern-card-title { font-weight: bold; font-size: ${fontSize.label}pt; color: ${colors.heading}; }
   .pattern-card-tier { font-weight: bold; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.4pt; flex-shrink: 0; }
   .pattern-card-stat { font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.35; }
+  .finding-row { display: flex; align-items: baseline; gap: 6pt; padding: 1.5pt 0; border-bottom: 0.5pt solid ${colors.border}; font-size: ${fontSize.small}pt; }
+  .finding-row .dot { display: inline-block; width: 6pt; height: 6pt; border-radius: 1.5pt; flex-shrink: 0; }
+  .finding-text { flex: 1; color: ${colors.heading}; line-height: 1.35; }
+  .finding-stat { color: ${colors.muted}; }
+  .finding-tier { font-weight: bold; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.4pt; flex-shrink: 0; }
 
   .discuss-item { display: flex; align-items: flex-start; gap: 8pt; margin-bottom: 2pt; }
   .discuss-bullet { display: inline-flex; align-items: center; justify-content: center; width: 16pt; height: 16pt; border-radius: 8pt; background: ${colors.heading}; color: #fff; font-weight: bold; font-size: 7pt; flex-shrink: 0; }
@@ -145,22 +151,28 @@ export function buildReportDocument(params: {
 
   .character-row { display: flex; gap: 8pt; font-size: ${fontSize.small}pt; padding: 1.5pt 0; border-bottom: 0.5pt solid ${colors.border}; }
   .character-date { width: 44pt; color: ${colors.muted}; flex-shrink: 0; }
-  .character-symptom { width: 130pt; color: ${colors.heading}; flex-shrink: 0; }
+  .character-symptom { width: 180pt; color: ${colors.heading}; flex-shrink: 0; }
   .character-tags { flex: 1; color: ${colors.body}; }
 
   .spark-stack { position: relative; margin-bottom: 2pt; }
   .spark-cell { margin-bottom: 2pt; }
   .spark-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1pt; font-size: ${fontSize.label}pt; }
   .spark-meta { font-size: 7pt; color: ${colors.muted}; }
+  /* Above the marker lines, which run the full height of the stack and
+     otherwise strike through the domain name and its figures. */
+  .spark-header > span { position: relative; z-index: 1; background: #fff; }
   .spark-no-data { width: 100%; height: 18pt; background: #F9FAFB; display: flex; align-items: center; justify-content: center; font-style: italic; font-size: 7pt; color: ${colors.muted}; }
   .spark-axis { display: flex; justify-content: space-between; font-size: 6.5pt; color: ${colors.muted}; margin-top: 8pt; }
   .marker-line { position: absolute; top: 0; bottom: 0; width: 0.75pt; background: ${colors.teal}; opacity: 0.5; }
   .marker-number { position: absolute; bottom: -8pt; width: 11pt; margin-left: -5.5pt; text-align: center; font-weight: bold; font-size: 6.5pt; color: ${colors.teal}; }
+  .marker-key { display: flex; flex-wrap: wrap; column-gap: 14pt; row-gap: 2pt; margin-top: 6pt; padding-top: 4pt; border-top: 0.5pt solid ${colors.border}; font-size: 7pt; color: ${colors.muted}; }
+  .marker-key-item { display: inline-flex; align-items: baseline; gap: 4pt; white-space: nowrap; }
+  .marker-key-num { font-weight: bold; color: ${colors.teal}; }
 
   .timeline-row { display: flex; align-items: flex-start; margin-bottom: 2pt; }
   .timeline-dot-square { width: 8pt; height: 8pt; border-radius: 1pt; opacity: 0.7; margin-top: 1pt; margin-right: 6pt; flex-shrink: 0; display: inline-block; }
   .timeline-dot-circle { width: 8pt; height: 8pt; border-radius: 4pt; background: ${colors.teal}; opacity: 0.7; margin-top: 1pt; margin-right: 6pt; flex-shrink: 0; display: inline-block; }
-  .timeline-dot-numbered { width: 10pt; height: 10pt; border-radius: 5pt; background: ${colors.teal}; color: #fff; display: inline-flex; align-items: center; justify-content: center; margin-right: 6pt; flex-shrink: 0; font-weight: bold; font-size: 6pt; }
+  .timeline-dot-numbered { min-width: 10pt; height: 10pt; padding: 0 2.5pt; border-radius: 5pt; background: ${colors.teal}; color: #fff; display: inline-flex; align-items: center; justify-content: center; margin-right: 6pt; flex-shrink: 0; font-weight: bold; font-size: 6pt; }
   .timeline-text { font-size: ${fontSize.small}pt; color: ${colors.body}; flex: 1; }
   .impact-line { font-style: italic; font-size: ${fontSize.small}pt; color: ${colors.muted}; margin: 0 0 3pt 14pt; }
 
@@ -169,6 +181,7 @@ export function buildReportDocument(params: {
   .rare-title { font-weight: bold; font-size: ${fontSize.label}pt; color: ${colors.heading}; }
   .rare-meta { font-size: ${fontSize.small}pt; color: ${colors.muted}; }
   .rare-body { font-size: ${fontSize.small}pt; color: ${colors.body}; line-height: 1.4; margin: 0 0 2pt; }
+  .rare-occurred { font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.4; margin: 0 0 2pt; }
 
   .event-table-header-row { display: flex; border-bottom: 1pt solid ${colors.heading}; padding-bottom: 2pt; margin-bottom: 1pt; }
   .event-table-row { display: flex; border-bottom: 0.5pt solid ${colors.border}; padding: 3pt 0; }
@@ -179,6 +192,15 @@ export function buildReportDocument(params: {
   .event-col-detail { flex: 1; font-size: ${fontSize.small}pt; color: ${colors.muted}; }
   .event-col-detail-h { flex: 1; font-weight: bold; font-size: 7pt; color: ${colors.muted}; text-transform: uppercase; letter-spacing: 0.5pt; }
 
+  .body-map-row { display: flex; align-items: flex-start; gap: 22pt; page-break-inside: avoid; }
+  .body-map-fig { display: flex; flex-direction: column; align-items: center; gap: 2pt; }
+  .body-map-caption { margin: 0; font-weight: bold; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.5pt; color: ${colors.muted}; }
+  .body-map-sides { display: flex; justify-content: space-between; width: 100%; font-size: 6pt; color: ${colors.muted}; letter-spacing: 0.3pt; }
+  .body-map-notes { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6pt; padding-top: 14pt; }
+  .body-map-note { margin: 0; font-size: ${fontSize.small}pt; color: ${colors.muted}; line-height: 1.45; }
+  .body-map-key { display: flex; flex-wrap: wrap; gap: 4pt 12pt; font-size: 7pt; color: ${colors.muted}; }
+  .body-map-key-item { display: inline-flex; align-items: center; gap: 4pt; }
+  .body-map-swatch { display: inline-block; width: 9pt; height: 9pt; border: 1pt solid; }
   .site-row { display: flex; justify-content: space-between; padding: 3pt 0; border-bottom: 0.5pt solid ${colors.border}; }
   .site-label { font-size: ${fontSize.small}pt; color: ${colors.body}; flex: 1; }
   .site-dates { font-size: 7pt; color: ${colors.muted}; margin-right: 10pt; }

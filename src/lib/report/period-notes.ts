@@ -1,4 +1,6 @@
 import { dateToString } from '@/lib/date-utils';
+import { CONTENT_WIDTH, theme } from '@/lib/report/theme';
+import { textHeightPt, type FlowSection } from '@/lib/report/flow-pages';
 
 // What she wrote at the time.
 //
@@ -17,10 +19,9 @@ import { dateToString } from '@/lib/date-utils';
 //
 // Notes are never analysed, scored or searched for keywords. They are
 // reproduced verbatim, dated, and ordered so the ones attached to something
-// the report already flagged come first.
-
-const MAX_NOTES = 8;
-const MAX_LENGTH = 220;
+// the report already flagged come first. All of them, in full: a report for a
+// stated period shows that period, and they run onto continuation pages
+// rather than being cut (see flow-pages.ts).
 
 export interface PeriodNote {
   date: string;
@@ -43,8 +44,7 @@ export interface PeriodNotesInput {
 function clean(text: unknown): string | null {
   if (typeof text !== 'string') return null;
   const trimmed = text.trim();
-  if (trimmed.length === 0) return null;
-  return trimmed.length > MAX_LENGTH ? `${trimmed.slice(0, MAX_LENGTH - 1)}…` : trimmed;
+  return trimmed.length === 0 ? null : trimmed;
 }
 
 /**
@@ -79,7 +79,7 @@ export function buildPeriodNotes(input: PeriodNotesInput): { notes: PeriodNote[]
     return b.date.localeCompare(a.date);
   });
 
-  return { notes: collected.slice(0, MAX_NOTES), total: collected.length };
+  return { notes: collected, total: collected.length };
 }
 
 function esc(s: string): string {
@@ -90,34 +90,28 @@ function fmtDay(d: string): string {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function noteRow(n: PeriodNote): string {
-  return `<div class="note-row">
+const NOTE_TEXT_WIDTH_PT = CONTENT_WIDTH - 56;
+
+function noteRow(n: PeriodNote): { html: string; heightPt: number } {
+  return {
+    html: `<div class="note-row">
     <span class="note-date">${esc(fmtDay(n.date))}${n.notable ? ' <strong>&bull;</strong>' : ''}</span>
     <span class="note-text">${esc(n.text)}</span>
-  </div>`;
+  </div>`,
+    heightPt: textHeightPt(n.text, theme.fontSize.small, NOTE_TEXT_WIDTH_PT) + 5,
+  };
 }
 
-export function buildPeriodNotesHtml(result: { notes: PeriodNote[]; total: number }): string {
-  if (result.notes.length === 0) return '';
-  const hidden = result.total - result.notes.length;
-
-  // Two columns past five notes — the landscape page has the width, and a
-  // notable-first/newest-within-group list reads fine split left-then-right
-  // the same way the weekly completion table does.
-  const rows = result.notes.length > 5
-    ? (() => {
-      const mid = Math.ceil(result.notes.length / 2);
-      return `<div class="two-col">
-        <div class="chart-col">${result.notes.slice(0, mid).map(noteRow).join('')}</div>
-        <div class="chart-col">${result.notes.slice(mid).map(noteRow).join('')}</div>
-      </div>`;
-    })()
-    : result.notes.map(noteRow).join('');
-
-  return `<div class="section-gap">
-    <p class="section-label">Written at the time</p>
-    ${rows}
-    ${hidden > 0 ? `<p class="overflow-note">${hidden} further note${hidden !== 1 ? 's' : ''} not shown.</p>` : ''}
-    <p class="sleep-chart-caption">The patient's own words, entered with the check-in and reproduced unedited. A bullet marks a day this report already flags elsewhere. Not analysed or scored.</p>
-  </div>`;
+/** Null when nothing was written in the period. */
+export function buildPeriodNotesSection(result: { notes: PeriodNote[]; total: number }): FlowSection | null {
+  if (result.notes.length === 0) return null;
+  const caption = "The patient's own words, entered with the check-in and reproduced unedited. A bullet marks a day this report already flags elsewhere. Not analysed or scored.";
+  return {
+    title: 'Written at the time',
+    rows: result.notes.map(noteRow),
+    footer: {
+      html: `<p class="sleep-chart-caption">${esc(caption)}</p>`,
+      heightPt: textHeightPt(caption, 7) + 2,
+    },
+  };
 }

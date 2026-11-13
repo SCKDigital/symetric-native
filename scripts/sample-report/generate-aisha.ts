@@ -103,9 +103,9 @@ async function main() {
 
   // expo-print is stubbed to hand the document back rather than print it.
   await generateReport({
-    userId: USER_ID, userName: 'Aisha', dateFrom: DATE_FROM, dateTo: DATE_TO,
+    userId: USER_ID, userName: 'Aisha', dateFrom: DATE_FROM, dateTo: DATE_TO, rangeLabel: `Last ${N_DAYS} days`,
     clusters, appointmentId: APPOINTMENT_ID, bodyTrackingEnabled: true,
-    includeMind: true, includeBody: true, includeCycle: true,
+    includeMind: true, includeBody: true, includeCycle: true, includeBodyDetail: true,
   });
   const html = (globalThis as { __reportHtml?: string }).__reportHtml;
   if (!html) throw new Error('generateReport finished without printing anything');

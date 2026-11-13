@@ -1,6 +1,7 @@
 import { buildCircadianBarChartSvg, buildDayOfWeekBarChartSvg } from '@/lib/report/bar-charts-svg';
 import { CORRELATION_MIN_ABS_R, CORRELATION_MIN_OVERLAP } from '@/lib/detection/compute-connection';
 import { DOMAIN_LABELS } from '@/lib/report/theme';
+import { flowPages, type FlowSection } from '@/lib/report/flow-pages';
 import {
   groupClaimLine, groupEvidenceLine, groupHeadline, pairSentence,
   type CorrelationGroup, type CorrelationGrouping,
@@ -57,7 +58,8 @@ interface ContextConnectionsData {
   cycleIntervals: (CompletedCycle & { usable: boolean })[];
   /** Pairs that were compared and showed nothing — rendered by its own
    *  module, passed in as HTML. */
-  checkedNotFoundHtml: string;
+  /** buildCheckedNotFoundSection's output; null when nothing was compared. */
+  checkedNotFound: FlowSection | null;
 }
 
 interface CycleSectionData {
@@ -69,16 +71,14 @@ interface CycleSectionData {
   intervals: (CompletedCycle & { usable: boolean })[];
 }
 
-function cycleTable(results: CycleProximityResult[], nearHeading: string, otherHeading: string, maxRows: number): string {
-  const rows = results.slice(0, maxRows).map(r => `<tr>
-    <td>${esc(factorLabel(r.domain))}</td>
-    <td class="center">${r.nearMean.toFixed(1)}</td>
-    <td class="center">${r.otherMean.toFixed(1)}</td>
-    <td class="center">${r.difference > 0 ? '+' : ''}${r.difference.toFixed(1)}</td>
-    <td class="center">${r.nearDays}/${r.otherDays}</td>
-  </tr>`).join('');
-  const hidden = results.length - Math.min(results.length, maxRows);
-  return `<table class="domain-table">
+const TABLE_HEADER_PT = 14;
+const TABLE_ROW_PT = 16;
+
+function cycleSection(title: string, results: CycleProximityResult[], nearHeading: string, otherHeading: string, note: string, lead = ''): FlowSection {
+  return {
+    title,
+    open: {
+      html: `${lead}<table class="domain-table">
       <thead><tr>
         <th>Factor</th>
         <th class="center">${nearHeading}</th>
@@ -86,9 +86,22 @@ function cycleTable(results: CycleProximityResult[], nearHeading: string, otherH
         <th class="center">Difference</th>
         <th class="center">Days compared</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    ${hidden > 0 ? `<p class="overflow-note">${hidden} further factor${hidden !== 1 ? 's' : ''} with a smaller difference not listed.</p>` : ''}`;
+      <tbody>`,
+      heightPt: TABLE_HEADER_PT + (lead ? 30 : 0),
+    },
+    rows: results.map(r => ({
+      html: `<tr>
+    <td>${esc(factorLabel(r.domain))}</td>
+    <td class="center">${r.nearMean.toFixed(1)}</td>
+    <td class="center">${r.otherMean.toFixed(1)}</td>
+    <td class="center">${r.difference > 0 ? '+' : ''}${r.difference.toFixed(1)}</td>
+    <td class="center">${r.nearDays}/${r.otherDays}</td>
+  </tr>`,
+      heightPt: TABLE_ROW_PT,
+    })),
+    close: '</tbody></table>',
+    footer: { html: `<p class="empty-muted chart-note">${note}</p>`, heightPt: 26 },
+  };
 }
 
 /**
@@ -104,42 +117,34 @@ function cycleTable(results: CycleProximityResult[], nearHeading: string, otherH
  *
  * The lengths come first and are listed whole, unusual ones included: an
  * irregular cycle is itself a finding, and the reader is the one placed to
- * say whether a long gap was a missed log or a long cycle.
+ * say whether a long gap was a missed log or a long cycle. Every factor is
+ * listed in both tables; they used to share a three-row budget.
  */
-function buildCycleHtml({ proximity, preDayOne, intervals }: CycleSectionData): string {
-  if (proximity.length === 0 && preDayOne.length === 0 && intervals.length === 0) return '';
+function buildCycleSections({ proximity, preDayOne, intervals }: CycleSectionData): FlowSection[] {
+  if (proximity.length === 0 && preDayOne.length === 0 && intervals.length === 0) return [];
 
   const unusual = intervals.filter(c => !c.usable);
   const lengthsHtml = intervals.length > 0
     ? `<p class="sleep-note">Days between logged Day 1s: ${intervals.map(c => `${c.lengthDays}${c.usable ? '' : '*'}`).join(', ')}.${unusual.length > 0 ? ` *Outside ${MIN_CYCLE_LENGTH}-${MAX_CYCLE_LENGTH} days, so possibly a missed or repeated log; left out of the week-before comparison.` : ''}</p>`
     : '';
+  const caveat = 'Mean comparisons only &middot; no phase is inferred, and this is not a test of cause';
 
-  // One row budget across both tables, so the column is the same height
-  // whichever of them has findings; a table that exists keeps at least one.
-  const preRows = preDayOne.length === 0 ? 0 : Math.max(1, CYCLE_MAX_ROWS - Math.min(proximity.length, 2));
-  const proximityRows = CYCLE_MAX_ROWS - preRows;
-
-  const proximityHtml = proximity.length > 0
-    ? `${cycleTable(proximity, `Within ${CYCLE_WINDOW_DAYS} days`, 'Other days', Math.max(1, proximityRows))}
-       <p class="empty-muted chart-note">${proximity[0].cycles} cycle start${proximity[0].cycles !== 1 ? 's' : ''} &middot; the ${CYCLE_WINDOW_DAYS} days either side of each Day 1 against every other day</p>`
-    : '';
-  const preHtml = preDayOne.length > 0
-    ? `${cycleTable(preDayOne, `${PRE_DAY_ONE_WINDOW_DAYS} days before`, 'Rest of cycle', preRows)}
-       <p class="empty-muted chart-note">${preDayOne[0].cycles} completed cycle${preDayOne[0].cycles !== 1 ? 's' : ''} &middot; counted back from the Day 1 that ends each, against the rest of the same cycles</p>`
-    : '';
-
-  return `<div class="section-gap">
-    <p class="section-label">Around cycle day 1</p>
-    ${lengthsHtml}
-    ${proximityHtml}
-    ${preHtml}
-    <p class="empty-muted chart-note">Mean comparisons only &middot; no phase is inferred, and this is not a test of cause</p>
-  </div>`;
+  const sections: FlowSection[] = [];
+  if (proximity.length > 0) {
+    sections.push(cycleSection('Around cycle day 1', proximity, `Within ${CYCLE_WINDOW_DAYS} days`, 'Other days',
+      `${proximity[0].cycles} cycle start${proximity[0].cycles !== 1 ? 's' : ''} &middot; the ${CYCLE_WINDOW_DAYS} days either side of each Day 1 against every other day &middot; ${caveat}`, lengthsHtml));
+  } else if (lengthsHtml) {
+    sections.push({ title: 'Around cycle day 1', rows: [{ html: lengthsHtml, heightPt: 30 }] });
+  }
+  if (preDayOne.length > 0) {
+    sections.push(cycleSection('The week before cycle day 1', preDayOne, `${PRE_DAY_ONE_WINDOW_DAYS} days before`, 'Rest of cycle',
+      `${preDayOne[0].cycles} completed cycle${preDayOne[0].cycles !== 1 ? 's' : ''} &middot; counted back from the Day 1 that ends each, against the rest of the same cycles &middot; ${caveat}`));
+  }
+  return sections;
 }
 
 /** Body factors are set in italics so a cross-system block is visible at a
  *  glance; sleep counts as neither and stays upright. */
-const CYCLE_MAX_ROWS = 3;
 const STANDALONE_MAX_PAIRS = 4;
 
 function factorHtml(domain: string): string {
@@ -187,8 +192,12 @@ function groupBlock(group: CorrelationGroup): string {
 // the same words — including body×mind edges, which the in-report computation
 // could never produce because it only ever saw mind check-ins. The in-report
 // pairs remain as a fallback for a range the weekly detector has not covered.
-export function buildContextConnectionsHtml(data: ContextConnectionsData): string {
-  const { dayOfWeekPatterns, circadianPatterns, grouping, domainConnections, cycleProximity, preDayOne, cycleIntervals, checkedNotFoundHtml } = data;
+/** One page body per sheet: time patterns and connections first, then the
+ *  cycle comparison and the pairs that showed nothing, on continuation pages
+ *  of their own. Together they measured 102% of a sheet on the sample
+ *  report, spilling onto an unnumbered page. */
+export function buildContextConnectionsPages(data: ContextConnectionsData): string[] {
+  const { dayOfWeekPatterns, circadianPatterns, grouping, domainConnections, cycleProximity, preDayOne, cycleIntervals, checkedNotFound } = data;
   const strongest = findStrongestTimePattern(dayOfWeekPatterns, circadianPatterns);
 
   let timePatternsHtml: string;
@@ -272,15 +281,7 @@ export function buildContextConnectionsHtml(data: ContextConnectionsData): strin
 
   const connectionsHtml = hasGrouped ? groupedHtml : fallbackHtml;
 
-  // Cycle proximity and checked-not-found are two independent, individually
-  // short sections — side by side uses the landscape width instead of each
-  // paying for its own section-label and gap in a second stacked block.
-  const cycleHtml = buildCycleHtml({ proximity: cycleProximity, preDayOne, intervals: cycleIntervals });
-  const bottomHtml = cycleHtml && checkedNotFoundHtml
-    ? `<div class="two-col"><div class="chart-col">${cycleHtml}</div><div class="chart-col">${checkedNotFoundHtml}</div></div>`
-    : `${cycleHtml}${checkedNotFoundHtml}`;
-
-  return `
+  const firstPage = `
     <div class="section-gap">
       <p class="section-label">Time-based patterns</p>
       ${timePatternsHtml}
@@ -290,7 +291,11 @@ export function buildContextConnectionsHtml(data: ContextConnectionsData): strin
       <p class="section-label">What moves with what</p>
       ${connectionsHtml}
     </div>
-
-    ${bottomHtml}
   `;
+
+  const rest = [
+    ...buildCycleSections({ proximity: cycleProximity, preDayOne, intervals: cycleIntervals }),
+    ...(checkedNotFound ? [checkedNotFound] : []),
+  ];
+  return rest.length > 0 ? [firstPage, ...flowPages(rest)] : [firstPage];
 }

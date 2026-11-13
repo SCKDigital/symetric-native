@@ -242,3 +242,7 @@ export const supabase = strict({
     async getSession() { return { data: { session: null }, error: null }; },
   }, 'auth'),
 }, 'supabase');
+
+// The real module's demo flag. The sample is built from real detection, not
+// the website demo's canned store.
+export const IS_DEMO = false;

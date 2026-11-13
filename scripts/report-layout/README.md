@@ -53,7 +53,14 @@ base64 per generated document.
 
 ## When a page overflows
 
-Prefer, in order: move a section to its own page (the report already
-paginates charts this way), cap a list and say what is not shown (the
-`overflow-note` convention), then tighten padding. Shrinking type is the last
-resort — a clinician reads this on paper.
+Lists are never capped: a report shows everything in the period the patient
+chose. Instead every list-bearing page is built from `FlowSection`s and laid
+out by `src/lib/report/flow-pages.ts`, which starts a numbered continuation
+page when the next row would not fit. If a flowed page overflows, its row
+height estimates are too low (or `PAGE_BODY_BUDGET_PT` too high) — fix the
+estimate, don't add a cap. For fixed pages, prefer moving a section to its own
+page, then tightening padding. Shrinking type is the last resort — a clinician
+reads this on paper.
+
+The fixture saturates every list well past a sheet, so continuation pages are
+exercised on every run.

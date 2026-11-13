@@ -93,7 +93,9 @@ function dataQuality(minCount: number): 'solid' | 'partial' | 'limited' {
   return 'limited';
 }
 
-export function detectPatternEvolution(days: DayScores[], activeDomains: TrackedFactor[], baselines: Partial<Record<TrackedFactor | 'sleep', number>>): PatternEvolution[] {
+/** `maxResults` defaults to the three Insights shows; the report passes
+ *  Infinity, because it lists everything in its period. */
+export function detectPatternEvolution(days: DayScores[], activeDomains: TrackedFactor[], baselines: Partial<Record<TrackedFactor | 'sleep', number>>, maxResults: number = MAX_RESULTS): PatternEvolution[] {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
   if (sorted.length === 0) return [];
 
@@ -189,5 +191,5 @@ export function detectPatternEvolution(days: DayScores[], activeDomains: Tracked
       if (pa !== pb) return pa - pb;
       return b.change_magnitude - a.change_magnitude;
     })
-    .slice(0, MAX_RESULTS);
+    .slice(0, maxResults);
 }

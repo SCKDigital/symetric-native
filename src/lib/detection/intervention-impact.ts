@@ -78,7 +78,11 @@ export function isAwaitingData(marker: { marker_date: string }, days: DayScores[
   return loggedAfter < MIN_DAYS;
 }
 
-export function detectInterventionImpacts(markers: InterventionMarker[], days: DayScores[], activeDomains: TrackedFactor[]): InterventionImpact[] {
+/** `maxResults` defaults to the three Insights shows. The report passes
+ *  Infinity: every marker in its period gets its own before/after reading,
+ *  where markers past the third used to print "not enough data" whatever
+ *  the data. */
+export function detectInterventionImpacts(markers: InterventionMarker[], days: DayScores[], activeDomains: TrackedFactor[], maxResults: number = MAX_RESULTS): InterventionImpact[] {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
   if (sorted.length === 0) return [];
 
@@ -90,7 +94,7 @@ export function detectInterventionImpacts(markers: InterventionMarker[], days: D
   const results: InterventionImpact[] = [];
 
   for (const marker of eligible) {
-    if (results.length >= MAX_RESULTS) break;
+    if (results.length >= maxResults) break;
 
     let best: InterventionImpact | null = null;
 

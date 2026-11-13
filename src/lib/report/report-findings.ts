@@ -5,7 +5,7 @@ import {
 } from '@/lib/pattern-findings';
 import { patternEvolutionHeadline, patternEvolutionStatLine } from '@/lib/report/chart-utils';
 import type { DomainConnection } from '@/lib/report/chart-coordinates';
-import { DOMAIN_LABELS, LOWER_IS_BETTER, theme } from '@/lib/report/theme';
+import { DOMAIN_LABELS, theme } from '@/lib/report/theme';
 import type { BodyEventFrequencyPattern } from '@/lib/detection/body-event-frequency';
 import type { BodyEventMindImpact } from '@/lib/detection/body-event-impact';
 import type { BodyTimeOfDayPattern } from '@/lib/detection/body-time-of-day';
@@ -16,7 +16,8 @@ import type { RareEvent } from '@/lib/detection/rare-events';
 import type { InterventionImpact } from '@/lib/detection/intervention-impact';
 import type { CircadianPattern } from '@/lib/circadian-detection';
 import type { DetectedCluster } from '@/lib/supabase';
-import { movesTogetherForReader } from '@/lib/domain-polarity';
+import { BODY_EVENTS } from '@/lib/body/constants';
+import { higherIsWorse, movesTogetherForReader } from '@/lib/domain-polarity';
 
 // Scoped port of the web app's lib/report/sections/reportFindings.tsx —
 // buildUnifiedFindings' mind-domain sections (clusters, domain connections,
@@ -74,6 +75,10 @@ function toUnified(idPrefix: string, kind: string, f: PatternFinding): UnifiedFi
     domains: f.sentenceHighlights.map(h => h.factor),
     kind,
   };
+}
+
+function fmtShortDay(d: string): string {
+  return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 export function plainPatternHeadline(cluster: DetectedCluster): string {
@@ -235,8 +240,14 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
     });
   }
 
+  // Named, with its date. "Event effect" alone, in the Domain Summary's
+  // active-pattern column, left the reader to guess which of the period's
+  // events it meant.
+  const impactByFindingId = new Map(data.interventionImpacts.map(i => [`impact-${i.marker_id}`, i]));
   for (const f of interventionImpactFindings(data.interventionImpacts)) {
-    findings.push(toUnified('med', 'Event effect', f));
+    const impact = impactByFindingId.get(f.id);
+    const kind = impact ? `Event effect: ${impact.marker_label}, ${fmtShortDay(impact.marker_date)}` : 'Event effect';
+    findings.push(toUnified('med', kind, f));
   }
 
   // 10 — Body patterns (deviations, evolution, rare events, time-of-day,
@@ -262,8 +273,10 @@ export function buildUnifiedFindings(data: UnifiedFindingsInput): UnifiedFinding
   for (const f of bodyEventFrequencyFindings(data.bodyEventFrequencyPatterns ?? [])) {
     findings.push(toUnified('body', 'Event frequency', f));
   }
-  for (const f of bodyEventImpactFindings(data.bodyEventImpacts ?? [])) {
-    findings.push(toUnified('body', 'Cross-domain impact', f));
+  for (const impact of data.bodyEventImpacts ?? []) {
+    for (const f of bodyEventImpactFindings([impact])) {
+      findings.push(toUnified('body', `Cross-domain impact: after ${BODY_EVENTS[impact.eventType]?.label ?? impact.eventType}`, f));
+    }
   }
 
   findings.sort((a, b) => {
@@ -297,20 +310,16 @@ export function fmtVal(v: number): string {
   return (Math.round(v * 10) / 10).toFixed(1);
 }
 
+// Polarity from domain-polarity.ts. This used theme.ts's LOWER_IS_BETTER,
+// which held three mind domains: it had no social_battery (now a depletion
+// scale), and no body domains at all, so every body row on the Domain
+// Summary was coloured as if a higher severity were an improvement.
 export function domainDeviationColor(domain: string, currentMedian: number | undefined, baseline: number | undefined): string {
   if (currentMedian == null || baseline == null) return theme.colors.gray;
   const diff = currentMedian - baseline;
   if (Math.abs(diff) < 0.5) return theme.colors.gray;
-  const isLowerBetter = LOWER_IS_BETTER.has(domain);
-  return (isLowerBetter ? diff > 0 : diff < 0) ? theme.colors.coral : theme.colors.teal;
+  return (higherIsWorse(domain) ? diff > 0 : diff < 0) ? theme.colors.coral : theme.colors.teal;
 }
 
-// Real Unicode arrows — the web report substitutes ASCII ('->'/'^'/'v') for
-// these because @react-pdf/renderer's Helvetica font has a limited glyph
-// set; HTML rendered via expo-print isn't under that constraint.
-export function trendArrow(currentMedian: number | undefined, baseline: number | undefined): string {
-  if (currentMedian == null || baseline == null) return '–';
-  const diff = currentMedian - baseline;
-  if (Math.abs(diff) < 0.3) return '→';
-  return diff > 0 ? '↑' : '↓';
-}
+// Trend arrows live in period-trend.ts, worked out from the period's own
+// first and last days rather than from a baseline.

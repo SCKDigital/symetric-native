@@ -3,20 +3,11 @@ import { fmtHours, type SleepHoursConnection } from '@/lib/detection/sleep-hours
 import type { SleepSymptomConnection } from '@/lib/queries/sleep-connections';
 import type { ChartDomain, ChartMarker, SleepConnection } from '@/lib/report/chart-coordinates';
 import { renderHoursSleptSvg, summariseHoursSlept, type HoursSleptPoint } from '@/lib/report/hours-slept-svg';
-import { buildDomainSparklineSectionHtml } from '@/lib/report/page2-findings-html';
+import { flowPages, textHeightPt, type FlowSection } from '@/lib/report/flow-pages';
+import { buildDomainSparklineSectionHtml, markerRowCount } from '@/lib/report/page2-findings-html';
+import type { DomainTrends } from '@/lib/report/period-trend';
 import { SPARKLINE_WIDTH_HALF } from '@/lib/report/sparkline-svg';
 import { DOMAIN_LABELS } from '@/lib/report/theme';
-import type { DetectedCluster } from '@/lib/supabase';
-
-/** Rows in "What follows a poor night" before the rest are summarised in a
- *  note. Ten keeps the page inside a sheet under the wider Android-like font,
- *  measured with scripts/report-layout. */
-const SLEEP_TABLE_MAX_ROWS = 10;
-/** Rows in "What follows a short night". Its rows, plus its heading, header
- *  row and caption (counted as HOURS_TABLE_OVERHEAD_ROWS), come off the
- *  quality table's cap so the two together fit the same sheet. */
-const HOURS_TABLE_MAX_ROWS = 4;
-const HOURS_TABLE_OVERHEAD_ROWS = 5;
 
 // Sleep's own page.
 //
@@ -38,9 +29,12 @@ interface SleepPageData {
   qualityDomain: ChartDomain | null;
   dates: string[];
   baselineMap: Record<string, number>;
+  /** Whole-period medians, for the "median rating" sentence. */
   currentRollingMedians: Record<string, number>;
+  /** First-days vs last-days medians, for the chart's trend arrow — the same
+   *  numbers every other chart's arrow uses. */
+  trends: DomainTrends;
   chartMarkers: ChartMarker[];
-  flaggedClusters: DetectedCluster[];
   /** One entry per date in range, gaps included. */
   hoursPoints: HoursSleptPoint[];
   medianHours: number | null;
@@ -67,9 +61,16 @@ function label(domain: string): string {
   return DOMAIN_LABELS[domain] ?? domain;
 }
 
-export function buildSleepPageHtml(data: SleepPageData): string {
+const TABLE_HEADER_PT = 14;
+const TABLE_ROW_PT = 16;
+
+/** One page body per sheet: both charts, then every domain in both tables,
+ *  continuing onto a second page when there are more than one holds. The
+ *  tables used to be capped at ten rows between them, the rest summarised as
+ *  "N further domains with a smaller difference not listed". */
+export function buildSleepPages(data: SleepPageData): string[] {
   const {
-    qualityDomain, dates, baselineMap, currentRollingMedians, chartMarkers, flaggedClusters,
+    qualityDomain, dates, baselineMap, currentRollingMedians, trends, chartMarkers,
     hoursPoints, medianHours, persistedConnections, fallbackConnections, hoursConnections, lagRelationships,
   } = data;
 
@@ -87,10 +88,9 @@ export function buildSleepPageHtml(data: SleepPageData): string {
     ? buildDomainSparklineSectionHtml({
       chartDomains: [qualityDomain],
       baselineMap,
-      currentRollingMedians,
+      trends,
       chartHasEnoughData: true,
       chartMarkers,
-      flaggedClusters,
       dates,
       label: 'Sleep quality, rated 1-5 each morning',
       width: SPARKLINE_WIDTH_HALF,
@@ -118,23 +118,16 @@ export function buildSleepPageHtml(data: SleepPageData): string {
   // The persisted detector is preferred: it compares each domain's mean after
   // good nights against poor ones on a stated sample, which a clinician can
   // weigh. The in-report fallback is a bare mean split with no sample size,
-  // worth showing only when the detector has not run over this range.
-  //
-  // Capped, because it lists every tracked domain: someone with 5 mind and 9
-  // body domains measured at 104% of a sheet here, spilling onto an unnumbered
-  // blank page. Rows arrive largest difference first, so the cap drops the
-  // ones closest to no difference at all.
-  //
-  // The duration table below shares the same budget: both tables on one page,
-  // so the rows it takes come off this one's cap rather than off the sheet.
-  const hoursRowsShown = Math.min(hoursConnections.length, HOURS_TABLE_MAX_ROWS);
-  const qualityCap = SLEEP_TABLE_MAX_ROWS - hoursRowsShown - (hoursRowsShown > 0 ? HOURS_TABLE_OVERHEAD_ROWS : 0);
-  const shownConnections = persistedConnections.slice(0, qualityCap);
-  const hiddenConnections = persistedConnections.length - shownConnections.length;
-  const connectionsSection = persistedConnections.length > 0
-    ? `<div class="section-gap">
-        <p class="section-label">What follows a poor night</p>
-        <table class="domain-table">
+  // worth showing only when the detector has not run over this range. Rows
+  // arrive largest difference first.
+  const poorNightCaption = persistedConnections.length > 0
+    ? 'Nights column is good/poor nights compared. A difference is a mean gap, not a test of cause.'
+    : 'A mean split between nights rated 2 or below and those above 3, computed for this report. No sample-size test.';
+  const connectionsSection: FlowSection = persistedConnections.length > 0
+    ? {
+      title: 'What follows a poor night',
+      open: {
+        html: `<table class="domain-table">
           <thead><tr>
             <th>Domain</th>
             <th class="center">After good sleep</th>
@@ -142,39 +135,44 @@ export function buildSleepPageHtml(data: SleepPageData): string {
             <th class="center">Difference</th>
             <th class="center">Nights</th>
           </tr></thead>
-          <tbody>
-            ${shownConnections.map(c => `<tr>
+          <tbody>`,
+        heightPt: TABLE_HEADER_PT,
+      },
+      rows: persistedConnections.map(c => ({
+        html: `<tr>
               <td>${esc(label(c.domain))}</td>
               <td class="center">${fmtVal(c.avg_after_good_sleep)}</td>
               <td class="center">${fmtVal(c.avg_after_poor_sleep)}</td>
               <td class="center">${c.difference > 0 ? '+' : ''}${fmtVal(c.difference)}</td>
               <td class="center">${c.good_sleep_count}/${c.poor_sleep_count}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-        ${hiddenConnections > 0 ? `<p class="overflow-note">${hiddenConnections} further domain${hiddenConnections !== 1 ? 's' : ''} with a smaller difference not listed.</p>` : ''}
-        <p class="sleep-chart-caption">Nights column is good/poor nights compared. A difference is a mean gap, not a test of cause.</p>
-      </div>`
-    : fallbackConnections.length > 0
-      ? `<div class="section-gap">
-          <p class="section-label">What follows a poor night</p>
-          ${fallbackConnections.map(c => `<div class="sleep-row"><span class="sleep-label">${esc(label(c.domain))}</span><span class="sleep-value">${esc(c.observation)}</span></div>`).join('')}
-          <p class="sleep-chart-caption">A mean split between nights rated 2 or below and those above 3, computed for this report. No sample-size test.</p>
-        </div>`
-      : '';
+            </tr>`,
+        heightPt: TABLE_ROW_PT,
+      })),
+      close: '</tbody></table>',
+      footer: { html: `<p class="sleep-chart-caption">${esc(poorNightCaption)}</p>`, heightPt: textHeightPt(poorNightCaption, 7) + 2 },
+    }
+    : {
+      title: 'What follows a poor night',
+      rows: fallbackConnections.map(c => ({
+        html: `<div class="sleep-row"><span class="sleep-label">${esc(label(c.domain))}</span><span class="sleep-value">${esc(c.observation)}</span></div>`,
+        heightPt: TABLE_ROW_PT,
+      })),
+      footer: { html: `<p class="sleep-chart-caption">${esc(poorNightCaption)}</p>`, heightPt: textHeightPt(poorNightCaption, 7) + 2 },
+    };
 
   // ── Duration relationships ────────────────────────────────────────────────
   // The same question asked of hours slept rather than the rating. "Short"
   // and "long" are this patient's own lower and upper third of nights, so
   // the cut-offs are printed in the column headers — without them a reader
   // would assume a population threshold.
-  const shownHours = hoursConnections.slice(0, hoursRowsShown);
-  const hiddenHours = hoursConnections.length - shownHours.length;
   const first = hoursConnections[0];
-  const hoursConnectionsSection = first
-    ? `<div class="section-gap">
-        <p class="section-label">What follows a short night</p>
-        <table class="domain-table">
+  const shortNightCaption = first
+    ? `Short and long are this patient's own shortest and longest third of ${first.nights} nights. Nights: short/long compared.`
+    : '';
+  const hoursConnectionsSection: FlowSection = {
+    title: 'What follows a short night',
+    open: first ? {
+      html: `<table class="domain-table">
           <thead><tr>
             <th>Domain</th>
             <th class="center">After &le;${fmtHours(first.shortCutoff)} h</th>
@@ -182,27 +180,45 @@ export function buildSleepPageHtml(data: SleepPageData): string {
             <th class="center">Difference</th>
             <th class="center">Nights</th>
           </tr></thead>
-          <tbody>
-            ${shownHours.map(c => `<tr>
+          <tbody>`,
+      heightPt: TABLE_HEADER_PT,
+    } : undefined,
+    rows: hoursConnections.map(c => ({
+      html: `<tr>
               <td>${esc(label(c.domain))}</td>
               <td class="center">${fmtVal(c.shortMean)}</td>
               <td class="center">${fmtVal(c.longMean)}</td>
               <td class="center">${c.difference > 0 ? '+' : ''}${fmtVal(c.difference)}</td>
               <td class="center">${c.shortDays}/${c.longDays}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-        ${hiddenHours > 0 ? `<p class="overflow-note">${hiddenHours} further domain${hiddenHours !== 1 ? 's' : ''} with a smaller difference not listed.</p>` : ''}
-        <p class="sleep-chart-caption">Short and long are this patient's own shortest and longest third of ${first.nights} nights. Nights: short/long compared.</p>
-      </div>`
-    : '';
+            </tr>`,
+      heightPt: TABLE_ROW_PT,
+    })),
+    close: '</tbody></table>',
+    footer: first ? { html: `<p class="sleep-chart-caption">${esc(shortNightCaption)}</p>`, heightPt: textHeightPt(shortNightCaption, 7) + 2 } : undefined,
+  };
 
   const sleepLag = lagRelationships.find(r => r.predictor === 'sleep');
-  const lagHtml = sleepLag
-    ? `<p class="sleep-note">Lag relationship: ${esc(label(sleepLag.predictor as string))} predicts ${esc(label(sleepLag.outcome as string))} ${sleepLag.lagDays} day${sleepLag.lagDays !== 1 ? 's' : ''} later, on ${Math.round(sleepLag.instanceRate * 100)}% of occasions.</p>`
+  const lagText = sleepLag
+    ? `Lag relationship: ${label(sleepLag.predictor as string)} predicts ${label(sleepLag.outcome as string)} ${sleepLag.lagDays} day${sleepLag.lagDays !== 1 ? 's' : ''} later, on ${Math.round(sleepLag.instanceRate * 100)}% of occasions.`
     : '';
+  const explainerText = 'Quality and duration are separate measurements: a rating out of 5 given each morning, and a count of hours. They are charted separately because they can move apart - a long night can still be rated poorly, and that gap is itself worth seeing.';
 
-  return `
+  const tail: FlowSection = {
+    rows: [
+      ...(lagText ? [{ html: `<p class="sleep-note">${esc(lagText)}</p>`, heightPt: textHeightPt(lagText) + 6 }] : []),
+      {
+        html: `<div class="explainer-box">
+      <p class="explainer-title">Reading this page</p>
+      <p class="explainer-text">${esc(explainerText)}</p>
+    </div>`,
+        heightPt: textHeightPt(explainerText) + 34,
+      },
+    ],
+  };
+
+  // The two charts side by side open the first page. Their height is fixed
+  // but for the rows of marker numbers under the quality chart.
+  const chartsHtml = `
     <div class="two-col">
       <div class="chart-col">
         ${qualityChart}
@@ -211,15 +227,8 @@ export function buildSleepPageHtml(data: SleepPageData): string {
       <div class="chart-col">
         ${hoursSection}
       </div>
-    </div>
+    </div>`;
+  const chartsPt = 160 + 8 * markerRowCount(chartMarkers, dates.length, SPARKLINE_WIDTH_HALF);
 
-    ${connectionsSection}
-    ${hoursConnectionsSection}
-    ${lagHtml}
-
-    <div class="explainer-box">
-      <p class="explainer-title">Reading this page</p>
-      <p class="explainer-text">Quality and duration are separate measurements: a rating out of 5 given each morning, and a count of hours. They are charted separately because they can move apart - a long night can still be rated poorly, and that gap is itself worth seeing.</p>
-    </div>
-  `;
+  return flowPages([connectionsSection, hoursConnectionsSection, tail], { html: chartsHtml, heightPt: chartsPt });
 }

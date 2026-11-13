@@ -47,7 +47,9 @@ interface ScoredEvent {
   score: number;
 }
 
-export function detectRareEvents(days: DayScores[], activeDomains: TrackedFactor[], baselines: Partial<Record<TrackedFactor | 'sleep', number>>): RareEvent[] {
+/** `maxResults` defaults to the three Insights shows; the report passes
+ *  Infinity, because it lists everything in its period. */
+export function detectRareEvents(days: DayScores[], activeDomains: TrackedFactor[], baselines: Partial<Record<TrackedFactor | 'sleep', number>>, maxResults: number = MAX_RESULTS): RareEvent[] {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
   if (sorted.length === 0) return [];
 
@@ -197,7 +199,7 @@ export function detectRareEvents(days: DayScores[], activeDomains: TrackedFactor
   }
 
   candidates.sort((a, b) => b.score - a.score);
-  const results = candidates.map(c => c.event).slice(0, MAX_RESULTS);
+  const results = candidates.map(c => c.event).slice(0, maxResults);
   debug.log('RareEvents', `Detected ${results.length} rare events`);
   return results;
 }

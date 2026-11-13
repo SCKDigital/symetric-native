@@ -3,16 +3,17 @@
 import * as fs from 'fs';
 
 import { buildReportDocument } from '@/lib/report/report-document';
-import { buildDomainSummaryHtml, buildPage1BodyHtml } from '@/lib/report/page1-html';
-import { buildPage2Html, SPARKLINE_EXPLAINER_HTML } from '@/lib/report/page2-html';
+import { buildDomainSummaryHtml, buildPage1Pages } from '@/lib/report/page1-html';
+import { buildPage2Pages, SPARKLINE_EXPLAINER_HTML } from '@/lib/report/page2-html';
 import { layOutSparklines } from '@/lib/report/page2-findings-html';
-import { buildSleepPageHtml } from '@/lib/report/page-sleep-html';
-import { buildBodyOverviewHtml } from '@/lib/report/page-body-overview-html';
-import { buildContextConnectionsHtml } from '@/lib/report/page-context-connections-html';
+import { buildSleepPages } from '@/lib/report/page-sleep-html';
+import { buildBodyOverviewPages } from '@/lib/report/page-body-overview-html';
+import { buildContextConnectionsPages } from '@/lib/report/page-context-connections-html';
 import { buildDataQualityHtml, buildMethodologyHtml } from '@/lib/report/page-data-quality-html';
-import { buildPeriodNotes, buildPeriodNotesHtml } from '@/lib/report/period-notes';
-import { buildCharacterEntries, buildCharacterSectionHtml } from '@/lib/report/symptom-character';
-import { buildCheckedNotFoundHtml, computeCheckedNotFound } from '@/lib/report/checked-not-found';
+import { buildPeriodNotes, buildPeriodNotesSection } from '@/lib/report/period-notes';
+import { buildCharacterEntries, buildCharacterPages } from '@/lib/report/symptom-character';
+import { computeDomainTrends } from '@/lib/report/period-trend';
+import { buildCheckedNotFoundSection, computeCheckedNotFound } from '@/lib/report/checked-not-found';
 import { groupConnections, type ConnectionRow } from '@/lib/correlation-groups';
 import type { ChartDomain } from '@/lib/report/chart-coordinates';
 
@@ -40,6 +41,11 @@ const mindDomains = MIND.map(chartDomain);
 const bodyDomains = BODY.map(chartDomain);
 const baselineMap = Object.fromEntries([...MIND, ...BODY, 'sleep'].map(d => [d, 5]));
 const medians = Object.fromEntries([...MIND, ...BODY, 'sleep'].map(d => [d, 5.4]));
+const dayRows = (domains: ChartDomain[]) => dates.map((date, k) => ({
+  date, scores: Object.fromEntries(domains.map(cd => [cd.domain, cd.points[k].value ?? undefined])),
+}));
+const mindTrends = computeDomainTrends(dayRows([...mindDomains, chartDomain('sleep', 3)]), [...MIND, 'sleep']);
+const bodyTrends = computeDomainTrends(dayRows(bodyDomains), BODY);
 
 const clusters = Array.from({ length: 4 }, (_, i) => ({
   id: `c${i}`, user_id: 'u', start_date: dates[10 + i * 12], end_date: dates[14 + i * 12],
@@ -47,20 +53,30 @@ const clusters = Array.from({ length: 4 }, (_, i) => ({
   direction: 'depressed', severity_score: 3, enrichment_completed: true, created_at: dates[0],
 })) as never[];
 
+// Twelve markers, two pairs a day apart: the case that printed "2" and "3"
+// on top of each other as "23".
 const chartMarkers = [
+  { dateIndex: 4, markerType: 'therapy', label: 'IFS Therapy' },
   { dateIndex: 12, markerType: 'medication', label: 'Increased to 40mg Fluoxitine' },
+  { dateIndex: 13, markerType: 'life_event', label: 'Fainted with vomiting and diarrhoea at midnight' },
+  { dateIndex: 25, markerType: 'therapy', label: 'IFS Therapy' },
   { dateIndex: 40, markerType: 'cycle_phase', label: 'Day 1' },
+  { dateIndex: 46, markerType: 'therapy', label: 'IFS Therapy' },
+  { dateIndex: 47, markerType: 'life_event', label: 'House sale fell through' },
   { dateIndex: 55, markerType: 'life_event', label: 'Family dinner' },
+  { dateIndex: 60, markerType: 'medication', label: 'Started propranolol 10mg as needed' },
+  { dateIndex: 67, markerType: 'therapy', label: 'IFS Therapy' },
   { dateIndex: 70, markerType: 'cycle_phase', label: 'Day 1' },
+  { dateIndex: 88, markerType: 'therapy', label: 'IFS Therapy' },
 ] as never[];
 
-const rareEvents = Array.from({ length: 4 }, (_, i) => ({
+const rareEvents = Array.from({ length: 9 }, (_, i) => ({
   event_type: 'extreme_spike', occurrence_dates: [dates[20 + i * 10]], frequency: 1,
   affected_domains: [MIND[i % MIND.length]],
   clinical_note: 'A long clinical note that wraps onto a second line in the report, describing what the detector observed and over how many days it observed it.',
 })) as never[];
 
-const patternEvolution = Array.from({ length: 3 }, (_, i) => ({
+const patternEvolution = Array.from({ length: 8 }, (_, i) => ({
   domain: MIND[i], evolution_type: 'volatility_change', direction: 'worsening',
   first_period_avg: 4.2, recent_period_avg: 5.6, change_magnitude: 1.4,
   first_period_volatility: 0.68, recent_period_volatility: 1.51,
@@ -94,27 +110,29 @@ dates.forEach((d, i) => {
 const domainConnections = MIND.slice(0, 3).map((a, i) => ({ domainA: a, domainB: MIND[i + 1], direction: 'positive' as const, n: 60 }));
 
 const mindSparklines = layOutSparklines({
-  chartDomains: mindDomains, baselineMap, currentRollingMedians: medians,
-  chartHasEnoughData: true, chartMarkers, flaggedClusters: clusters, dates,
+  chartDomains: mindDomains, baselineMap, trends: mindTrends,
+  chartHasEnoughData: true, chartMarkers, dates,
   trailingHtml: SPARKLINE_EXPLAINER_HTML,
 });
 
-const characterRows = dates.slice(0, 30).map((entry_date, i) => ({
+const characterRows = dates.slice(0, 70).map((entry_date, i) => ({
   entry_date, pain_mechanical: 4 + (i % 4), pain_widespread: 2,
   pain_character: ['aching', 'electric or shooting', 'burning'].slice(0, (i % 3) + 1),
   note: i % 3 === 0 ? 'Shoulder went again lifting the kettle, spent the afternoon flat with the curtains shut.' : null,
 }));
 
 const bodySparklines = layOutSparklines({
-  chartDomains: bodyDomains, baselineMap, currentRollingMedians: medians,
-  chartHasEnoughData: true, chartMarkers, flaggedClusters: clusters, dates,
+  chartDomains: bodyDomains, baselineMap, trends: bodyTrends,
+  chartHasEnoughData: true, chartMarkers, dates,
   lineColor: '#8a5a20', isLowerBetterFn: () => true,
   trailingHtml: SPARKLINE_EXPLAINER_HTML,
 });
 
-const notesHtml = buildPeriodNotesHtml(buildPeriodNotes({
-  checkIns: dates.slice(0, 40).map(d => ({
-    notes: 'Third night up with palpitations, missed work again and could not face the stairs by the afternoon.',
+const notesSection = buildPeriodNotesSection(buildPeriodNotes({
+  checkIns: dates.slice(0, 60).map((d, i) => ({
+    notes: i % 4 === 0
+      ? 'Third night up with palpitations, missed work again and could not face the stairs by the afternoon. Rang the GP and could not get through, so spent most of the evening on the sofa with the lights off and the phone on silent, which helped a bit.'
+      : 'Third night up with palpitations, missed work again and could not face the stairs by the afternoon.',
     scheduled_at: `${d}T09:00:00Z`, status: 'completed',
   })),
   bodyCheckIns: characterRows as never[],
@@ -123,31 +141,26 @@ const notesHtml = buildPeriodNotesHtml(buildPeriodNotes({
 
 const page1Input = {
       userName: 'Aisha Rahman', dateFrom, dateTo, completedCheckIns: 268, totalScheduled: 443,
-      trackedDomains: MIND, baselineMap, currentRollingMedians: medians,
-      questions: Array.from({ length: 3 }, (_, i) => ({ id: `q${i}`, question_text: 'Is the fluoxetine dose change responsible for the improvement in joint instability, or is that the physio?', sort_order: i })) as never[],
+      trackedDomains: MIND, baselineMap, trends: mindTrends, rangeLabel: 'Since Mind appointment on 8 August 2026 (Psychiatrist review)',
+      questions: Array.from({ length: 6 }, (_, i) => ({ id: `q${i}`, question_text: 'Is the fluoxetine dose change responsible for the improvement in joint instability, or is that the physio?', sort_order: i })) as never[],
       methodologyPageNum: 10,
-      bodyTrackedDomains: BODY, bodyBaselineMap: baselineMap, bodyCurrentRollingMedians: medians,
+      bodyTrackedDomains: BODY, bodyBaselineMap: baselineMap, bodyTrends,
       flaggedClusters: clusters, domainConnections, lagRelationships: [], dayOfWeekPatterns: [],
       circadianPatterns: [], rareEvents, patternEvolution, interventionImpacts,
       bodyFlaggedClusters: clusters, bodyPatternEvolution: patternEvolution, bodyRareEvents: rareEvents,
 } as never;
 
 const pages = [
-  { sectionTitle: 'Executive Summary', bodyHtml: buildPage1BodyHtml(page1Input) },
+  ...buildPage1Pages(page1Input).map(bodyHtml => ({ sectionTitle: 'Executive Summary', bodyHtml })),
   { sectionTitle: 'Domain Summary', bodyHtml: buildDomainSummaryHtml(page1Input) },
-  {
-    sectionTitle: 'Mind Overview',
-    bodyHtml: buildPage2Html({
-      notesHtml, chartMarkers, flaggedClusters: clusters, dates,
-      interventionImpacts, rareEvents, patternEvolution, sparklinesInline: mindSparklines.inline,
-    } as never),
-  },
+  ...buildPage2Pages({
+    notesSection, chartMarkers, flaggedClusters: clusters, dates,
+    interventionImpacts, rareEvents, patternEvolution, sparklinesInline: mindSparklines.inline,
+  } as never).map(bodyHtml => ({ sectionTitle: 'Mind Overview', bodyHtml })),
   ...mindSparklines.pages.map(bodyHtml => ({ sectionTitle: 'Mind Charts', bodyHtml })),
-  {
-    sectionTitle: 'Sleep',
-    bodyHtml: buildSleepPageHtml({
-      qualityDomain: chartDomain('sleep', 3), dates, baselineMap, currentRollingMedians: medians,
-      chartMarkers, flaggedClusters: clusters,
+  ...buildSleepPages({
+      qualityDomain: chartDomain('sleep', 3), dates, baselineMap, currentRollingMedians: medians, trends: mindTrends,
+      chartMarkers,
       hoursPoints: dates.map((date, i) => ({ date, hours: i % 6 === 0 ? null : 6 + (i % 5) })),
       medianHours: 8,
       persistedConnections: [...MIND, ...BODY].map((domain, i) => ({
@@ -167,33 +180,27 @@ const pages = [
         predictor: 'sleep', outcome: 'pain_mechanical', lagDays: 1, correlation: -0.6,
         instanceRate: 0.82, instanceCount: 41, totalPairs: 50,
       }],
-    } as never),
-  },
-  {
-    sectionTitle: 'Body Overview',
-    bodyHtml: buildBodyOverviewHtml({
+    } as never).map(bodyHtml => ({ sectionTitle: 'Sleep', bodyHtml })),
+  ...buildBodyOverviewPages({
       dateFrom,
-      eventProximity: Array.from({ length: 4 }, (_, i) => ({
+      eventProximity: Array.from({ length: 6 }, (_, i) => ({
         markerDate: dates[12], markerType: 'medication', markerLabel: 'Increased to 40mg Fluoxitine',
-        eventType: ['reaction', 'subluxation', 'presyncope', 'palpitations'][i], before: 1, after: 5, change: 4, windowDays: 21,
+        eventType: ['reaction', 'subluxation', 'presyncope', 'palpitations', 'reaction', 'subluxation'][i], before: 1, after: 5, change: 4, windowDays: 21,
       })) as never[],
       sparklinesInline: bodySparklines.inline,
-      bodyEventOccurrences: Array.from({ length: 4 }, (_, i) => ({
-        date: dates[30 + i], eventType: 'reaction', label: 'Reaction', detail: 'flushing', context: 'Went out for lunch, hot room, felt it start in the face.',
+      bodyEventOccurrences: Array.from({ length: 24 }, (_, i) => ({
+        date: dates[89 - i * 3], eventType: 'reaction', label: 'Reaction', detail: 'flushing', context: 'Went out for lunch, hot room, felt it start in the face.',
       })) as never[],
-      bodySiteFrequency: Array.from({ length: 5 }, (_, i) => ({
-        region: 'shoulder', side: i % 2 ? 'R' : 'L', label: `${i % 2 ? 'R' : 'L'} shoulder`, dayCount: 22 - i * 3,
-        source: 'pain', firstSeen: dates[i * 10], lastSeen: dates[80],
+      bodySiteFrequency: Array.from({ length: 14 }, (_, i) => ({
+        region: 'shoulder', side: i % 2 ? 'R' : 'L', label: `${i % 2 ? 'R' : 'L'} shoulder`, dayCount: 30 - i * 2,
+        source: 'pain', firstSeen: dates[(i * 6) % 80], lastSeen: dates[80],
       })) as never[],
       bodyFlaggedClusters: clusters, chartMarkers, dates, interventionImpacts,
       bodyRareEvents: rareEvents, bodyPatternEvolution: patternEvolution,
-    } as never),
-  },
+    } as never).map(bodyHtml => ({ sectionTitle: 'Body Overview', bodyHtml })),
   ...bodySparklines.pages.map(bodyHtml => ({ sectionTitle: 'Body Charts', bodyHtml })),
-  { sectionTitle: 'Symptom Character', bodyHtml: buildCharacterSectionHtml(buildCharacterEntries(characterRows)) },
-  {
-    sectionTitle: 'Context & Connections',
-    bodyHtml: buildContextConnectionsHtml({
+  ...buildCharacterPages(buildCharacterEntries(characterRows)).map(bodyHtml => ({ sectionTitle: 'Symptom Character', bodyHtml })),
+  ...buildContextConnectionsPages({
       grouping, dayOfWeekPatterns: [], circadianPatterns: [], domainConnections,
       cycleProximity: BODY.slice(0, 5).map(domain => ({
         domain, nearMean: 6.8, otherMean: 4.6, difference: 2.2, nearDays: 14, otherDays: 62, cycles: 2,
@@ -209,11 +216,10 @@ const pages = [
         { start: dates[40], nextDayOne: dates[70], lengthDays: 30, usable: true },
         { start: dates[70], nextDayOne: dates[89], lengthDays: 52, usable: false },
       ],
-      checkedNotFoundHtml: buildCheckedNotFoundHtml(
+      checkedNotFound: buildCheckedNotFoundSection(
         computeCheckedNotFound(dates, dailyMeans, MIND, new Set(['anxiety|concentration'])),
       ),
-    } as never),
-  },
+    } as never).map(bodyHtml => ({ sectionTitle: 'Context & Connections', bodyHtml })),
   {
     sectionTitle: 'Data Quality',
     bodyHtml: buildDataQualityHtml({

@@ -19,15 +19,16 @@ import { isBodyDomain } from '@/lib/pattern-findings';
 import { fetchQuestionsForAppointment } from '@/lib/api/questions';
 import { fetchPatternReviewsForAppointment } from '@/lib/api/pattern-reviews';
 import { buildBodyChartDomains, buildChartCoordinates, computeDomainConnections, computeSleepConnections, type ChartDomain } from '@/lib/report/chart-coordinates';
-import { buildBodyOverviewHtml } from '@/lib/report/page-body-overview-html';
-import { buildContextConnectionsHtml } from '@/lib/report/page-context-connections-html';
+import { buildBodyOverviewPages } from '@/lib/report/page-body-overview-html';
+import { buildContextConnectionsPages } from '@/lib/report/page-context-connections-html';
 import { buildDataQualityHtml, buildMethodologyHtml } from '@/lib/report/page-data-quality-html';
-import { buildDomainSummaryHtml, buildPage1BodyHtml } from '@/lib/report/page1-html';
-import { buildPage2Html, SPARKLINE_EXPLAINER_HTML } from '@/lib/report/page2-html';
-import { buildSleepPageHtml } from '@/lib/report/page-sleep-html';
-import { buildCharacterEntries, buildCharacterSectionHtml } from '@/lib/report/symptom-character';
-import { buildPeriodNotes, buildPeriodNotesHtml } from '@/lib/report/period-notes';
-import { buildCheckedNotFoundHtml, computeCheckedNotFound } from '@/lib/report/checked-not-found';
+import { buildDomainSummaryHtml, buildPage1Pages, METHODOLOGY_PAGE_TOKEN } from '@/lib/report/page1-html';
+import { buildPage2Pages, SPARKLINE_EXPLAINER_HTML } from '@/lib/report/page2-html';
+import { computeDomainTrends } from '@/lib/report/period-trend';
+import { buildSleepPages } from '@/lib/report/page-sleep-html';
+import { buildCharacterEntries, buildCharacterPages } from '@/lib/report/symptom-character';
+import { buildPeriodNotes, buildPeriodNotesSection } from '@/lib/report/period-notes';
+import { buildCheckedNotFoundSection, computeCheckedNotFound } from '@/lib/report/checked-not-found';
 import { dayOneIntervals, detectCycleProximity, detectPreDayOneWindow } from '@/lib/detection/cycle-proximity';
 import { detectSleepHoursConnections, hoursSleptByDate } from '@/lib/detection/sleep-hours-connections';
 import { detectEventProximity } from '@/lib/detection/event-proximity';
@@ -47,6 +48,9 @@ export interface GenerateReportInput {
   userName?: string;
   dateFrom: string;
   dateTo: string;
+  /** How the patient chose the range ("Since appointment on 8 August 2026",
+   *  "Last 30 days"), printed at the top of the first page. */
+  rangeLabel?: string;
   /** Unfiltered — every cluster (mind or body) in range, same as the web
    *  app's own `clusters` prop. Split into mind-only/body-only internally
    *  via isBodyDomain, matching web's mindClusters/bodyClusters split. */
@@ -66,6 +70,11 @@ export interface GenerateReportInput {
   includeMind?: boolean;
   includeBody?: boolean;
   includeCycle?: boolean;
+  /** "Include full detail" under the body toggle. Off, the Symptom
+   *  Character pages (every pain and breathing description the patient
+   *  chose) are left out; everything else on the body side still prints.
+   *  Defaults off: those pages can run to three or four sheets. */
+  includeBodyDetail?: boolean;
 }
 
 // Mirrors insights.tsx's buildBodyDays/bodyBaselineMap recipe, but scoped to
@@ -169,10 +178,11 @@ function buildMorningEveningPairs(rows: Record<string, unknown>[], domains: Body
  */
 export async function generateReport(input: GenerateReportInput): Promise<{ uri: string }> {
   const {
-    userId, userName, dateFrom, dateTo, clusters, appointmentId,
+    userId, userName, dateFrom, dateTo, rangeLabel, clusters, appointmentId,
     bodyTrackingEnabled = false,
     includeMind = true,
     includeCycle = true,
+    includeBodyDetail = false,
   } = input;
   // Body content follows the include toggle when the caller sets one, and
   // otherwise whether the user tracks body at all.
@@ -268,8 +278,10 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // detectors below instead, not by feeding these generic ones merged data.
   const dayOfWeekPatterns = detectDayOfWeekPatterns(dayScores, activeDomains);
   const lagRelationships = detectLagRelationships(dayScores, activeDomains);
-  const rareEvents = detectRareEvents(dayScores, activeDomains, baselineMap);
-  const patternEvolution = detectPatternEvolution(dayScores, activeDomains, baselineMap);
+  // Uncapped: Insights shows the top three of each, but the report lists
+  // everything in its period.
+  const rareEvents = detectRareEvents(dayScores, activeDomains, baselineMap, Infinity);
+  const patternEvolution = detectPatternEvolution(dayScores, activeDomains, baselineMap, Infinity);
 
   // ── Body tracking — computed early so intervention-impact detection below
   // can merge it in. Scoped to the report's own date-range rows, same as
@@ -307,7 +319,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // picture for one marker is the correct behavior, not a leak.
   const mergedDayScores = mergeDays(dayScores, bodyDayScores);
   const combinedDomains = [...activeDomains, ...bodyTrackedDomains];
-  const interventionImpacts = detectInterventionImpacts(markers, mergedDayScores, combinedDomains);
+  const interventionImpacts = detectInterventionImpacts(markers, mergedDayScores, combinedDomains, Infinity);
 
   // The report is generated on the patient's own device, so the device zone
   // is the zone its check-ins were scheduled in — no profile read needed.
@@ -379,8 +391,8 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // bodyBaselineMap were computed early, above, for the intervention-impact
   // merge) ──────────────────────────────────────────────────────────────
 
-  const bodyPatternEvolution = detectPatternEvolution(bodyDayScores, bodyTrackedDomains, bodyBaselineMap);
-  const bodyRareEvents = detectRareEvents(bodyDayScores, bodyTrackedDomains, bodyBaselineMap);
+  const bodyPatternEvolution = detectPatternEvolution(bodyDayScores, bodyTrackedDomains, bodyBaselineMap, Infinity);
+  const bodyRareEvents = detectRareEvents(bodyDayScores, bodyTrackedDomains, bodyBaselineMap, Infinity);
 
   // These three feed Page 1's unified findings ranking only — Page 3 (Body
   // Overview) never renders them directly, same as on the web app.
@@ -392,11 +404,11 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
   // for this one" choice already made in insights.tsx).
   const bodyEventImpacts = detectBodyEventImpacts(bodyEventInput, dayScores, activeDomains);
 
-  const bodyCurrentRollingMedians: Record<string, number> = {};
-  for (const domain of bodyTrackedDomains) {
-    const vals = bodyDayScores.map(bd => bd.scores[domain]).filter((v): v is number => v != null);
-    if (vals.length > 0) bodyCurrentRollingMedians[domain] = median(vals);
-  }
+  // Each domain's first days against its last, on the same windows and the
+  // same day scores pattern evolution reads, so every trend arrow in the
+  // report agrees with every "improving/worsening trend" it prints.
+  const mindTrends = computeDomainTrends(dayScores, [...coords.trackedDomains, 'sleep']);
+  const bodyTrends = computeDomainTrends(bodyDayScores, bodyTrackedDomains);
   const bodyChartDomains = buildBodyChartDomains(bodyDayScores as any, bodyTrackedDomains, coords.dates, bodyBaselineMap);
   const bodyChartHasEnoughData = coords.dates.length >= 7 && bodyChartDomains.some(cd => cd.points.filter(p => p.value != null).length >= 7);
 
@@ -405,26 +417,19 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
 
   const hasBodyContent = bodySummary.domains.length > 0 || bodySummary.events.length > 0;
 
-  const characterSectionHtml = hasBodyContent
-    ? buildCharacterSectionHtml(buildCharacterEntries(bodyCheckInsRaw ?? []))
-    : '';
+  const characterPages = hasBodyContent && includeBodyDetail
+    ? buildCharacterPages(buildCharacterEntries(bodyCheckInsRaw ?? []))
+    : [];
 
   // ── Sparkline pagination ──────────────────────────────────────────────
-  // buildReportDocument derives totalPages from pages.length itself, so only
-  // methodologyPageNum (Page 1's "Methodology on page N" footnote) is worked
-  // out here — and it now has chart pages to count as well as the optional
-  // Body Overview page the web app's SymetricReport.tsx also allowed for.
-  // Charts get their own pages rather than being piled onto the overview
-  // pages, which had no cap on how many they would try to hold — see
-  // SPARKLINES_PER_PAGE. Computed here, before Page 1, because Page 1's
-  // "Methodology on page N" footnote has to count them.
+  // Charts get pages of their own, one column, a few to a page; see
+  // layOutSparklines.
   const mindSparklines = layOutSparklines({
     chartDomains: coords.chartDomains,
     baselineMap,
-    currentRollingMedians: coords.currentRollingMedians,
+    trends: mindTrends,
     chartHasEnoughData: coords.chartHasEnoughData,
     chartMarkers: coords.chartMarkers,
-    flaggedClusters,
     dates: coords.dates,
     trailingHtml: SPARKLINE_EXPLAINER_HTML,
   });
@@ -433,10 +438,9 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     ? layOutSparklines({
       chartDomains: bodyChartDomains,
       baselineMap: bodyBaselineMap,
-      currentRollingMedians: bodyCurrentRollingMedians,
+      trends: bodyTrends,
       chartHasEnoughData: bodyChartHasEnoughData,
       chartMarkers: coords.chartMarkers,
-      flaggedClusters: bodyFlaggedClusters,
       dates: coords.dates,
       lineColor: BODY_COLOR,
       isLowerBetterFn: () => true,
@@ -444,29 +448,16 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     })
     : { inline: '', pages: [] };
 
-  // Order: Executive Summary, Mind Overview, its chart pages, then (when
-  // there is body content) Body Overview and its chart pages, then Context &
-  // Connections and Methodology. Was hardcoded as `hasBodyContent ? 5 : 4`,
-  // which silently stopped being true the moment a page could be added.
-  const methodologyPageNum =
-    3 // Executive Summary, Domain Summary, Mind Overview
-    + mindSparklines.pages.length
-    + 1 // Sleep
-    + (hasBodyContent ? 1 + bodySparklines.pages.length : 0)
-    + (characterSectionHtml ? 1 : 0)
-    + 1 // Context & Connections
-    + 1 // Data Quality
-    + 1; // Methodology, which the footnote points at
-
   const page1Input = {
     userName,
     dateFrom,
     dateTo,
+    rangeLabel,
     completedCheckIns,
     totalScheduled,
     trackedDomains: activeDomains,
     baselineMap,
-    currentRollingMedians: coords.currentRollingMedians,
+    trends: mindTrends,
     questions: storedQuestions,
     flaggedClusters,
     domainConnections,
@@ -476,10 +467,11 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     rareEvents,
     patternEvolution,
     interventionImpacts,
-    methodologyPageNum,
+    // Filled in once the document is assembled and the page is known.
+    methodologyPageNum: METHODOLOGY_PAGE_TOKEN,
     bodyTrackedDomains,
     bodyBaselineMap,
-    bodyCurrentRollingMedians,
+    bodyTrends,
     bodyFlaggedClusters,
     bodyPatternEvolution,
     bodyRareEvents,
@@ -488,7 +480,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     bodyEventImpacts,
   };
 
-  const page1Body = buildPage1BodyHtml(page1Input);
+  const page1Pages = buildPage1Pages(page1Input);
 
   // Days this report already draws attention to, so a note written on one of
   // them is shown before the rest — a note beside a flagged episode is the
@@ -506,14 +498,14 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     for (const date of r.occurrence_dates ?? []) notableDates.add(date);
   }
 
-  const periodNotesHtml = buildPeriodNotesHtml(buildPeriodNotes({
+  const periodNotesSection = buildPeriodNotesSection(buildPeriodNotes({
     checkIns: (checkIns ?? []) as never,
     bodyCheckIns: (bodyCheckInsRaw ?? []) as Record<string, unknown>[],
     notableDates,
   }));
 
-  const page2Body = buildPage2Html({
-    notesHtml: periodNotesHtml,
+  const page2Pages = buildPage2Pages({
+    notesSection: periodNotesSection,
     chartMarkers: coords.chartMarkers,
     sparklinesInline: mindSparklines.inline,
     flaggedClusters,
@@ -539,13 +531,13 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     }
     : null;
 
-  const sleepPageBody = buildSleepPageHtml({
+  const sleepPages = buildSleepPages({
     qualityDomain: sleepQualityDomain,
     dates: coords.dates,
     baselineMap,
     currentRollingMedians: coords.currentRollingMedians,
+    trends: mindTrends,
     chartMarkers: coords.chartMarkers,
-    flaggedClusters,
     hoursPoints: sleepHoursPoints,
     medianHours: sleepMedianHours,
     persistedConnections,
@@ -560,7 +552,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     lagRelationships,
   });
 
-  const bodyOverviewBody = hasBodyContent ? buildBodyOverviewHtml({
+  const bodyOverviewPages = hasBodyContent ? buildBodyOverviewPages({
     dateFrom,
     eventProximity: detectEventProximity(
       (bodyEventsRaw ?? []) as unknown as { event_date: string; event_type: string }[],
@@ -575,7 +567,7 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     interventionImpacts,
     bodyRareEvents,
     bodyPatternEvolution,
-  }) : null;
+  }) : [];
 
   // Cycle day 1 markers drive this; includeCycle has already removed them
   // from `markers` when the patient excluded cycle data from the report.
@@ -594,15 +586,15 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
 
   // Stated negatives, so the positives above have a denominator.
   const foundPairKeys = new Set(domainConnections.map(c => `${c.domainA}|${c.domainB}`));
-  const checkedNotFoundHtml = buildCheckedNotFoundHtml(
+  const checkedNotFound = buildCheckedNotFoundSection(
     computeCheckedNotFound(coords.dates, coords.dailyMeans, coords.trackedDomains, foundPairKeys),
   );
 
-  const contextConnectionsBody = buildContextConnectionsHtml({
+  const contextConnectionsPages = buildContextConnectionsPages({
     cycleProximity,
     preDayOne,
     cycleIntervals,
-    checkedNotFoundHtml,
+    checkedNotFound,
     grouping: connectionGrouping,
     dayOfWeekPatterns,
     circadianPatterns: (includeMind ? (circadianPatterns ?? []) : []) as CircadianPattern[],
@@ -618,27 +610,31 @@ export async function generateReport(input: GenerateReportInput): Promise<{ uri:
     totalScheduled,
   });
 
+  // Each list-bearing section is a run of pages now, as many as its entries
+  // need, every one numbered (see flow-pages.ts).
+  const pages = [
+    ...page1Pages.map(bodyHtml => ({ sectionTitle: 'Executive Summary', bodyHtml })),
+    { sectionTitle: 'Domain Summary', bodyHtml: buildDomainSummaryHtml(page1Input) },
+    ...page2Pages.map(bodyHtml => ({ sectionTitle: 'Mind Overview', bodyHtml })),
+    // Charts follow the page that introduces them. Each one is its own
+    // page in this list, so "Page 3 of 7" keeps matching the sheet it is
+    // printed on.
+    ...mindSparklines.pages.map(bodyHtml => ({ sectionTitle: 'Mind Charts', bodyHtml })),
+    ...sleepPages.map(bodyHtml => ({ sectionTitle: 'Sleep', bodyHtml })),
+    ...bodyOverviewPages.map(bodyHtml => ({ sectionTitle: 'Body Overview', bodyHtml })),
+    ...bodySparklines.pages.map(bodyHtml => ({ sectionTitle: 'Body Charts', bodyHtml })),
+    ...characterPages.map(bodyHtml => ({ sectionTitle: 'Symptom Character', bodyHtml })),
+    ...contextConnectionsPages.map(bodyHtml => ({ sectionTitle: 'Context & Connections', bodyHtml })),
+    { sectionTitle: 'Data Quality', bodyHtml: dataQualityBody },
+    { sectionTitle: 'Methodology', bodyHtml: buildMethodologyHtml(dateFrom, dateTo) },
+  ];
+  // Page 1's "Methodology on page N", counted from the finished list rather
+  // than worked out by hand ahead of it.
+  const methodologyPageNum = pages.length;
+  for (const page of pages) page.bodyHtml = page.bodyHtml.replace(METHODOLOGY_PAGE_TOKEN, String(methodologyPageNum));
+
   const html = buildReportDocument({
-    pages: [
-      { sectionTitle: 'Executive Summary', bodyHtml: page1Body },
-      { sectionTitle: 'Domain Summary', bodyHtml: buildDomainSummaryHtml(page1Input) },
-      { sectionTitle: 'Mind Overview', bodyHtml: page2Body },
-      // Charts follow the page that introduces them. Each one is its own
-      // page in this list, so "Page 3 of 7" keeps matching the sheet it is
-      // printed on — the thing that stopped being true when a page's content
-      // overflowed and the print engine added a sheet nobody had numbered.
-      ...mindSparklines.pages.map(bodyHtml => ({ sectionTitle: 'Mind Charts', bodyHtml })),
-      { sectionTitle: 'Sleep', bodyHtml: sleepPageBody },
-      ...(bodyOverviewBody != null ? [{ sectionTitle: 'Body Overview', bodyHtml: bodyOverviewBody }] : []),
-      ...bodySparklines.pages.map(bodyHtml => ({ sectionTitle: 'Body Charts', bodyHtml })),
-      // A page of its own: measured at 114% of a sheet when it trailed the
-      // last chart page, and it is a list that grows with how much the
-      // patient describes.
-      ...(characterSectionHtml ? [{ sectionTitle: 'Symptom Character', bodyHtml: characterSectionHtml }] : []),
-      { sectionTitle: 'Context & Connections', bodyHtml: contextConnectionsBody },
-      { sectionTitle: 'Data Quality', bodyHtml: dataQualityBody },
-      { sectionTitle: 'Methodology', bodyHtml: buildMethodologyHtml(dateFrom, dateTo) },
-    ],
+    pages,
     generationDate,
     dateFrom,
     dateTo,

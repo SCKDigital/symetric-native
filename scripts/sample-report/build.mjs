@@ -32,6 +32,10 @@ const stubs = {
   '@/lib/supabase': join(here, 'fake-supabase.ts'),
   '@react-native-async-storage/async-storage': 'export default { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} };',
   'expo-print': 'export async function printToFileAsync({ html }) { globalThis.__reportHtml = html; return { uri: "memory://report.pdf" }; }',
+  // Pulled in by the offline outbox (src/lib/offline), which the queries the
+  // report shares with the app now go through. Always online, never queues.
+  '@react-native-community/netinfo': 'export default { addEventListener: cb => { cb({ isConnected: true, isInternetReachable: true }); return () => {}; }, fetch: async () => ({ isConnected: true, isInternetReachable: true }) };',
+  'expo-crypto': 'import { randomUUID as r } from "node:crypto"; export const randomUUID = () => r();',
   'react-native': 'export const Platform = { OS: "ios", select: o => o.ios ?? o.default }; export const AppState = { addEventListener: () => ({ remove() {} }) };',
 };
 

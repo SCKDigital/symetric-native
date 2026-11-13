@@ -1,3 +1,6 @@
+import { flowPages, textHeightPt } from '@/lib/report/flow-pages';
+import { CONTENT_WIDTH, theme } from '@/lib/report/theme';
+
 // Symptom character: the words, next to the numbers.
 //
 // The evening check-in asks what pain felt like (aching, burning, electric or
@@ -10,8 +13,9 @@
 // that is electric and shooting — which is the distinction a clinician needs
 // to separate, say, a mechanical problem from a neuropathic one. The scores
 // say how bad; only these say what kind.
-
-const MAX_ENTRIES = 10;
+//
+// Every description in the period is listed, running onto continuation pages
+// when there are more than a sheet holds (see flow-pages.ts).
 
 export interface CharacterEntry {
   date: string;
@@ -72,24 +76,33 @@ function fmtDay(d: string): string {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-/** Renders the block that sits under the body charts. '' when nothing was
- *  described, which is the normal case for someone who logs scores only. */
-export function buildCharacterSectionHtml(entries: CharacterEntry[]): string {
-  if (entries.length === 0) return '';
+const SYMPTOM_WIDTH_PT = 180;
+const TAGS_WIDTH_PT = CONTENT_WIDTH - 44 - SYMPTOM_WIDTH_PT - 16;
 
-  const shown = entries.slice(0, MAX_ENTRIES);
-  const hidden = entries.length - shown.length;
+/** One page body per sheet; empty when nothing was described, which is the
+ *  normal case for someone who logs scores only. */
+export function buildCharacterPages(entries: CharacterEntry[]): string[] {
+  if (entries.length === 0) return [];
 
-  const rows = shown.map(e => `<div class="character-row">
+  const rows = entries.map(e => {
+    const tags = e.tags.join(' · ');
+    return {
+      html: `<div class="character-row">
     <span class="character-date">${esc(fmtDay(e.date))}</span>
     <span class="character-symptom">${esc(e.symptom)} ${esc(e.scores)}</span>
-    <span class="character-tags">${e.tags.map(esc).join(' &middot; ')}</span>
-  </div>`).join('');
+    <span class="character-tags">${esc(tags)}</span>
+  </div>`,
+      heightPt: Math.max(
+        textHeightPt(tags, theme.fontSize.small, TAGS_WIDTH_PT),
+        textHeightPt(`${e.symptom} ${e.scores}`, theme.fontSize.small, SYMPTOM_WIDTH_PT),
+      ) + 4,
+    };
+  });
+  const caption = 'Chosen from a fixed list at the time of logging, alongside the scores charted on the body chart pages. Descriptive only - never scored, ranked or fed into pattern detection.';
 
-  return `<div class="section-gap">
-    <p class="section-label">How it felt, in the patient's own terms</p>
-    ${rows}
-    ${hidden > 0 ? `<p class="overflow-note">${hidden} earlier description${hidden !== 1 ? 's' : ''} not shown.</p>` : ''}
-    <p class="sleep-chart-caption">Chosen from a fixed list at the time of logging, alongside the scores charted above. Descriptive only - never scored, ranked or fed into pattern detection.</p>
-  </div>`;
+  return flowPages([{
+    title: "How it felt, in the patient's own terms",
+    rows,
+    footer: { html: `<p class="sleep-chart-caption">${esc(caption)}</p>`, heightPt: textHeightPt(caption, 7) + 2 },
+  }]);
 }

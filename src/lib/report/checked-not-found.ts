@@ -1,6 +1,7 @@
 import { CORRELATION_MIN_OVERLAP } from '@/lib/detection/compute-connection';
 import type { DailyMeans } from '@/lib/report/chart-coordinates';
 import { factorLabel } from '@/lib/pattern-findings';
+import type { FlowSection } from '@/lib/report/flow-pages';
 
 // What was looked at and came back empty.
 //
@@ -17,7 +18,6 @@ import { factorLabel } from '@/lib/pattern-findings';
 // with everything; saying that thirty pairs were compared and six passed is
 // the same page with its arithmetic shown.
 
-const MAX_SHOWN = 4;
 
 export interface CheckedPair {
   a: string;
@@ -85,24 +85,24 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function buildCheckedNotFoundHtml(result: CheckedNotFound): string {
-  if (result.tested === 0) return '';
-
-  const shown = result.pairs.slice(0, MAX_SHOWN);
-  const hidden = result.pairs.length - shown.length;
-
-  const list = shown.length === 0
-    ? `<p class="empty-muted">Every pair with enough overlapping days showed a relationship.</p>`
-    : shown.map(p => `<div class="group-standalone">
+/** Every pair compared and found unrelated, as a paginated section (see
+ *  flow-pages.ts). It used to list four and say how many more it left out.
+ *  Null when nothing had enough overlap to compare. */
+export function buildCheckedNotFoundSection(result: CheckedNotFound): FlowSection | null {
+  if (result.tested === 0) return null;
+  const claim = `${result.tested} pair${result.tested !== 1 ? 's' : ''} had enough overlapping days to compare. ${result.found} showed a relationship; the rest did not.`;
+  const caption = 'A null result is not proof of no connection - only that none was visible in this period, at this amount of data.';
+  return {
+    title: 'Compared, nothing found',
+    open: { html: `<p class="group-claim">${esc(claim)}</p>`, heightPt: 16 },
+    rows: result.pairs.map(p => ({
+      html: `<div class="group-standalone">
         <span class="standalone-text">${esc(factorLabel(p.a))} and ${esc(factorLabel(p.b))}</span>
         <span class="standalone-meta">${p.overlap} days &middot; no relationship</span>
-      </div>`).join('');
-
-  return `<div class="section-gap">
-    <p class="section-label">Compared, nothing found</p>
-    <p class="group-claim">${result.tested} pair${result.tested !== 1 ? 's' : ''} had enough overlapping days to compare. ${result.found} showed a relationship; the rest did not.</p>
-    ${list}
-    ${hidden > 0 ? `<p class="overflow-note">${hidden} further pair${hidden !== 1 ? 's' : ''} with no relationship not listed.</p>` : ''}
-    <p class="sleep-chart-caption">A null result is not proof of no connection - only that none was visible in this period, at this amount of data.</p>
-  </div>`;
+      </div>`,
+      heightPt: 16,
+    })),
+    empty: { html: `<p class="group-claim">${esc(claim)}</p><p class="empty-muted">Every pair with enough overlapping days showed a relationship.</p>`, heightPt: 32 },
+    footer: { html: `<p class="sleep-chart-caption">${esc(caption)}</p>`, heightPt: 14 },
+  };
 }

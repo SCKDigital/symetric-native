@@ -22,6 +22,8 @@ interface Props {
   appointmentId?: string;
   fromDate: string;
   toDate: string;
+  /** The range as the patient picked it, for the top of the report. */
+  rangeLabel?: string;
 }
 
 // Chunk 1 of the PDF report port — see generate-report.ts's header comment
@@ -34,7 +36,7 @@ interface Props {
 // auto-download anchor click -> expo-print's printToFileAsync followed by
 // the native share sheet (expo-sharing), since there's no browser
 // downloads folder on native to drop a file into.
-export default function GenerateReportSection({ clusters, appointmentId, fromDate, toDate }: Props) {
+export default function GenerateReportSection({ clusters, appointmentId, fromDate, toDate, rangeLabel }: Props) {
   const styles = useStyles();
   const accent = useAccent();
   const { user, profile } = useAuth();
@@ -47,6 +49,7 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
   const [includeMind, setIncludeMind] = useState(true);
   const [includeBody, setIncludeBody] = useState(profile?.body_tracking_enabled ?? false);
   const [includeCycle, setIncludeCycle] = useState(profile?.cycle_tracking_enabled ?? false);
+  const [includeBodyDetail, setIncludeBodyDetail] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -87,12 +90,14 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
         userName: trimmed || profile.display_name || profile.email,
         dateFrom: fromDate,
         dateTo: toDate,
+        rangeLabel,
         clusters,
         appointmentId,
         bodyTrackingEnabled: profile.body_tracking_enabled ?? false,
         includeMind,
         includeBody,
         includeCycle,
+        includeBodyDetail: includeBody && includeBodyDetail,
       });
       // Counts and timing only, per analytics.ts's rule.
       trackReportGenerated(
@@ -139,6 +144,16 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
       <View style={styles.includeList}>
         <IncludeToggle label="Include mind check-ins" checked={includeMind} onToggle={() => setIncludeMind(v => !v)} />
         <IncludeToggle label="Include body check-ins" checked={includeBody} onToggle={() => setIncludeBody(v => !v)} />
+        {/* Only meaningful with body included, so only offered then. */}
+        {includeBody && (
+          <IncludeToggle
+            label="Include full detail"
+            hint="Adds every pain and breathing description, in your own terms. Can add several pages."
+            nested
+            checked={includeBodyDetail}
+            onToggle={() => setIncludeBodyDetail(v => !v)}
+          />
+        )}
         <IncludeToggle label="Include cycle dates" checked={includeCycle} onToggle={() => setIncludeCycle(v => !v)} />
       </View>
 
@@ -166,18 +181,21 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
   );
 }
 
-function IncludeToggle({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
+function IncludeToggle({ label, hint, nested, checked, onToggle }: { label: string; hint?: string; nested?: boolean; checked: boolean; onToggle: () => void }) {
   const styles = useStyles();
   return (
     <Pressable
       onPress={onToggle}
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
-      style={({ pressed }) => [styles.includeRow, pressed && { opacity: 0.7 }]}>
+      style={({ pressed }) => [styles.includeRow, nested && styles.includeRowNested, pressed && { opacity: 0.7 }]}>
       <View style={[styles.checkbox, checked && styles.checkboxOn]}>
         {checked && <Text style={styles.checkboxTick}>✓</Text>}
       </View>
-      <Text style={styles.includeLabel}>{label}</Text>
+      <View style={styles.includeText}>
+        <Text style={styles.includeLabel}>{label}</Text>
+        {hint && <Text style={styles.includeHint}>{hint}</Text>}
+      </View>
     </Pressable>
   );
 }
@@ -200,7 +218,10 @@ const useStyles = makeAccentStyles(b => ({
   },
   checkboxOn: { backgroundColor: b.fill, borderColor: b.fill },
   checkboxTick: { fontSize: 13, color: b.onFill, fontWeight: '700' },
-  includeLabel: { fontSize: 15, color: '#e2e8f0', flex: 1 },
+  includeRowNested: { marginLeft: 34, alignItems: 'flex-start' },
+  includeText: { flex: 1, gap: 2 },
+  includeLabel: { fontSize: 15, color: '#e2e8f0' },
+  includeHint: { fontSize: 12, color: '#6b7a99', lineHeight: 17 },
   patternCount: { fontSize: 13, color: '#6b7a99', marginBottom: 16 },
   statusText: { fontSize: 13, color: '#6b7a99', marginBottom: 12 },
   errorText: { fontSize: 13, color: '#f87171', marginBottom: 12 },
