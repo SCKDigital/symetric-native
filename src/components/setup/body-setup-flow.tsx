@@ -14,7 +14,8 @@ import {
 } from '@/lib/body/constants';
 import { BODY_COLOR } from '@/lib/domains';
 import { saveProfile } from '@/lib/offline/queued-writes';
-import { toMinutes, type TimeRange } from '@/lib/quiet-hours';
+import { bodyTimingProblem } from '@/lib/body/timing';
+import type { TimeRange } from '@/lib/quiet-hours';
 import type { BodyDomainType } from '@/lib/supabase';
 import type { TimeFormat } from '@/lib/time-format';
 
@@ -86,13 +87,8 @@ export function BodySetupFlow({ timeFormat, mindWindow, mindPerDay, onDone, onCl
     else if (morningChosen.length < MORNING_DOMAIN_LIMIT) setMorningPicks(p => [...p.filter(x => morningOptions.includes(x)), d]);
   };
 
-  // Neither rule was checked before: a reminder could fire before its
-  // check-in opened, and the morning check-in could open after the evening one.
-  const timingProblem = toMinutes(remind) < toMinutes(from)
-    ? 'Your reminder needs to be at or after the time the evening check-in opens.'
-    : morningOn && toMinutes(morningAt) >= toMinutes(from)
-      ? 'The morning check-in needs to open before the evening one.'
-      : null;
+  // The same rules Settings applies (lib/body/timing.ts).
+  const timingProblem = bodyTimingProblem({ eveningFrom: from, reminder: remind, morningEnabled: morningOn, morningAt });
 
   const save = async () => {
     if (!user || busy || timingProblem) return;
@@ -239,7 +235,8 @@ export function BodySetupFlow({ timeFormat, mindWindow, mindPerDay, onDone, onCl
   );
 }
 
-function KeyItem({ color, label, round }: { color: string; label: string; round?: boolean }) {
+/** One entry in the day bar's key. Also used by Settings › Body tracking. */
+export function KeyItem({ color, label, round }: { color: string; label: string; round?: boolean }) {
   const styles = useStyles();
   return (
     <View style={styles.keyItem}>

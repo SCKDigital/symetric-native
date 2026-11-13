@@ -1,194 +1,148 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Modal, Text, View } from 'react-native';
 
-import { PlatformPicker } from '@/components/shared/platform-picker';
-import { BODY_DOMAIN_ORDER, BODY_DOMAINS } from '@/lib/body/constants';
-import type { BodyDomainType } from '@/lib/supabase';
+import { TimePair } from '@/components/onboarding/check-in-preferences-step';
+import { KeyItem } from '@/components/setup/body-setup-flow';
+import { DayBar, FooterRow, Note, SetupScreen } from '@/components/setup/setup-kit';
+import { Toggle } from '@/components/settings/settings-primitives';
+import { brandTint } from '@/constants/brand';
 import { makeAccentStyles } from '@/lib/accent-styles';
-import { useAccent } from '@/contexts/accent-context';
-import { dateToTimeString, timeStringToDate } from '@/lib/date-utils';
-
-// Settings chrome uses the app's default indigo, not the body-tracking
-// amber accent — that accent is reserved for the capture screens
-// themselves (BodyCheckIn, BodyMap, History) so it reads as a distinct
-// experience there. Matches the web app's own b.textFlat convention.
+import { bodyTimingProblem } from '@/lib/body/timing';
+import { BODY_COLOR } from '@/lib/domains';
+import type { TimeRange } from '@/lib/quiet-hours';
+import type { TimeFormat } from '@/lib/time-format';
 
 interface Props {
-  activeDomains: BodyDomainType[];
-  onToggleDomain: (domain: BodyDomainType) => void;
+  timeFormat: TimeFormat;
+  /** Her mind waking window and check-ins per day, drawn faintly on the day
+   *  bar behind the body check-ins. */
+  mindWindow: TimeRange;
+  mindPerDay: number;
   currentAvailableFrom: string;
   currentReminderTime: string;
   currentMorningEnabled: boolean;
   currentMorningTime: string;
+  /** Opened from the Morning check-in switch: start with morning on. */
+  startWithMorning?: boolean;
   onSaveTiming: (availableFrom: string, reminderTime: string, morningEnabled: boolean, morningTime: string) => Promise<void>;
   onClose: () => void;
 }
 
-type ActivePicker = 'available' | 'reminder' | 'morning' | null;
-
-// Ported from the web app's BodyTrackingSheet.tsx. Mechanic swap: three
-// <input type="time"> fields -> one shared PlatformPicker, tracked by which
-// field is currently being edited. Conditionally mounted
-// by its parent (settings.tsx) rather than an always-mounted `visible`
-// prop, matching this app's established modal convention.
+/**
+ * Settings › Body tracking times, rebuilt 2026-11-14 to match body setup's
+ * second screen: the same day bar, the same Opens / Remind me pair, the same
+ * rules (lib/body/timing.ts).
+ *
+ * What changed from the port of the web sheet: times follow her 12/24-hour
+ * setting instead of showing raw 17:00; the stale "three scores (fatigue,
+ * pain, dizziness)" copy is gone, since she now picks her morning symptoms;
+ * the symptom pills it repeated are left to the Settings page, which already
+ * shows them; and a reminder before opening, or a morning check-in after the
+ * evening one, can no longer be saved.
+ *
+ * Nothing is written until Save.
+ */
 export default function BodyTrackingSheet({
-  activeDomains, onToggleDomain, currentAvailableFrom, currentReminderTime,
-  currentMorningEnabled, currentMorningTime, onSaveTiming, onClose,
+  timeFormat, mindWindow, mindPerDay, currentAvailableFrom, currentReminderTime,
+  currentMorningEnabled, currentMorningTime, startWithMorning, onSaveTiming, onClose,
 }: Props) {
   const styles = useStyles();
-  const accent = useAccent();
-  const [availableFrom, setAvailableFrom] = useState(currentAvailableFrom);
-  const [reminderTime, setReminderTime] = useState(currentReminderTime);
-  const [morningEnabled, setMorningEnabled] = useState(currentMorningEnabled);
-  const [morningTime, setMorningTime] = useState(currentMorningTime);
-  const [activePicker, setActivePicker] = useState<ActivePicker>(null);
+  const [from, setFrom] = useState(currentAvailableFrom.slice(0, 5));
+  const [remind, setRemind] = useState(currentReminderTime.slice(0, 5));
+  const [morningOn, setMorningOn] = useState(startWithMorning || currentMorningEnabled);
+  const [morningAt, setMorningAt] = useState(currentMorningTime.slice(0, 5));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const dirty = availableFrom !== currentAvailableFrom
-    || reminderTime !== currentReminderTime
-    || morningEnabled !== currentMorningEnabled
-    || morningTime !== currentMorningTime;
+  const dirty = from !== currentAvailableFrom.slice(0, 5)
+    || remind !== currentReminderTime.slice(0, 5)
+    || morningOn !== currentMorningEnabled
+    || morningAt !== currentMorningTime.slice(0, 5);
+  const problem = bodyTimingProblem({ eveningFrom: from, reminder: remind, morningEnabled: morningOn, morningAt });
 
   const handleSave = async () => {
     if (!dirty) { onClose(); return; }
+    if (problem || saving) return;
     setSaving(true);
     setSaveError(null);
     try {
-      await onSaveTiming(availableFrom, reminderTime, morningEnabled, morningTime);
+      await onSaveTiming(from, remind, morningOn, morningAt);
       onClose();
     } catch {
-      setSaveError('Failed to save. Please try again.');
+      setSaveError('Could not save your times. Try again.');
       setSaving(false);
     }
   };
 
-  const handleTimePick = (field: Exclude<ActivePicker, null>) => (selectedDate: Date) => {
-    const value = dateToTimeString(selectedDate);
-    if (field === 'available') setAvailableFrom(value);
-    else if (field === 'reminder') setReminderTime(value);
-    else setMorningTime(value);
-  };
-
-  const pickerValue = activePicker === 'available' ? availableFrom : activePicker === 'reminder' ? reminderTime : morningTime;
-
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-          <View style={styles.handle} />
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>Body check-in settings</Text>
-            <Text style={styles.subtitle}>Deactivating a domain stops new entries but keeps your history.</Text>
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <SetupScreen
+        stepLabel="Body tracking"
+        title="When should we ask?"
+        onClose={onClose}
+        footer={(
+          <FooterRow
+            note={dirty ? undefined : 'No changes yet'}
+            label={dirty ? 'Save' : 'Done'}
+            onPress={handleSave}
+            disabled={dirty && !!problem}
+            busy={saving}
+          />
+        )}>
+        <DayBar
+          window={mindWindow}
+          checkIns={mindPerDay}
+          timeFormat={timeFormat}
+          body={{ eveningFrom: from, reminder: remind, morning: morningOn ? morningAt : null, color: BODY_COLOR }}>
+          <View style={styles.key}>
+            <KeyItem color="#262f3d" label="Mind check-ins" />
+            <KeyItem color={brandTint(BODY_COLOR, 0.55)} label="Body, evening" />
+            {morningOn && <KeyItem color={BODY_COLOR} label="Body, morning" round />}
+          </View>
+        </DayBar>
 
-            <Text style={styles.sectionLabel}>Domains</Text>
-            <View style={styles.pillRow}>
-              {BODY_DOMAIN_ORDER.map(d => {
-                const config = BODY_DOMAINS[d];
-                if (config.deprecated) return null;
-                if (config.required) {
-                  return (
-                    <View key={d} style={styles.requiredPill}>
-                      <Text style={styles.requiredPillText}>{config.label}</Text>
-                    </View>
-                  );
-                }
-                const active = activeDomains.includes(d);
-                return (
-                  <Pressable key={d} onPress={() => onToggleDomain(d)} style={[styles.domainPill, active && styles.domainPillActive]}>
-                    <Text style={[styles.domainPillText, active && styles.domainPillTextActive]}>{config.label}</Text>
-                  </Pressable>
-                );
-              })}
+        <View style={styles.block}>
+          <Text style={styles.blockTitle}>Evening check-in</Text>
+          <Text style={styles.blockSub}>
+            Opens on Today at this time and stays open until you go to bed. The reminder is a single nudge, sent only
+            if you haven&apos;t logged yet.
+          </Text>
+          <TimePair
+            left={{ label: 'Opens', value: from }}
+            right={{ label: 'Remind me', value: remind }}
+            timeFormat={timeFormat}
+            onChange={(side, v) => (side === 'left' ? setFrom(v) : setRemind(v))}
+          />
+        </View>
+
+        <View style={styles.block}>
+          <View style={styles.blockHead}>
+            <View style={styles.blockHeadText}>
+              <Text style={styles.blockTitle}>Morning check-in</Text>
+              <Text style={styles.blockSub}>
+                Optional. A short check-in before the day starts, so Symetric can compare how you wake with how the day
+                ends. Choose what it asks about on the Settings page.
+              </Text>
             </View>
+            <Toggle value={morningOn} onValueChange={setMorningOn} />
+          </View>
+          {morningOn && (
+            <TimePair left={{ label: 'Opens', value: morningAt }} timeFormat={timeFormat} onChange={(_, v) => setMorningAt(v)} />
+          )}
+        </View>
 
-            <View style={styles.timeRow}>
-              <View style={styles.timeCol}>
-                <Text style={styles.timeLabel}>Check-in opens at</Text>
-                <Pressable onPress={() => setActivePicker('available')} style={styles.timeInput}>
-                  <Text style={styles.timeInputText}>{availableFrom}</Text>
-                </Pressable>
-              </View>
-              <View style={styles.timeCol}>
-                <Text style={styles.timeLabel}>Remind me at</Text>
-                <Pressable onPress={() => setActivePicker('reminder')} style={styles.timeInput}>
-                  <Text style={styles.timeInputText}>{reminderTime}</Text>
-                </Pressable>
-              </View>
-            </View>
-            <Text style={styles.timeHint}>
-              “Opens at” is when the Today card appears. “Remind me at” is when a single push fires, only if you haven’t logged yet.
-            </Text>
-
-            <View style={styles.morningRow}>
-              <View style={styles.morningTextWrap}>
-                <Text style={styles.morningTitle}>Morning check-in</Text>
-                <Text style={styles.morningSubtitle}>
-                  Optional and short: three scores (fatigue, pain, dizziness) to catch how the day started, kept separate from tonight’s numbers.
-                </Text>
-              </View>
-              <Switch value={morningEnabled} onValueChange={setMorningEnabled} trackColor={{ true: accent.textFlat }} />
-            </View>
-            {morningEnabled && (
-              <View style={styles.morningTimeBlock}>
-                <Text style={styles.timeLabel}>Morning check-in opens at</Text>
-                <Pressable onPress={() => setActivePicker('morning')} style={styles.timeInput}>
-                  <Text style={styles.timeInputText}>{morningTime}</Text>
-                </Pressable>
-              </View>
-            )}
-
-            {activePicker && (
-              <PlatformPicker
-                style={styles.pickerWrap}
-                mode="time"
-                value={timeStringToDate(pickerValue)}
-                onPick={handleTimePick(activePicker)}
-                onClose={() => setActivePicker(null)}
-              />
-            )}
-
-            {saveError && <Text style={styles.errorText}>{saveError}</Text>}
-
-            <Pressable onPress={handleSave} disabled={saving} style={[styles.saveButton, saving && styles.saveButtonDisabled]}>
-              <Text style={[styles.saveButtonText, saving && styles.saveButtonTextDisabled]}>{saving ? 'Saving…' : dirty ? 'Save' : 'Done'}</Text>
-            </Pressable>
-          </ScrollView>
-        </Pressable>
-      </Pressable>
+        {problem && <Note tone="error">{problem}</Note>}
+        {saveError && <Note tone="error">{saveError}</Note>}
+      </SetupScreen>
     </Modal>
   );
 }
 
-const useStyles = makeAccentStyles(b => ({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#141820', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 48, maxHeight: '85%' },
-  handle: { width: 36, height: 4, backgroundColor: '#2d3748', borderRadius: 2, alignSelf: 'center', marginBottom: 24 },
-  title: { fontSize: 16, fontWeight: '600', color: '#e2e8f0', marginBottom: 6 },
-  subtitle: { fontSize: 13, color: '#718096', marginBottom: 22 },
-  sectionLabel: { fontSize: 12, color: '#8892a4', marginBottom: 8 },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 22 },
-  requiredPill: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: `${b.textFlat}1a`, borderWidth: 1, borderColor: `${b.textFlat}40` },
-  requiredPillText: { fontSize: 12, fontWeight: '500', color: b.textFlat },
-  domainPill: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#1e2333', borderWidth: 1, borderColor: '#252b3b' },
-  domainPillActive: { backgroundColor: `${b.textFlat}1a`, borderColor: `${b.textFlat}40` },
-  domainPillText: { fontSize: 12, fontWeight: '500', color: '#555c72' },
-  domainPillTextActive: { color: b.textFlat },
-  timeRow: { flexDirection: 'row', gap: 12, marginBottom: 6 },
-  timeCol: { flex: 1 },
-  timeLabel: { fontSize: 11, color: '#4a5568', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-  timeInput: { padding: 11, paddingHorizontal: 14, backgroundColor: '#0a0c12', borderWidth: 1, borderColor: '#2d3748', borderRadius: 10 },
-  timeInputText: { fontSize: 15, color: '#e2e8f0' },
-  timeHint: { fontSize: 11.5, color: '#4a5568', lineHeight: 17, marginBottom: 20 },
-  morningRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  morningTextWrap: { flex: 1, marginRight: 12 },
-  morningTitle: { fontSize: 13, fontWeight: '500', color: '#e2e8f0', marginBottom: 2 },
-  morningSubtitle: { fontSize: 11.5, color: '#4a5568', lineHeight: 16 },
-  morningTimeBlock: { marginBottom: 20 },
-  pickerWrap: { marginBottom: 20 },
-  errorText: { fontSize: 12, color: '#f87171', marginBottom: 16 },
-  saveButton: { padding: 14, borderRadius: 12, backgroundColor: b.fill, alignItems: 'center' },
-  saveButtonDisabled: { backgroundColor: '#1e2533' },
-  saveButtonText: { fontSize: 15, fontWeight: '600', color: b.onFill },
-  saveButtonTextDisabled: { color: '#4a5568' },
+const useStyles = makeAccentStyles(() => ({
+  key: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  block: { backgroundColor: '#141820', borderWidth: 1, borderColor: '#1e2533', borderRadius: 14, padding: 14, gap: 10 },
+  blockHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  blockHeadText: { flex: 1, gap: 3 },
+  blockTitle: { fontSize: 15, fontWeight: '600', color: '#e2e8f0' },
+  blockSub: { fontSize: 12.5, color: '#8892a4', lineHeight: 18 },
 }));

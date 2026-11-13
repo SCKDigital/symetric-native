@@ -43,6 +43,7 @@ import type { BodyDomainType, CheckInSettings, DomainType, Profile } from '@/lib
 import { saveCheckInSettings, saveProfile, setBaseline } from '@/lib/offline/queued-writes';
 import { overlayCheckInSettings } from '@/lib/offline/overlays';
 import { defaultQuietHours, fitQuietHours } from '@/lib/quiet-hours';
+import { bodyTimingProblem } from '@/lib/body/timing';
 import { supabase } from '@/lib/supabase';
 import { formatWindowTime, type TimeFormat } from '@/lib/time-format';
 import { brandTint } from '@/constants/brand';
@@ -323,6 +324,31 @@ export default function SettingsScreen() {
 
   // ── Profile booleans ───────────────────────────────────────────────────────
 
+  // ── Body tracking times ────────────────────────────────────────────────────
+
+  // Whether the body times sheet opens with the morning check-in switched on
+  // (it does when opened from the Morning check-in switch, below).
+  const [bodySheetMorning, setBodySheetMorning] = useState(false);
+  const openBodySheet = (withMorning: boolean) => {
+    setBodySheetMorning(withMorning);
+    setSheet('bodyTracking');
+  };
+
+  // Turning the morning check-in on goes through the same rules as the sheet
+  // (lib/body/timing.ts). If its saved time would open after the evening one,
+  // the sheet opens with morning on so the time can be fixed first, rather
+  // than the switch saving a pair the rest of the app can't use.
+  const handleToggleMorning = () => {
+    if (!bodyMorningEnabled) {
+      const problem = bodyTimingProblem({
+        eveningFrom: bodyAvailableFrom.slice(0, 5), reminder: bodyReminderTime.slice(0, 5),
+        morningEnabled: true, morningAt: bodyMorningTime.slice(0, 5),
+      });
+      if (problem) { openBodySheet(true); return; }
+    }
+    toggleProfileField('body_morning_enabled', bodyMorningEnabled, setBodyMorningEnabled);
+  };
+
   const toggleProfileField = async (field: keyof Profile, current: boolean, onOptimistic?: (v: boolean) => void) => {
     if (!user) return;
     const next = !current;
@@ -520,19 +546,19 @@ export default function SettingsScreen() {
               <SettingsRow
                 icon={<ClockIcon />} label="Available from"
                 subtitle={formatWindowTime(bodyAvailableFrom, timeFormat)}
-                right={<RowValue>Edit</RowValue>} onPress={() => setSheet('bodyTracking')}
+                right={<RowValue>Edit</RowValue>} onPress={() => openBodySheet(false)}
               />
               <RowDivider />
               <SettingsRow
                 icon={<ClockSimpleIcon />} label="Remind me at"
                 subtitle={formatWindowTime(bodyReminderTime, timeFormat)}
-                right={<RowValue>Edit</RowValue>} onPress={() => setSheet('bodyTracking')}
+                right={<RowValue>Edit</RowValue>} onPress={() => openBodySheet(false)}
               />
               <RowDivider />
               <SettingsRow
                 icon={<BellIcon />} label="Morning check-in"
-                subtitle="Optional: fatigue, pain, and dizziness, before the day starts"
-                right={<Toggle value={bodyMorningEnabled} onValueChange={() => toggleProfileField('body_morning_enabled', bodyMorningEnabled, setBodyMorningEnabled)} />}
+                subtitle="Optional. A short check-in before the day starts"
+                right={<Toggle value={bodyMorningEnabled} onValueChange={handleToggleMorning} />}
               />
               {bodyMorningEnabled && (
                 <>
@@ -551,7 +577,7 @@ export default function SettingsScreen() {
                   <SettingsRow
                     icon={<ClockIcon />} label="Opens at"
                     subtitle={formatWindowTime(bodyMorningTime, timeFormat)}
-                    right={<RowValue>Edit</RowValue>} onPress={() => setSheet('bodyTracking')}
+                    right={<RowValue>Edit</RowValue>} onPress={() => openBodySheet(false)}
                   />
                 </>
               )}
@@ -802,8 +828,10 @@ export default function SettingsScreen() {
       )}
       {sheet === 'bodyTracking' && (
         <BodyTrackingSheet
-          activeDomains={bodyDomainsActive}
-          onToggleDomain={handleToggleBodyDomain}
+          timeFormat={timeFormat}
+          mindWindow={wakingWindow}
+          mindPerDay={checkInSettings?.check_ins_per_day ?? 3}
+          startWithMorning={bodySheetMorning}
           currentAvailableFrom={bodyAvailableFrom}
           currentReminderTime={bodyReminderTime}
           currentMorningEnabled={bodyMorningEnabled}
