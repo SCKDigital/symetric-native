@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import type { SetupCardState } from '@/hooks/use-setup-cards';
 import { DEFAULT_ACCENT } from '@/constants/accents';
-import { dateToString } from '@/lib/date-utils';
 import { IS_DEMO, supabase } from '@/lib/supabase';
 import { useAppOpenId } from '@/lib/tips/app-open';
 import {
@@ -24,9 +23,15 @@ export interface TipDeck {
 
 /** Whole local days since the account was created. */
 function daysSince(createdAt: string): number {
-  const created = new Date(`${dateToString(new Date(createdAt))}T00:00:00`);
-  const today = new Date(`${dateToString(new Date())}T00:00:00`);
-  return Math.round((today.getTime() - created.getTime()) / 86_400_000);
+  // Calendar arithmetic on local date parts, not a re-parsed date string:
+  // string parsing is where Hermes and V8 have disagreed before. An
+  // unparseable createdAt gives NaN, which fails every ">=" check — no tips,
+  // never a crash.
+  const c = new Date(createdAt);
+  const n = new Date();
+  const created = Date.UTC(c.getFullYear(), c.getMonth(), c.getDate());
+  const today = Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
+  return Math.round((today - created) / 86_400_000);
 }
 
 /** True when the query finds at least one row. A failed read counts as unknown → null. */
