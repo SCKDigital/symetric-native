@@ -15,12 +15,17 @@ import { PulseLoadingScreen } from '@/components/pulse-loading-screen';
 import { AccentProvider } from '@/contexts/accent-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { trySetSessionFromUrl } from '@/lib/auth-deep-link';
+import { clearShareFiles } from '@/lib/share-files';
 import { IS_DEMO } from '@/lib/supabase';
 import { useAppLock } from '@/hooks/use-app-lock';
 import { usePushTokenSync } from '@/hooks/use-push-token-sync';
 import { useOutboxRunner } from '@/hooks/use-outbox-runner';
 
 SplashScreen.preventAutoHideAsync();
+
+// Files written for a share sheet in a previous run have done their job.
+// See lib/share-files.ts.
+clearShareFiles();
 
 // Standard Expo boilerplate, no web equivalent (the web app's foreground
 // notification display is the browser's own, driven by public/sw.js's

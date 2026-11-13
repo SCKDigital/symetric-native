@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import MarkerModal from '@/components/marker-modal';
 import CheckInPreferencesStep from '@/components/onboarding/check-in-preferences-step';
 import DomainSelectionStep from '@/components/onboarding/domain-selection-step';
+import { useModalTopPadding } from '@/components/shared/modal-keyboard-view';
 import AppLockPinSheet from '@/components/settings/app-lock-pin-sheet';
 import { Toggle } from '@/components/settings/settings-primitives';
 import { useAuth } from '@/contexts/auth-context';
@@ -95,6 +96,7 @@ function SetupCard({ title, body, action, onPress, onSecondary, secondaryLabel, 
 
 export default function SetupCards({ state, onChanged }: Props) {
   const styles = useStyles();
+  const sheetPaddingTop = useModalTopPadding(60);
   const { user, profile, refreshProfile } = useAuth();
   const [sheet, setSheet] = useState<null | 'domains' | 'times' | 'body' | 'cycle' | 'preferences'>(null);
   const [pinSheet, setPinSheet] = useState(false);
@@ -314,7 +316,7 @@ export default function SetupCards({ state, onChanged }: Props) {
       </Modal>
 
       <Modal visible={sheet === 'body'} animationType="slide" onRequestClose={() => setSheet(null)}>
-        <ScrollView contentContainerStyle={styles.sheet}>
+        <ScrollView contentContainerStyle={[styles.sheet, { paddingTop: sheetPaddingTop }]}>
           <Text style={styles.sheetTitle}>Set up body tracking</Text>
 
           <Text style={styles.sheetLabel}>WHICH SYMPTOMS</Text>
@@ -390,7 +392,7 @@ export default function SetupCards({ state, onChanged }: Props) {
       </Modal>
 
       <Modal visible={sheet === 'preferences'} animationType="slide" onRequestClose={() => setSheet(null)}>
-        <ScrollView contentContainerStyle={styles.sheet}>
+        <ScrollView contentContainerStyle={[styles.sheet, { paddingTop: sheetPaddingTop }]}>
           <Text style={styles.sheetTitle}>Lock it, or quieten it</Text>
 
           <View style={styles.sheetToggleRow}>
@@ -546,7 +548,8 @@ const useStyles = makeAccentStyles(b => ({
   cardSecondary: { fontSize: 13, color: '#6b7a99' },
   pressed: { opacity: 0.7 },
 
-  sheet: { padding: 24, paddingTop: 60, paddingBottom: 60, gap: 10, backgroundColor: '#0a0c12', flexGrow: 1 },
+  // paddingTop comes from useModalTopPadding.
+  sheet: { padding: 24, paddingBottom: 60, gap: 10, backgroundColor: '#0a0c12', flexGrow: 1 },
   sheetTitle: { fontSize: 22, fontWeight: '600', color: '#e2e8f0', marginBottom: 12 },
   sheetLabel: { fontSize: 11, color: '#6b7a99', letterSpacing: 0.9, marginTop: 14 },
   sheetToggleRow: {

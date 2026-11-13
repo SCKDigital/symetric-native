@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -28,6 +29,70 @@ export type PushSubscribeResult =
 
 function getProjectId(): string | undefined {
   return Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId ?? undefined;
+}
+
+// This device's token as last registered. Kept so the token row can be found
+// again without asking Expo — which needs the network, and which a device
+// whose permission has gone may not answer usefully.
+const DEVICE_TOKEN_KEY = 'symetric.push.deviceToken';
+
+async function readStoredDeviceToken(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(DEVICE_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+async function forgetStoredDeviceToken(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(DEVICE_TOKEN_KEY);
+  } catch {
+    // Only a cache.
+  }
+}
+
+/** The stored token, else Expo's answer within four seconds, else null. */
+async function resolveThisDeviceToken(projectId: string): Promise<string | null> {
+  const stored = await readStoredDeviceToken();
+  if (stored) return stored;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Notifications.getExpoPushTokenAsync({ projectId }).then(t => t.data),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 4000); }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Gets this device's Expo token and stores it against the user, one row per
+ * device (upserted by token). Shared by the explicit subscribe and the launch
+ * sync. Returns false if the row could not be written.
+ */
+async function registerThisDevice(userId: string, projectId: string): Promise<boolean> {
+  // The channel is what Android attaches an incoming push to; it is created at
+  // launch too (use-push-token-sync), this just guarantees it on this path.
+  await ensureAndroidNotificationChannel();
+  const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+  const { error } = await supabase.from('expo_push_tokens').upsert(
+    { user_id: userId, token, platform: Platform.OS },
+    { onConflict: 'token' },
+  );
+  if (error) {
+    console.error('[push] token upsert failed:', error);
+    return false;
+  }
+  try {
+    await AsyncStorage.setItem(DEVICE_TOKEN_KEY, token);
+  } catch {
+    // Only a cache; resolveThisDeviceToken falls back to asking Expo.
+  }
+  return true;
 }
 
 /**
@@ -71,57 +136,77 @@ export async function ensureAndroidNotificationChannel(): Promise<void> {
   });
 }
 
+/**
+ * Takes this device out of the send list because it cannot show a push, and
+ * switches the account's push_enabled off only if no other device is still
+ * registered. Returns true when it switched it off.
+ *
+ * push_enabled belongs to the account; permission belongs to one device.
+ * Turning the account off whenever *this* device lacked permission meant that
+ * signing in on a second phone, before allowing notifications there, silently
+ * stopped reminders on the first one.
+ */
+async function dropThisDevice(userId: string): Promise<boolean> {
+  const projectId = getProjectId();
+  const token = projectId ? await resolveThisDeviceToken(projectId) : await readStoredDeviceToken();
+  if (token) {
+    const { error } = await supabase.from('expo_push_tokens').delete().eq('token', token);
+    if (!error) await forgetStoredDeviceToken();
+  }
+
+  const { count, error } = await supabase
+    .from('expo_push_tokens')
+    .select('token', { count: 'exact', head: true })
+    .eq('user_id', userId);
+  // Unknown is not "none": leave the account alone and try again next time.
+  if (error || count === null || count > 0) return false;
+
+  await supabase.from('profiles').update({ push_enabled: false }).eq('id', userId);
+  return true;
+}
+
 export async function subscribeToPushNotifications(userId: string): Promise<PushSubscribeResult> {
   if (!Device.isDevice) {
     return { success: false, reason: 'unsupported', message: 'Push notifications require a physical device.' };
   }
 
-  const existing = await Notifications.getPermissionsAsync();
-
-  // canAskAgain, not status alone: Android reports 'denied' after a single
-  // "Don't allow" yet still lets the app show the prompt again. Only when the
-  // OS won't ask any more is device Settings the user's only way back.
-  if (existing.status === 'denied' && !existing.canAskAgain) {
-    return {
-      success: false,
-      reason: 'blocked',
-      message: 'Notifications are blocked. Enable them for Symetric in your device Settings, then try again.',
-    };
-  }
-
-  // Re-reading through isPermissionGranted rather than comparing the root
-  // status directly — see its comment for the iOS authorisation states that
-  // deliver notifications without reporting 'granted'.
-  const final = isPermissionGranted(existing) ? existing : await Notifications.requestPermissionsAsync();
-
-  if (!isPermissionGranted(final)) {
-    await supabase.from('profiles').update({ push_enabled: false }).eq('id', userId);
-    return { success: false, reason: 'denied', message: 'Notification permission was not granted.' };
-  }
-
-  const projectId = getProjectId();
-  if (!projectId) {
-    return { success: false, reason: 'error', message: 'Push notifications aren’t set up for this build yet.' };
-  }
-
+  // All of it inside the try: a permission call that throws used to escape,
+  // and the callers' busy flags were never cleared.
   try {
-    await ensureAndroidNotificationChannel();
+    const existing = await Notifications.getPermissionsAsync();
 
-    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+    // canAskAgain, not status alone: Android reports 'denied' after a single
+    // "Don't allow" yet still lets the app show the prompt again. Only when
+    // the OS won't ask any more is device Settings the user's only way back.
+    if (existing.status === 'denied' && !existing.canAskAgain) {
+      return {
+        success: false,
+        reason: 'blocked',
+        message: 'Notifications are blocked. Enable them for Symetric in your device Settings, then try again.',
+      };
+    }
+
+    // Re-reading through isPermissionGranted rather than comparing the root
+    // status directly — see its comment for the iOS authorisation states that
+    // deliver notifications without reporting 'granted'.
+    const final = isPermissionGranted(existing) ? existing : await Notifications.requestPermissionsAsync();
+
+    if (!isPermissionGranted(final)) {
+      await dropThisDevice(userId);
+      return { success: false, reason: 'denied', message: 'Notification permission was not granted.' };
+    }
+
+    const projectId = getProjectId();
+    if (!projectId) {
+      return { success: false, reason: 'error', message: 'Push notifications aren’t set up for this build yet.' };
+    }
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       return { success: false, reason: 'error', message: 'Session expired. Please sign out and sign in again.' };
     }
 
-    // Upsert keyed by token — each device has its own token, so this adds/
-    // updates only the current device's row without touching the user's
-    // other devices, same intent as web's per-endpoint upsert.
-    const { error: upsertError } = await supabase.from('expo_push_tokens').upsert(
-      { user_id: userId, token, platform: Platform.OS },
-      { onConflict: 'token' },
-    );
-    if (upsertError) {
+    if (!(await registerThisDevice(userId, projectId))) {
       return { success: false, reason: 'error', message: 'Failed to save your push token. Please try again.' };
     }
 
@@ -131,12 +216,17 @@ export async function subscribeToPushNotifications(userId: string): Promise<Push
     }
 
     return { success: true };
-  } catch {
+  } catch (e) {
+    console.error('[push] subscribe failed:', e);
     return { success: false, reason: 'error', message: 'An unexpected error occurred. Please try again.' };
   }
 }
 
-export type PushTokenSyncResult = 'synced' | 'permission_revoked' | 'unsupported' | 'error';
+/** 'permission_revoked': this device can't show pushes and was the last one
+ *  registered, so the account's push_enabled was switched off.
+ *  'not_permitted_here': this device can't show pushes and was dropped, but
+ *  another device still has them, so the account was left alone. */
+export type PushTokenSyncResult = 'synced' | 'permission_revoked' | 'not_permitted_here' | 'unsupported' | 'error';
 
 /**
  * Re-registers this device's Expo push token when the user already has push
@@ -153,9 +243,11 @@ export type PushTokenSyncResult = 'synced' | 'permission_revoked' | 'unsupported
  * precisely what the test-notification error told people to do.
  *
  * It reconciles the other direction too: if notification permission has since
- * been revoked in the OS (one tap on Android 13+), push_enabled goes back to
- * false, so Settings shows the true state and offers the prompt again instead
- * of claiming reminders are on while the OS drops them.
+ * been revoked in the OS (one tap on Android 13+), this device's row goes, and
+ * if it was the last one push_enabled goes back to false, so Settings shows
+ * the true state and offers the prompt again instead of claiming reminders
+ * are on while the OS drops them. See dropThisDevice for why a device without
+ * permission doesn't switch the whole account off.
  */
 export async function syncPushToken(userId: string): Promise<PushTokenSyncResult> {
   if (!Device.isDevice) return 'unsupported';
@@ -163,28 +255,13 @@ export async function syncPushToken(userId: string): Promise<PushTokenSyncResult
   try {
     const perms = await Notifications.getPermissionsAsync();
     if (!isPermissionGranted(perms)) {
-      await supabase.from('profiles').update({ push_enabled: false }).eq('id', userId);
-      return 'permission_revoked';
+      return (await dropThisDevice(userId)) ? 'permission_revoked' : 'not_permitted_here';
     }
 
     const projectId = getProjectId();
     if (!projectId) return 'error';
 
-    // Must precede getExpoPushTokenAsync on Android: the channel is what the
-    // OS attaches an incoming push to.
-    await ensureAndroidNotificationChannel();
-
-    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-
-    const { error } = await supabase.from('expo_push_tokens').upsert(
-      { user_id: userId, token, platform: Platform.OS },
-      { onConflict: 'token' },
-    );
-    if (error) {
-      console.error('[push] token sync upsert failed:', error);
-      return 'error';
-    }
-    return 'synced';
+    return (await registerThisDevice(userId, projectId)) ? 'synced' : 'error';
   } catch (e) {
     console.error('[push] token sync failed:', e);
     return 'error';
@@ -193,19 +270,19 @@ export async function syncPushToken(userId: string): Promise<PushTokenSyncResult
 
 /**
  * Deletes this device's row from expo_push_tokens. Best-effort and bounded:
- * fetching the token needs the network, and sign-out must not hang on it.
- * If it fails the row is orphaned; the send path drops tokens Expo reports
- * as invalid.
+ * the stored token needs no network, and asking Expo for it is capped at four
+ * seconds, so sign-out can't hang on it. If it fails the row is orphaned; the
+ * send path drops tokens Expo reports as invalid.
  */
 export async function removeThisDevicePushToken(): Promise<void> {
   const projectId = getProjectId();
   if (!projectId || !Device.isDevice) return;
   try {
-    const token = await Promise.race([
-      Notifications.getExpoPushTokenAsync({ projectId }).then(t => t.data),
-      new Promise<null>(resolve => setTimeout(() => resolve(null), 4000)),
-    ]);
-    if (token) await supabase.from('expo_push_tokens').delete().eq('token', token);
+    const token = await resolveThisDeviceToken(projectId);
+    if (token) {
+      const { error } = await supabase.from('expo_push_tokens').delete().eq('token', token);
+      if (!error) await forgetStoredDeviceToken();
+    }
   } catch {
     // See above.
   }

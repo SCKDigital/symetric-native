@@ -5,6 +5,7 @@ import DomainSlider from '@/components/checkin/domain-slider';
 import BodyMap, { type PainSite } from '@/components/body/body-map';
 import CharacterTags from '@/components/body/character-tags';
 import EventSitePicker, { type EventSite } from '@/components/body/event-site-picker';
+import { ModalKeyboardView, useModalTopPadding } from '@/components/shared/modal-keyboard-view';
 import { useAuth } from '@/contexts/auth-context';
 import {
   trackBodyBackfillUsed, trackBodyCheckInCompleted, trackBodyCheckInStarted, trackBodyEventLogged, trackBodyMapOpened,
@@ -50,6 +51,7 @@ const PENDING_ENTRY = 'pending';
 // morning check-in, onboarding's body-consent step.
 export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
   const styles = useStyles();
+  const paddingTop = useModalTopPadding(40);
   const { user, profile } = useAuth();
   // Sliders live inside this ScrollView. A horizontal drag that starts with
   // any vertical component gets claimed by the scroll, which is what made the
@@ -336,8 +338,13 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={scrollEnabled}>
+      <ModalKeyboardView fullScreen style={styles.root}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingTop }]}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={scrollEnabled}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets>
           <View style={styles.header}>
             <Text style={styles.headerLabel}>Body check-in</Text>
             <Pressable onPress={onClose} hitSlop={8}>
@@ -462,14 +469,15 @@ export default function BodyCheckIn({ visible, onClose, initialDate }: Props) {
             </>
           )}
         </ScrollView>
-      </View>
+      </ModalKeyboardView>
     </Modal>
   );
 }
 
 const useStyles = makeAccentStyles(b => ({
   root: { flex: 1, backgroundColor: '#0a0c12' },
-  content: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 96 },
+  // paddingTop comes from useModalTopPadding.
+  content: { paddingHorizontal: 20, paddingBottom: 96 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   headerLabel: { fontSize: 13, fontWeight: '500', color: BODY_COLOR, textTransform: 'uppercase', letterSpacing: 0.6 },
   closeIcon: { fontSize: 18, color: '#64748b' },

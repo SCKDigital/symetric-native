@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import { ModalKeyboardView } from '@/components/shared/modal-keyboard-view';
 import { PlatformPicker } from '@/components/shared/platform-picker';
 import { dateToString, parseDateString } from '@/lib/date-utils';
 import { markerColors, markerTypeLabels, MarkerType } from '@/lib/marker-colors';
@@ -169,172 +170,174 @@ export default function MarkerModal({ marker, defaultDate, onSave, onDelete, onC
 
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.card} onPress={e => e.stopPropagation()}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>{isEditing ? 'Edit marker' : 'Add marker'}</Text>
+      <ModalKeyboardView>
+        <Pressable style={styles.overlay} onPress={onClose}>
+          <Pressable style={styles.card} onPress={e => e.stopPropagation()}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.title}>{isEditing ? 'Edit marker' : 'Add marker'}</Text>
 
-            {/* ── Type selector ─────────────────────────────────────────── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Type</Text>
-              <View style={styles.pillGrid}>
-                {(Object.keys(markerColors) as MarkerType[])
-                  .filter(type => type !== 'cycle_phase' || cycleTrackingEnabled)
-                  .map(type => {
-                    const selected = markerType === type;
-                    const color = markerColors[type];
+              {/* ── Type selector ─────────────────────────────────────────── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Type</Text>
+                <View style={styles.pillGrid}>
+                  {(Object.keys(markerColors) as MarkerType[])
+                    .filter(type => type !== 'cycle_phase' || cycleTrackingEnabled)
+                    .map(type => {
+                      const selected = markerType === type;
+                      const color = markerColors[type];
+                      return (
+                        <Pressable
+                          key={type}
+                          onPress={() => {
+                            if (type !== markerType) {
+                              selectAction(type, type === 'cycle_phase' ? 'day_one' : null);
+                            }
+                            setMarkerType(type);
+                            setTypeError(null);
+                          }}
+                          style={[styles.pill, styles.pillHalf, { borderColor: selected ? color : '#2d3748' }, selected && { backgroundColor: `${color}33` }]}>
+                          <Text style={[styles.pillText, selected && { color, fontWeight: '600' }]}>{markerTypeLabels[type]}</Text>
+                        </Pressable>
+                      );
+                    })}
+                </View>
+                <Text style={styles.hint}>This helps you see patterns before and after different kinds of changes.</Text>
+                {typeError && <Text style={styles.errorText}>{typeError}</Text>}
+              </View>
+
+              {/* ── Cycle phase sub-type ──────────────────────────────────── */}
+              {markerType === 'cycle_phase' && (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Which phase?</Text>
+                  <Pressable
+                    onPress={() => selectAction('cycle_phase', selectedAction === 'day_one' ? null : 'day_one')}
+                    style={[styles.pill, { borderColor: selectedAction === 'day_one' ? '#ec4899' : '#2d3748' }, selectedAction === 'day_one' && { backgroundColor: 'rgba(236,72,153,0.13)' }]}>
+                    <View style={[styles.dot, { backgroundColor: '#ec4899' }]} />
+                    <Text style={[styles.pillText, selectedAction === 'day_one' && { color: '#ec4899', fontWeight: '600' }]}>Day 1</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {/* ── Therapy sub-type ──────────────────────────────────────── */}
+              {markerType === 'therapy' && (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Mind or body?</Text>
+                  <View style={styles.pillGrid}>
+                    {THERAPY_ACTIONS.map(({ action, label: btnLabel }) => {
+                      const active = selectedAction === action;
+                      const color = markerColors.therapy;
+                      return (
+                        <Pressable key={action} onPress={() => selectAction('therapy', active ? null : action)} style={[styles.pill, styles.pillHalf, { borderColor: active ? color : '#2d3748' }, active && { backgroundColor: `${color}22` }]}>
+                          <Text style={[styles.pillText, active && { color, fontWeight: '600' }]}>{btnLabel}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* ── Medication action ─────────────────────────────────────── */}
+              {markerType === 'medication' && (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>What kind of change?</Text>
+                  <View style={styles.pillGrid}>
+                    {MEDICATION_ACTIONS.map(({ action, label: btnLabel }) => {
+                      const active = selectedAction === action;
+                      return (
+                        <Pressable key={action} onPress={() => selectAction('medication', active ? null : action)} style={[styles.pill, styles.pillHalf, { borderColor: active ? '#f59e0b' : '#2d3748' }, active && { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
+                          <Text style={[styles.pillText, active && { color: '#fbbf24', fontWeight: '600' }]}>{btnLabel}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* ── Date ───────────────────────────────────────────────────── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>When?</Text>
+                <View style={styles.quickDateRow}>
+                  {(
+                    [
+                      { label: 'Today', daysAgo: 0 },
+                      { label: '1 week ago', daysAgo: 7 },
+                      { label: '2 weeks ago', daysAgo: 14 },
+                    ] as const
+                  ).map(({ label: shortcutLabel, daysAgo }) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - daysAgo);
+                    const value = dateToString(d);
+                    const isSelected = markerDate === value;
                     return (
                       <Pressable
-                        key={type}
+                        key={shortcutLabel}
                         onPress={() => {
-                          if (type !== markerType) {
-                            selectAction(type, type === 'cycle_phase' ? 'day_one' : null);
-                          }
-                          setMarkerType(type);
-                          setTypeError(null);
+                          setMarkerDate(value);
+                          setDateError(null);
                         }}
-                        style={[styles.pill, styles.pillHalf, { borderColor: selected ? color : '#2d3748' }, selected && { backgroundColor: `${color}33` }]}>
-                        <Text style={[styles.pillText, selected && { color, fontWeight: '600' }]}>{markerTypeLabels[type]}</Text>
+                        style={[styles.quickDatePill, isSelected && styles.quickDatePillActive]}>
+                        <Text style={[styles.quickDateText, isSelected && styles.quickDateTextActive]}>{shortcutLabel}</Text>
                       </Pressable>
                     );
                   })}
+                </View>
+                <Pressable onPress={() => setShowDatePicker(true)} style={[styles.dateInput, dateError && styles.dateInputError]}>
+                  <Text style={styles.dateInputText}>{markerDate}</Text>
+                </Pressable>
+                {showDatePicker && (
+                  <PlatformPicker
+                    style={styles.pickerWrap}
+                    mode="date"
+                    value={parseDateString(markerDate)}
+                    maximumDate={new Date()}
+                    onPick={handleDatePick}
+                    onClose={() => setShowDatePicker(false)}
+                  />
+                )}
+                {dateError && <Text style={styles.errorText}>{dateError}</Text>}
               </View>
-              <Text style={styles.hint}>This helps you see patterns before and after different kinds of changes.</Text>
-              {typeError && <Text style={styles.errorText}>{typeError}</Text>}
-            </View>
 
-            {/* ── Cycle phase sub-type ──────────────────────────────────── */}
-            {markerType === 'cycle_phase' && (
+              {/* ── Label ──────────────────────────────────────────────────── */}
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Which phase?</Text>
-                <Pressable
-                  onPress={() => selectAction('cycle_phase', selectedAction === 'day_one' ? null : 'day_one')}
-                  style={[styles.pill, { borderColor: selectedAction === 'day_one' ? '#ec4899' : '#2d3748' }, selectedAction === 'day_one' && { backgroundColor: 'rgba(236,72,153,0.13)' }]}>
-                  <View style={[styles.dot, { backgroundColor: '#ec4899' }]} />
-                  <Text style={[styles.pillText, selectedAction === 'day_one' && { color: '#ec4899', fontWeight: '600' }]}>Day 1</Text>
+                <Text style={styles.fieldLabel}>What changed?</Text>
+                <TextInput
+                  value={label}
+                  maxLength={MAX_LABEL_LENGTH}
+                  placeholder={markerType === 'medication' ? 'e.g. Started 20mg, Increased dosage' : markerType === 'therapy' ? 'e.g. First session, Weekly CBT' : 'e.g. Job change, Moved cities'}
+                  placeholderTextColor="#4a5568"
+                  onChangeText={text => {
+                    setLabel(text);
+                    setLabelError(null);
+                  }}
+                  style={[styles.textInput, labelError && styles.dateInputError]}
+                />
+                {label.length >= 80 && (
+                  <Text style={[styles.charCount, label.length >= 95 && styles.charCountWarn]}>
+                    {MAX_LABEL_LENGTH - label.length} character{MAX_LABEL_LENGTH - label.length !== 1 ? 's' : ''} remaining
+                  </Text>
+                )}
+                {labelError && <Text style={styles.errorText}>{labelError}</Text>}
+              </View>
+
+              {/* ── Actions ────────────────────────────────────────────────── */}
+              <View style={styles.actionRow}>
+                <Pressable onPress={onClose} disabled={saving} style={styles.cancelButton}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={handleSave} disabled={saving || !canSave} style={[styles.saveButton, (saving || !canSave) && styles.saveButtonDisabled]}>
+                  {saving ? <ActivityIndicator color="#4a5568" /> : <Text style={[styles.saveButtonText, !canSave && styles.saveButtonTextDisabled]}>Save marker</Text>}
                 </Pressable>
               </View>
-            )}
 
-            {/* ── Therapy sub-type ──────────────────────────────────────── */}
-            {markerType === 'therapy' && (
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Mind or body?</Text>
-                <View style={styles.pillGrid}>
-                  {THERAPY_ACTIONS.map(({ action, label: btnLabel }) => {
-                    const active = selectedAction === action;
-                    const color = markerColors.therapy;
-                    return (
-                      <Pressable key={action} onPress={() => selectAction('therapy', active ? null : action)} style={[styles.pill, styles.pillHalf, { borderColor: active ? color : '#2d3748' }, active && { backgroundColor: `${color}22` }]}>
-                        <Text style={[styles.pillText, active && { color, fontWeight: '600' }]}>{btnLabel}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* ── Medication action ─────────────────────────────────────── */}
-            {markerType === 'medication' && (
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>What kind of change?</Text>
-                <View style={styles.pillGrid}>
-                  {MEDICATION_ACTIONS.map(({ action, label: btnLabel }) => {
-                    const active = selectedAction === action;
-                    return (
-                      <Pressable key={action} onPress={() => selectAction('medication', active ? null : action)} style={[styles.pill, styles.pillHalf, { borderColor: active ? '#f59e0b' : '#2d3748' }, active && { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
-                        <Text style={[styles.pillText, active && { color: '#fbbf24', fontWeight: '600' }]}>{btnLabel}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* ── Date ───────────────────────────────────────────────────── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>When?</Text>
-              <View style={styles.quickDateRow}>
-                {(
-                  [
-                    { label: 'Today', daysAgo: 0 },
-                    { label: '1 week ago', daysAgo: 7 },
-                    { label: '2 weeks ago', daysAgo: 14 },
-                  ] as const
-                ).map(({ label: shortcutLabel, daysAgo }) => {
-                  const d = new Date();
-                  d.setDate(d.getDate() - daysAgo);
-                  const value = dateToString(d);
-                  const isSelected = markerDate === value;
-                  return (
-                    <Pressable
-                      key={shortcutLabel}
-                      onPress={() => {
-                        setMarkerDate(value);
-                        setDateError(null);
-                      }}
-                      style={[styles.quickDatePill, isSelected && styles.quickDatePillActive]}>
-                      <Text style={[styles.quickDateText, isSelected && styles.quickDateTextActive]}>{shortcutLabel}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Pressable onPress={() => setShowDatePicker(true)} style={[styles.dateInput, dateError && styles.dateInputError]}>
-                <Text style={styles.dateInputText}>{markerDate}</Text>
-              </Pressable>
-              {showDatePicker && (
-                <PlatformPicker
-                  style={styles.pickerWrap}
-                  mode="date"
-                  value={parseDateString(markerDate)}
-                  maximumDate={new Date()}
-                  onPick={handleDatePick}
-                  onClose={() => setShowDatePicker(false)}
-                />
+              {isEditing && onDelete && (
+                <Pressable onPress={() => setConfirmDelete(true)} style={styles.deleteTextButton}>
+                  <Text style={styles.deleteTextButtonText}>Delete marker</Text>
+                </Pressable>
               )}
-              {dateError && <Text style={styles.errorText}>{dateError}</Text>}
-            </View>
-
-            {/* ── Label ──────────────────────────────────────────────────── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>What changed?</Text>
-              <TextInput
-                value={label}
-                maxLength={MAX_LABEL_LENGTH}
-                placeholder={markerType === 'medication' ? 'e.g. Started 20mg, Increased dosage' : markerType === 'therapy' ? 'e.g. First session, Weekly CBT' : 'e.g. Job change, Moved cities'}
-                placeholderTextColor="#4a5568"
-                onChangeText={text => {
-                  setLabel(text);
-                  setLabelError(null);
-                }}
-                style={[styles.textInput, labelError && styles.dateInputError]}
-              />
-              {label.length >= 80 && (
-                <Text style={[styles.charCount, label.length >= 95 && styles.charCountWarn]}>
-                  {MAX_LABEL_LENGTH - label.length} character{MAX_LABEL_LENGTH - label.length !== 1 ? 's' : ''} remaining
-                </Text>
-              )}
-              {labelError && <Text style={styles.errorText}>{labelError}</Text>}
-            </View>
-
-            {/* ── Actions ────────────────────────────────────────────────── */}
-            <View style={styles.actionRow}>
-              <Pressable onPress={onClose} disabled={saving} style={styles.cancelButton}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={handleSave} disabled={saving || !canSave} style={[styles.saveButton, (saving || !canSave) && styles.saveButtonDisabled]}>
-                {saving ? <ActivityIndicator color="#4a5568" /> : <Text style={[styles.saveButtonText, !canSave && styles.saveButtonTextDisabled]}>Save marker</Text>}
-              </Pressable>
-            </View>
-
-            {isEditing && onDelete && (
-              <Pressable onPress={() => setConfirmDelete(true)} style={styles.deleteTextButton}>
-                <Text style={styles.deleteTextButtonText}>Delete marker</Text>
-              </Pressable>
-            )}
-          </ScrollView>
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </ModalKeyboardView>
     </Modal>
   );
 }

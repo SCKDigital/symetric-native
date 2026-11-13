@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput } from 'react-native';
 
 import DomainSlider from '@/components/checkin/domain-slider';
+import { ModalKeyboardView, useModalTopPadding } from '@/components/shared/modal-keyboard-view';
 import { useAuth } from '@/contexts/auth-context';
 import { DOMAIN_COPY, getDomainColorFromProfile } from '@/lib/domains';
 import { submit } from '@/lib/offline/outbox';
@@ -22,6 +23,7 @@ interface Props {
 
 export default function EditCheckInModal({ checkIn, activeDomains, baselines, onClose, onSaved }: Props) {
   const styles = useStyles();
+  const paddingTop = useModalTopPadding(60);
   const { profile, user } = useAuth();
 
   // Only domains this check-in actually recorded. `activeDomains` is what's
@@ -71,8 +73,8 @@ export default function EditCheckInModal({ checkIn, activeDomains, baselines, on
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
-      <View style={styles.sheet}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ModalKeyboardView fullScreen style={styles.sheet}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingTop }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
           <Text style={styles.label}>EDIT CHECK-IN</Text>
           <Text style={styles.heading}>Change what you logged</Text>
 
@@ -107,7 +109,7 @@ export default function EditCheckInModal({ checkIn, activeDomains, baselines, on
             <Text style={styles.cancel}>Cancel</Text>
           </Pressable>
         </ScrollView>
-      </View>
+      </ModalKeyboardView>
     </Modal>
   );
 }
@@ -115,7 +117,8 @@ export default function EditCheckInModal({ checkIn, activeDomains, baselines, on
 const useStyles = makeAccentStyles(b => ({
   pressed: { opacity: 0.7 },
   sheet: { flex: 1, backgroundColor: '#0a0c12' },
-  content: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 60, gap: 8 },
+  // paddingTop comes from useModalTopPadding.
+  content: { paddingHorizontal: 20, paddingBottom: 60, gap: 8 },
   label: { fontSize: 11, color: b.text, fontWeight: '600', letterSpacing: 0.9 },
   heading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0', marginBottom: 12 },
   notes: {

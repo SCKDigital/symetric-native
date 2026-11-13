@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { CheckIcon } from '@/components/marker-icons';
+import { ModalKeyboardView } from '@/components/shared/modal-keyboard-view';
 import { PlatformPicker } from '@/components/shared/platform-picker';
 import { addDays, dateToString, parseDateString, todayDateString } from '@/lib/date-utils';
 import type { Appointment, AppointmentFocusCategory } from '@/lib/supabase';
@@ -71,70 +72,72 @@ export default function AppointmentModal({ appointment, onSave, onClose }: Props
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-          <View style={styles.handle} />
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.header}>
-              <Text style={styles.title}>{appointment ? 'Edit appointment' : 'Set appointment'}</Text>
-              <Pressable onPress={onClose} hitSlop={8}>
-                <Text style={styles.closeText}>✕</Text>
-              </Pressable>
-            </View>
+      <ModalKeyboardView>
+        <Pressable style={styles.overlay} onPress={onClose}>
+          <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
+            <View style={styles.handle} />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={styles.header}>
+                <Text style={styles.title}>{appointment ? 'Edit appointment' : 'Set appointment'}</Text>
+                <Pressable onPress={onClose} hitSlop={8}>
+                  <Text style={styles.closeText}>✕</Text>
+                </Pressable>
+              </View>
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Date</Text>
-              <Pressable onPress={() => setShowDatePicker(true)} style={styles.dateInput}>
-                <Text style={styles.dateInputText}>{date}</Text>
-              </Pressable>
-              {showDatePicker && (
-                <PlatformPicker
-                  style={styles.pickerWrap}
-                  mode="date"
-                  value={parseDateString(date)}
-                  minimumDate={parseDateString(today)}
-                  onPick={selected => setDate(dateToString(selected))}
-                  onClose={() => setShowDatePicker(false)}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Date</Text>
+                <Pressable onPress={() => setShowDatePicker(true)} style={styles.dateInput}>
+                  <Text style={styles.dateInputText}>{date}</Text>
+                </Pressable>
+                {showDatePicker && (
+                  <PlatformPicker
+                    style={styles.pickerWrap}
+                    mode="date"
+                    value={parseDateString(date)}
+                    minimumDate={parseDateString(today)}
+                    onPick={selected => setDate(dateToString(selected))}
+                    onClose={() => setShowDatePicker(false)}
+                  />
+                )}
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>What&rsquo;s this appointment about?</Text>
+                <View style={styles.bubbleRow}>
+                  <CategoryBubble label="Mind" active={focusCategories.includes('mind')} onPress={() => toggleCategory('mind')} />
+                  <CategoryBubble label="Body" active={focusCategories.includes('body')} onPress={() => toggleCategory('body')} />
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <View style={styles.focusLabelRow}>
+                  <Text style={styles.fieldLabel}>Focus areas</Text>
+                  <Text style={styles.optionalText}>optional</Text>
+                </View>
+                <Text style={styles.hint}>Comma-separated - e.g. &ldquo;Sleep patterns, Concentration&rdquo;</Text>
+                <TextInput
+                  value={focusAreasText}
+                  onChangeText={setFocusAreasText}
+                  placeholder="What do you want to focus on?"
+                  placeholderTextColor="#4a5568"
+                  multiline
+                  numberOfLines={2}
+                  style={styles.textArea}
                 />
-              )}
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>What&rsquo;s this appointment about?</Text>
-              <View style={styles.bubbleRow}>
-                <CategoryBubble label="Mind" active={focusCategories.includes('mind')} onPress={() => toggleCategory('mind')} />
-                <CategoryBubble label="Body" active={focusCategories.includes('body')} onPress={() => toggleCategory('body')} />
               </View>
-            </View>
 
-            <View style={styles.field}>
-              <View style={styles.focusLabelRow}>
-                <Text style={styles.fieldLabel}>Focus areas</Text>
-                <Text style={styles.optionalText}>optional</Text>
+              <View style={styles.actionRow}>
+                <Pressable onPress={onClose} style={styles.cancelButton}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={handleSave} disabled={!date || saving} style={[styles.saveButton, (!date || saving) && styles.saveButtonDisabled]}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save</Text>}
+                </Pressable>
               </View>
-              <Text style={styles.hint}>Comma-separated - e.g. &ldquo;Sleep patterns, Concentration&rdquo;</Text>
-              <TextInput
-                value={focusAreasText}
-                onChangeText={setFocusAreasText}
-                placeholder="What do you want to focus on?"
-                placeholderTextColor="#4a5568"
-                multiline
-                numberOfLines={2}
-                style={styles.textArea}
-              />
-            </View>
-
-            <View style={styles.actionRow}>
-              <Pressable onPress={onClose} style={styles.cancelButton}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={handleSave} disabled={!date || saving} style={[styles.saveButton, (!date || saving) && styles.saveButtonDisabled]}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save</Text>}
-              </Pressable>
-            </View>
-          </ScrollView>
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </ModalKeyboardView>
     </Modal>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import DomainSlider from '@/components/checkin/domain-slider';
+import { useModalTopPadding } from '@/components/shared/modal-keyboard-view';
 import { useAuth } from '@/contexts/auth-context';
 import { trackBodyMorningCheckInCompleted } from '@/lib/analytics';
 import { BODY_DOMAINS, MORNING_READABLE_DOMAIN_ORDER, resolveMorningDomains } from '@/lib/body/constants';
@@ -58,6 +59,7 @@ const MORNING_LABELS: Partial<Record<BodyDomainType, string>> = {
 // Today-tab card" scoping as the evening check-in's own entry point.
 export default function MorningBodyCheckIn({ visible, onClose }: Props) {
   const { user, profile } = useAuth();
+  const paddingTop = useModalTopPadding(40);
   // What this person asked to be asked. Resolved rather than read straight off
   // the profile — see resolveMorningDomains for why it is intersected with the
   // evening list.
@@ -169,7 +171,7 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={scrollEnabled}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingTop }]} showsVerticalScrollIndicator={false} scrollEnabled={scrollEnabled}>
           <View style={styles.header}>
             <Text style={styles.headerLabel}>Morning body check-in</Text>
             <Pressable onPress={onClose} hitSlop={8}>
@@ -222,7 +224,8 @@ export default function MorningBodyCheckIn({ visible, onClose }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0c12' },
-  content: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 96 },
+  // paddingTop comes from useModalTopPadding.
+  content: { paddingHorizontal: 20, paddingBottom: 96 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   headerLabel: { fontSize: 13, fontWeight: '500', color: BODY_COLOR, textTransform: 'uppercase', letterSpacing: 0.6 },
   closeIcon: { fontSize: 18, color: '#64748b' },

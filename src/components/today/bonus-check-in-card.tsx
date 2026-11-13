@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput } from 'react-native';
 
 import DomainSlider from '@/components/checkin/domain-slider';
 import EditCheckInModal from '@/components/checkin/edit-check-in-modal';
+import { ModalKeyboardView, useModalTopPadding } from '@/components/shared/modal-keyboard-view';
 import { useAuth } from '@/contexts/auth-context';
 import { trackCheckInCompleted } from '@/lib/analytics';
 import { RESCUE_WINDOW_MS } from '@/lib/constants';
@@ -54,6 +55,7 @@ interface Props {
 
 export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, onForceOpenHandled, onLogged }: Props) {
   const styles = useStyles();
+  const sheetPaddingTop = useModalTopPadding(60);
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -270,8 +272,8 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
       )}
 
       <Modal visible={sheetVisible} animationType="slide" onRequestClose={closeModal}>
-        <View style={styles.sheet}>
-          <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <ModalKeyboardView fullScreen style={styles.sheet}>
+          <ScrollView contentContainerStyle={[styles.sheetContent, { paddingTop: sheetPaddingTop }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <Text style={styles.sheetLabel}>BONUS MIND CHECK-IN</Text>
             <Text style={styles.sheetHeading}>How are you right now?</Text>
 
@@ -316,7 +318,7 @@ export default function BonusCheckInCard({ activeDomains, baselines, forceOpen, 
               <Text style={styles.cancel}>Cancel</Text>
             </Pressable>
           </ScrollView>
-        </View>
+        </ModalKeyboardView>
       </Modal>
     </>
   );
@@ -344,7 +346,8 @@ const useStyles = makeAccentStyles(b => ({
   editRowMeta: { fontSize: 12, color: '#6b7690' },
 
   sheet: { flex: 1, backgroundColor: '#0a0c12' },
-  sheetContent: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 60, gap: 8 },
+  // paddingTop comes from useModalTopPadding.
+  sheetContent: { paddingHorizontal: 20, paddingBottom: 60, gap: 8 },
   sheetLabel: { fontSize: 11, color: b.text, fontWeight: '600', letterSpacing: 0.9 },
   sheetHeading: { fontSize: 22, fontWeight: '600', color: '#e2e8f0', marginBottom: 12 },
   notes: {

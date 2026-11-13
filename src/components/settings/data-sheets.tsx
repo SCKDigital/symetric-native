@@ -1,6 +1,5 @@
-import { File, Paths } from 'expo-file-system';
 import { useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 import { SheetButton, SheetCancel, SheetShell } from '@/components/settings/settings-primitives';
 import { PlatformPicker } from '@/components/shared/platform-picker';
@@ -12,6 +11,7 @@ import { resolveActiveDomains } from '@/lib/domains';
 import { clearCache } from '@/lib/offline/cache';
 import { useIsOnline } from '@/lib/offline/connectivity';
 import { clearOutbox, syncBeforeServerAction } from '@/lib/offline/outbox';
+import { clearShareFiles, writeShareFile } from '@/lib/share-files';
 import { OFFLINE_TITLE } from '@/components/shared/offline-gate';
 import { supabase } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
@@ -33,14 +33,28 @@ function displayDate(d: Date): string {
  *  downloads folder for the web version's downloadBlob() to target. Same route
  *  the PDF report already takes in prepare/generate-report-section.tsx. */
 async function shareExportFile(file: ExportFile): Promise<void> {
-  const target = new File(Paths.cache, file.name);
-  if (target.exists) target.delete();
-  target.create();
-  target.write(file.content);
+  const uri = writeShareFile(file.name, file.content);
   const Sharing = await import('expo-sharing');
   if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(target.uri, { mimeType: file.mimeType, UTI: file.mimeType === 'application/json' ? 'public.json' : 'public.comma-separated-values-text' });
+    await Sharing.shareAsync(uri, { mimeType: file.mimeType, UTI: file.mimeType === 'application/json' ? 'public.json' : 'public.comma-separated-values-text' });
   }
+}
+
+/** Between two share sheets. shareAsync can't say whether the last one was
+ *  cancelled, so without asking, cancelling the first of six files still
+ *  opened the other five. */
+function confirmNextFile(next: number, total: number): Promise<boolean> {
+  return new Promise(resolve => {
+    Alert.alert(
+      `File ${next} of ${total}`,
+      'Share the next file of your export?',
+      [
+        { text: 'Stop', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Share next', onPress: () => resolve(true) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  });
 }
 
 // ── Export ───────────────────────────────────────────────────────────────────
@@ -63,11 +77,17 @@ export function ExportSheet({ onClose }: { onClose: () => void }) {
         setError('Some entries are still syncing. Try again in a moment.');
         return;
       }
+      // Last export's files are not needed once a new one is on its way.
+      clearShareFiles();
       if (fmt === 'CSV') {
         // Four files as on the web, plus body files when there is body data.
         // The share sheet can only take one at a time, so they go one after
         // another rather than as a single archive.
-        for (const file of await buildCsvExport(user.id)) await shareExportFile(file);
+        const files = await buildCsvExport(user.id);
+        for (let i = 0; i < files.length; i++) {
+          if (i > 0 && !(await confirmNextFile(i + 1, files.length))) break;
+          await shareExportFile(files[i]);
+        }
       } else {
         await shareExportFile(await buildJsonExport(user.id));
       }

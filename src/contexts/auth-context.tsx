@@ -9,6 +9,7 @@ import { readStoredSession } from '@/lib/offline/session';
 import { onSynced, useOutbox } from '@/lib/offline/outbox';
 import { overlayProfile } from '@/lib/offline/overlays';
 import { removeThisDevicePushToken } from '@/lib/push-notifications';
+import { clearShareFiles } from '@/lib/share-files';
 import { IS_DEMO, Profile, supabase } from '@/lib/supabase';
 
 interface AuthContextType {
@@ -194,6 +195,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Left behind, it kept delivering this account's reminders to a device
     // someone else may now be using.
     await removeThisDevicePushToken();
+    // Exports and reports written for the share sheet are this account's
+    // health data; they must not outlive the session on this phone.
+    clearShareFiles();
     const { error } = await supabase.auth.signOut();
     if (error) {
       // Offline, or the server rejected the revoke. Signing out of this

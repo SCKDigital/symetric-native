@@ -1,7 +1,10 @@
+import * as ScreenCapture from 'expo-screen-capture';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { AUTO_RELOCK_MS } from '@/lib/app-lock';
+
+const APP_LOCK_CAPTURE_KEY = 'app-lock';
 
 // Ported from the web app's src/hooks/useAppLock.ts. Mechanic swap: no
 // sessionStorage equivalent on native — web deliberately used
@@ -47,6 +50,27 @@ export function useAppLock(userId: string | undefined, enabled: boolean) {
     });
 
     return () => subscription.remove();
+  }, [enabled, userId]);
+
+  // The covering view above is drawn by JS after the app has already been
+  // told it is going away, which is too late for the OS's app-switcher
+  // snapshot on Android (it has no 'inactive' step to buy time) and only
+  // usually in time on iOS. These are the native protections: FLAG_SECURE on
+  // Android, which blanks the recents preview (and, as a side effect, blocks
+  // screenshots while the lock is on), and a native blur over iOS's snapshot.
+  useEffect(() => {
+    const on = enabled && !!userId;
+    if (!on || Platform.OS === 'web') return;
+    const apply = Platform.OS === 'android'
+      ? ScreenCapture.preventScreenCaptureAsync(APP_LOCK_CAPTURE_KEY)
+      : ScreenCapture.enableAppSwitcherProtectionAsync(0.8);
+    apply.catch(e => console.warn('[app-lock] snapshot protection:', e));
+    return () => {
+      const release = Platform.OS === 'android'
+        ? ScreenCapture.allowScreenCaptureAsync(APP_LOCK_CAPTURE_KEY)
+        : ScreenCapture.disableAppSwitcherProtectionAsync();
+      release.catch(e => console.warn('[app-lock] snapshot protection release:', e));
+    };
   }, [enabled, userId]);
 
   const unlock = useCallback(() => {

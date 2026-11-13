@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { ModalKeyboardView } from '@/components/shared/modal-keyboard-view';
 import { useAuth } from '@/contexts/auth-context';
 import { comfortActiveForProfile } from '@/lib/domains';
 import { brandTint } from '@/constants/brand';
@@ -169,7 +170,7 @@ export function SheetShell({ title, description, onClose, children }: {
   const styles = useStyles();
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.sheetRoot}>
+      <ModalKeyboardView style={styles.sheetRoot}>
         <Pressable style={styles.sheetBackdrop} onPress={onClose} accessibilityLabel="Close" />
         <View style={styles.sheet}>
           <View style={styles.sheetHandle} />
@@ -179,7 +180,7 @@ export function SheetShell({ title, description, onClose, children }: {
             {children}
           </ScrollView>
         </View>
-      </View>
+      </ModalKeyboardView>
     </Modal>
   );
 }

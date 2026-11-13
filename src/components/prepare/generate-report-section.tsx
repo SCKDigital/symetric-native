@@ -8,6 +8,7 @@ import { useIsOnline } from '@/lib/offline/connectivity';
 import { syncBeforeServerAction } from '@/lib/offline/outbox';
 import { OFFLINE_TITLE } from '@/components/shared/offline-gate';
 import { generateReport } from '@/lib/report/generate-report';
+import { adoptShareFile, clearShareFiles } from '@/lib/share-files';
 import { supabase } from '@/lib/supabase';
 import type { DetectedCluster } from '@/lib/supabase';
 import { makeAccentStyles } from '@/lib/accent-styles';
@@ -88,7 +89,9 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
       }
 
       const startedAt = Date.now();
-      const { uri } = await generateReport({
+      // The last report's PDF is not needed once a new one is on its way.
+      clearShareFiles();
+      const { uri: printedUri } = await generateReport({
         userId: user.id,
         userName: trimmed || profile.display_name || profile.email,
         dateFrom: fromDate,
@@ -116,6 +119,8 @@ export default function GenerateReportSection({ clusters, appointmentId, fromDat
         clusters.filter(c => c.flagged_for_report).length,
         { generationTimeMs: Date.now() - startedAt },
       );
+      // Into the folder sign-out clears; expo-print leaves it in the cache.
+      const uri = adoptShareFile(printedUri, `symetric_report_${toDate}.pdf`);
       const Sharing = await import('expo-sharing');
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });

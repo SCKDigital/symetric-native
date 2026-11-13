@@ -74,7 +74,9 @@ export function usePushTokenSync(
           // device was offline at launch must be retried on the next resume,
           // not suppressed for six hours — that would recreate the silent
           // stale-token state this hook exists to prevent.
-          if (result === 'synced' || result === 'unsupported') lastSyncedAt = Date.now();
+          // 'not_permitted_here' too: this device has been dropped from the
+          // send list, and re-checking on every resume would only repeat that.
+          if (result === 'synced' || result === 'unsupported' || result === 'not_permitted_here') lastSyncedAt = Date.now();
           if (!cancelled && result === 'permission_revoked') onProfileChangedRef.current?.();
         })
         .catch(e => console.error('[push] token sync:', e))

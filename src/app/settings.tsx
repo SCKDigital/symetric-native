@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOutbox } from '@/lib/offline/outbox';
@@ -215,6 +215,8 @@ export default function SettingsScreen() {
 
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
+  /** The OS won't prompt again; only device Settings can turn it back on. */
+  const [pushBlocked, setPushBlocked] = useState(false);
   const [showMoreExpanded, setShowMoreExpanded] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
   const [testPushResult, setTestPushResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -379,14 +381,25 @@ export default function SettingsScreen() {
   const handleTogglePush = async (next: boolean) => {
     if (!user) return;
     setPushError(null);
+    setPushBlocked(false);
     setPushBusy(true);
-    if (next) {
-      const result = await subscribeToPushNotifications(user.id);
-      if (!result.success) setPushError(result.message);
-    } else {
-      await unsubscribeFromPushNotifications(user.id);
+    // finally: anything thrown here used to leave the toggle disabled for good.
+    try {
+      if (next) {
+        const result = await subscribeToPushNotifications(user.id);
+        if (!result.success) {
+          setPushError(result.message);
+          setPushBlocked(result.reason === 'blocked');
+        }
+      } else {
+        await unsubscribeFromPushNotifications(user.id);
+      }
+    } catch (e) {
+      console.error('[settings] push toggle failed:', e);
+      setPushError('Something went wrong. Please try again.');
+    } finally {
+      setPushBusy(false);
     }
-    setPushBusy(false);
     await refreshProfile();
   };
 
@@ -570,7 +583,16 @@ export default function SettingsScreen() {
             subtitle="How Symetric reaches you for check-ins"
             right={<Toggle value={pushEnabled} onValueChange={guardOnline(handleTogglePush, 'Changing push notifications')} disabled={pushBusy} />}
           />
-          {pushError && <View style={styles.inlineWrap}><InlineMessage type="error">{pushError}</InlineMessage></View>}
+          {pushError && (
+            <View style={styles.inlineWrap}>
+              <InlineMessage type="error">{pushError}</InlineMessage>
+              {pushBlocked && (
+                <Pressable onPress={() => Linking.openSettings()} accessibilityRole="button" hitSlop={8}>
+                  <Text style={styles.openSettings}>Open Settings</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
 
           <Pressable onPress={() => setShowMoreExpanded(p => !p)} style={styles.showMore}>
             <Text style={styles.showMoreLabel}>Notification test</Text>
@@ -835,6 +857,7 @@ const useStyles = makeAccentStyles(b => ({
   pillTextActiveBody: { color: '#BC812F' },
 
   inlineWrap: { paddingHorizontal: 16, paddingBottom: 14 },
+  openSettings: { fontSize: 13, fontWeight: '600', color: '#e2e8f0', marginTop: 10 },
 
   showMore: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
