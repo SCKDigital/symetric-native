@@ -10,6 +10,9 @@ interface DomainSelectionStepProps {
   onUpdate: (domains: DomainType[]) => void;
   onNext: () => void;
   onBack: () => void;
+  /** A save failure from the caller, shown above the buttons. */
+  error?: string | null;
+  saving?: boolean;
 }
 
 const domains = DOMAIN_ORDER.map(type => ({ type, ...DOMAIN_COPY[type] }));
@@ -19,7 +22,7 @@ const MAX_DOMAINS = 8;
 
 // Ported from the web app's DomainSelectionStep.tsx — straight layout port,
 // no native-only mechanics.
-export default function DomainSelectionStep({ selectedDomains, onUpdate, onNext, onBack }: DomainSelectionStepProps) {
+export default function DomainSelectionStep({ selectedDomains, onUpdate, onNext, onBack, error, saving }: DomainSelectionStepProps) {
   const handleToggle = (domain: DomainType) => {
     if (selectedDomains.includes(domain)) {
       onUpdate(selectedDomains.filter(d => d !== domain));
@@ -63,11 +66,12 @@ export default function DomainSelectionStep({ selectedDomains, onUpdate, onNext,
 
         {showError && <Text style={styles.errorText}>Please select at least 2 domains to track.</Text>}
         <Text style={styles.helperText}>{helperText}</Text>
+        {error && <Text style={styles.errorText}>{error}</Text>}
 
         <View style={styles.buttonRow}>
           <OnboardingBackButton onPress={onBack} />
           <View style={styles.primaryButtonFlex}>
-            <OnboardingPrimaryButton label="Continue" onPress={onNext} disabled={!canProceed} />
+            <OnboardingPrimaryButton label={saving ? 'Saving…' : 'Continue'} onPress={onNext} disabled={!canProceed || saving} />
           </View>
         </View>
       </ScrollView>

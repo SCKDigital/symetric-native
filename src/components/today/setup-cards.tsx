@@ -163,19 +163,25 @@ export default function SetupCards({ state, onChanged }: Props) {
   const [pickedDomains, setPickedDomains] = useState<DomainType[]>([]);
 
   const saveDomains = async () => {
-    if (!user || pickedDomains.length < 2) return;
+    if (!user || busy || pickedDomains.length < 2) return;
     setBusy(true);
     setError(null);
 
-    const { error: settingsError } = await saveCheckInSettings(user.id, { active_domains: pickedDomains });
-    if (settingsError) { setError('Could not save your domains. Try again.'); setBusy(false); return; }
-
+    // Baselines first, domains second. A non-empty active_domains is what marks
+    // this card done (use-setup-cards.ts), so writing it first meant a failed
+    // baseline seed still hid the card on the next refresh, with no baselines.
+    //
     // Neutral seed rows rather than asked-for numbers. Every read of a baseline
     // falls back to the scale midpoint anyway, but a real row means nothing
     // downstream has to care whether one exists, and the weekly rolling recalc
     // (which is append-only, and expects a prior row) takes over from day 14.
-    const { error: baselineError } = await seedBaselines(user.id, pickedDomains, 5, 'default');
+    // baselines.source is the baseline_source enum in production — only
+    // 'onboarding' and 'rolling_median' exist. Anything else is rejected.
+    const { error: baselineError } = await seedBaselines(user.id, pickedDomains, 5, 'onboarding');
     if (baselineError) { setError('Could not set up your baselines. Try again.'); setBusy(false); return; }
+
+    const { error: settingsError } = await saveCheckInSettings(user.id, { active_domains: pickedDomains });
+    if (settingsError) { setError('Could not save your domains. Try again.'); setBusy(false); return; }
 
     const timezone = profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     // Offline the domains are queued, and today's check-ins are scheduled by
@@ -242,7 +248,7 @@ export default function SetupCards({ state, onChanged }: Props) {
           title="What do you want to track?"
           body="Pick as few as 2 or as many as 8. Every check-in only ever shows what you choose here, so there's nothing to scroll past later."
           action="Choose domains"
-          onPress={() => { setPickedDomains([]); setSheet('domains'); }}
+          onPress={() => { setPickedDomains([]); setError(null); setSheet('domains'); }}
         />
       )}
 
@@ -303,6 +309,10 @@ export default function SetupCards({ state, onChanged }: Props) {
           onUpdate={setPickedDomains}
           onNext={saveDomains}
           onBack={() => setSheet(null)}
+          // The card stack's own error line is behind this full-screen sheet,
+          // so a failed save looked like a dead button. Show it here too.
+          error={error}
+          saving={busy}
         />
       </Modal>
 

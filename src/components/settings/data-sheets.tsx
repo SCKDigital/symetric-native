@@ -287,7 +287,7 @@ interface CurrentBaseline { domain: string; baseline_score: number; source: stri
 export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClose: () => void }) {
   const styles = useStyles();
   const online = useIsOnline();
-  const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [state, setState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [current, setCurrent] = useState<CurrentBaseline[] | null>(null);
 
   useEffect(() => {
@@ -323,17 +323,17 @@ export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClos
 
     const now = new Date().toISOString();
 
-    // Append-only, per domain: flip the current row, insert the new one. Never
-    // an in-place update — the baseline history is what pattern evolution reads.
+    // Append-only, per domain: insert the new row, then retire the old ones.
+    // Never an in-place update — the baseline history is what pattern evolution
+    // reads. Insert first: retiring first meant a rejected insert left the
+    // domain with no current baseline at all, while the sheet said "updated".
+    let failed = false;
     for (const domain of activeDomains) {
       const vals = checkIns
         .map(ci => (ci as Record<string, unknown>)[domain] as number | null)
         .filter((v): v is number => v !== null && v !== undefined);
 
-      await supabase.from('baselines').update({ is_current: false })
-        .eq('user_id', userId).eq('domain', domain).eq('is_current', true);
-
-      await supabase.from('baselines').insert({
+      const { data: inserted, error: insertError } = await supabase.from('baselines').insert({
         user_id: userId,
         domain,
         baseline_score: vals.length > 0 ? round2(median(vals)) : 5,
@@ -341,9 +341,15 @@ export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClos
         source: 'manual_reset',
         set_at: now,
         is_current: true,
-      });
+      }).select('id').single();
+      if (insertError || !inserted) { failed = true; continue; }
+
+      const { error: retireError } = await supabase.from('baselines').update({ is_current: false })
+        .eq('user_id', userId).eq('domain', domain).eq('is_current', true).neq('id', inserted.id);
+      if (retireError) failed = true;
     }
 
+    if (failed) { setState('error'); return; }
     setState('done');
     setTimeout(onClose, 1400);
   };
@@ -362,6 +368,9 @@ export function ResetBaselineSheet({ userId, onClose }: { userId: string; onClos
             </View>
           ))}
         </View>
+      )}
+      {state === 'error' && (
+        <Text style={styles.error}>Some baselines could not be updated. Your previous ones are still in use. Try again.</Text>
       )}
       {state === 'done'
         ? <Text style={styles.hint}>Baselines updated.</Text>
