@@ -9,6 +9,21 @@ node scripts/sample-report/build.mjs            # writes the site's PDF
 node scripts/sample-report/build.mjs out.pdf    # or anywhere else
 ```
 
+The site offers both report variants. The command above writes the
+comprehensive one; the basic one is built with `REPORT_VARIANT=basic`:
+
+```
+REPORT_VARIANT=basic node scripts/sample-report/build.mjs ../symetric-marketing/public/symetric-sample-report-basic.pdf
+node scripts/sample-report/build.mjs
+```
+
+Run the basic one first, so the comprehensive run leaves its HTML in
+`.tmp-sample-report/aisha-report.html` (the layout check below reads it).
+After a rebuild, check the three findings quoted on the homepage
+(`symetric-marketing/src/content/home/home.md`, `insights`), the page count in
+its `report` section, and the thumbnails in `public/report/` (pages 1, 6 and
+17 of the comprehensive report, 960x742 webp).
+
 Every run also writes `src/lib/demo/aisha-tables.json`, the website demo's
 starting data: Aisha's rows plus everything detection stored from them. This
 keeps the demo showing what the PDF shows. Commit it whenever you commit a new
