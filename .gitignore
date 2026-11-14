@@ -52,3 +52,7 @@ supabase/.branches/
 
 # stray local web builds
 dist-web/
+
+# Marketing films: rendered output and the generated data step
+scripts/data-film/out/
+scripts/data-film/src/data.generated.json

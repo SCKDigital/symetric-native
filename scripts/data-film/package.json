@@ -1,0 +1,23 @@
+{
+  "name": "symetric-data-film",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Marketing films drawn from the sample dataset and the app's own colour file.",
+  "scripts": {
+    "data": "node prepare-data.mjs",
+    "studio": "npm run data && remotion studio src/index.ts",
+    "render": "npm run data && remotion render src/index.ts NinetyDays out/ninety-days.mp4",
+    "still": "npm run data && remotion still src/index.ts NinetyDays out/still.png"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/google-fonts": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -34,3 +34,10 @@ site, on Aisha's sample data in memory (`EXPO_PUBLIC_DEMO=1`, deployed by
 the report changes `src/lib/demo/aisha-tables.json`. Commit the two together.
 Before touching `src/lib/demo/`, `IS_DEMO`, or the detection scheduler's
 AsyncStorage keys, read `docs/web-demo.md`.
+
+# Marketing visuals are generated, not drawn
+
+Marketing images and films are drawn in code from the sample dataset and the
+app's own colour file (`scripts/data-film/`, Remotion). Before making any
+marketing visual, read `docs/marketing-visuals.md`: it records the chosen
+direction, what was turned down, and the rules every piece keeps.
