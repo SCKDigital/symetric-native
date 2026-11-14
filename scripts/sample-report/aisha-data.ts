@@ -28,6 +28,12 @@ const PRESYNCOPE_DAY = 22;   // a day energy falls apart within the day
 const POOR_SLEEP = [35, 36, 37, 38, 39];
 const CYCLE_DAY_ONES = [3, 31, 59, 87];
 const LOW_WEEK = [56, 57, 58, 59, 60, 61, 62]; // a week she mostly couldn't log
+// Days with no mind check-in at all, five or six in each 30 days. Nobody logs
+// every day, and a sample that nearly does would hide the thing the app is
+// built around: a missed day is a blank, and the patterns still hold. Kept
+// clear of the story beats above (markers, the flare, the days with notes)
+// and of Wednesdays, so the gaps cost data without rewriting the story.
+const MISSED_DAYS = new Set([6, 7, 15, 19, 26, 30, 48, 54, 56, 62, 68, 75, 76, 83]);
 
 const MIND = ['mood', 'energy', 'anxiety', 'concentration', 'sensory_sensitivity'] as const;
 const BODY = ['fatigue', 'pain_mechanical', 'pain_widespread', 'joint_instability', 'breathlessness', 'orthostatic', 'gut', 'brain_fog', 'exhaustion'] as const;
@@ -145,13 +151,14 @@ export function buildAishaRows() {
       // Mornings are the ones that get missed: she's at her worst on standing.
       const missRate = oneTapDay ? (block === 'midday' ? 0 : 1)
         : LOW_WEEK.includes(i) ? 0.45 : block === 'morning' ? 0.3 : 0.1;
-      const completed = rand() >= missRate;
+      const rolled = rand() >= missRate;
+      const missedDay = MISSED_DAYS.has(i);
       const base = {
         user_id: USER_ID, scheduled_at: scheduled.toISOString(), scheduled_date: date,
         expires_at: new Date(scheduled.getTime() + 30 * 60_000).toISOString(),
         created_at: scheduled.toISOString(),
       };
-      if (!completed) {
+      if (!rolled) {
         checkIns.push({ ...base, status: 'expired' });
         continue;
       }
@@ -160,9 +167,16 @@ export function buildAishaRows() {
       // a baseline from.
       const oneTap = oneTapDay;
       const values = Object.fromEntries(MIND.map(d => [d, clamp(Math.round(v[d] + noise(0.9)), 1, 10)]));
+      const completedAt = new Date(scheduled.getTime() + (2 + Math.floor(rand() * 20)) * 60_000).toISOString();
+      // A missed day still draws its random numbers above, so adding or moving
+      // one leaves every other day's values exactly as they were.
+      if (missedDay) {
+        checkIns.push({ ...base, status: 'expired' });
+        continue;
+      }
       checkIns.push({
         ...base, status: 'completed',
-        completed_at: new Date(scheduled.getTime() + (2 + Math.floor(rand() * 20)) * 60_000).toISOString(),
+        completed_at: completedAt,
         low_demand: oneTap,
         ...values,
         notes: block === 'evening' ? (NOTES[i] ?? null) : null,

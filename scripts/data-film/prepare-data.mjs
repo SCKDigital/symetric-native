@@ -52,7 +52,8 @@ const dates = tables.check_ins.map((c) => c.scheduled_date).sort();
 const first = utc(dates[0]);
 const last = utc(dates[dates.length - 1]);
 
-const days = [];
+const allDays = [];
+const days = allDays;
 for (let t = first; t <= last; t += dayMs) {
   const date = iso(t);
   const rows = completed.filter((c) => c.scheduled_date === date);
@@ -67,7 +68,7 @@ for (let t = first; t <= last; t += dayMs) {
 // Described, not interpreted: the gap between one weekday's average and the
 // average of every other day, and in how many weeks that weekday sat above
 // the rest of its own week.
-function weekdayFinding(domain) {
+function weekdayFinding(domain, days = allDays) {
   const byDay = [0, 1, 2, 3, 4, 5, 6].map((w) => round1(mean(days.filter((d) => d.weekday === w && d.scores[domain] !== null).map((d) => d.scores[domain]))));
   const peak = byDay.indexOf(Math.max(...byDay));
   const on = days.filter((d) => d.weekday === peak && d.scores[domain] !== null).map((d) => d.scores[domain]);
@@ -92,6 +93,45 @@ function weekdayFinding(domain) {
   return { domain, byWeekday: byDay, peakWeekday: peak, gap: round1(mean(on) - mean(off)), weeksHeld: held, weeksTotal: total };
 }
 
+// ── The last 30 days, for the month film ─────────────────────────────────────
+const month = days.slice(-30);
+const monthFinding = weekdayFinding('sensory_sensitivity', month);
+
+// ── Pairs the app itself detected, latest window only ────────────────────────
+// Taken from the detector's own output rather than recomputed here, so a film
+// never claims a link the app would not show.
+const latest = tables.domain_connections.map((r) => r.window_end).sort().pop();
+const connections = tables.domain_connections
+  .filter((r) => r.window_end === latest)
+  .map((r) => ({ a: r.domain_a, b: r.domain_b, together: r.moves_together, strength: r.strength, sampleSize: r.sample_size }));
+
+// ── Morning against evening, for one body symptom ────────────────────────────
+function morningEvening(domain) {
+  let total = 0, held = 0;
+  for (const b of tables.body_checkins) {
+    const m = b[`morning_${domain}`], e = b[domain];
+    if (typeof m !== 'number' || typeof e !== 'number') continue;
+    total++;
+    if (m > e) held++;
+  }
+  return { domain, held, total };
+}
+
+// ── What the report page needs ───────────────────────────────────────────────
+const profile = tables.profiles[0];
+const anxietyRun = tables.detected_clusters
+  .filter((c) => c.cluster_type === 'sustained_deviation' && c.domains_involved.includes('anxiety') && c.direction === 'elevated')
+  .sort((x, y) => (x.start_date < y.start_date ? 1 : -1))[0];
+const report = {
+  name: profile.report_display_name,
+  from: days[0].date,
+  to: days[days.length - 1].date,
+  scheduled: tables.check_ins.length,
+  completed: completed.length,
+  anxietyRun: anxietyRun ? { from: anxietyRun.start_date, days: Math.round((utc(anxietyRun.end_date) - utc(anxietyRun.start_date)) / dayMs) + 1 } : null,
+  questions: [...tables.prepare_questions].sort((x, y) => x.sort_order - y.sort_order).map((q) => q.question_text),
+};
+
 const out = {
   generatedFrom: 'src/lib/domains.ts + src/lib/demo/aisha-tables.json',
   colors,
@@ -100,9 +140,16 @@ const out = {
   days,
   totals: { days: days.length, checkIns: completed.length, daysLogged: days.filter((d) => d.checkIns > 0).length },
   finding: weekdayFinding('sensory_sensitivity'),
+  month: { days: month, missed: month.filter((d) => d.checkIns === 0).length, finding: monthFinding },
+  connections,
+  morningDizziness: morningEvening('orthostatic'),
+  report,
 };
 
 fs.mkdirSync(path.join(here, 'src'), { recursive: true });
 fs.writeFileSync(path.join(here, 'src/data.generated.json'), JSON.stringify(out, null, 1));
 console.log(`data: ${out.totals.days} days, ${out.totals.checkIns} check-ins, ${out.totals.daysLogged} days logged`);
 console.log('finding:', JSON.stringify(out.finding));
+console.log('month:', out.month.missed, 'missed;', JSON.stringify(out.month.finding));
+console.log('morning dizziness:', JSON.stringify(out.morningDizziness));
+console.log('report:', JSON.stringify(out.report));

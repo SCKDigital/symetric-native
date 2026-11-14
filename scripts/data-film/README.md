@@ -15,14 +15,25 @@ This is its own package, so Remotion never enters the app's dependencies.
 cd scripts/data-film
 npm install
 npm run studio    # preview and scrub in the browser
-npm run render    # out/ninety-days.mp4, 1080 x 1920
+npm run render:all   # every film, to out/
 ```
 
 ## Films
 
-- `NinetyDays` (11s): every check-in arrives as a stripe, then the film closes
-  in on the weekday that stands out and states the finding in the app's own
-  sentence shape.
+All 1080 x 1920, 30fps. `npm run render:all` renders every one to `out/`.
+
+| Id | Length | What it does |
+|---|---|---|
+| `NinetyDays` | 11s | Every check-in arrives as a stripe, then the film closes in on the weekday that stands out. |
+| `Wednesdays` | 8s | The question, then the average-by-weekday chart and the gap. |
+| `Notes` | 10s | Scribbled notes land, then recede behind two real findings. The notes are a dramatisation; the findings are not. |
+| `Pairs` | 11s | Three links drawn one at a time: two from the detector's own output, one weekday link. |
+| `Month` | 9s | The last 30 days as a calendar; missed days are blanks. The headline count is computed. |
+| `Number` | 8s | The gap, huge, counting up, then the ninety days it came from. |
+| `Paper` | 10s | A report page slides in and a pen marks it. Every line on the page is computed or read from the sample tables. |
+
+`src/kit.tsx` holds the shared pieces: fonts, colours, easing, the headline,
+the lockup and the sentence shapes.
 
 ## Rules a film has to keep (docs/brand.md)
 

@@ -7,6 +7,7 @@
     "data": "node prepare-data.mjs",
     "studio": "npm run data && remotion studio src/index.ts",
     "render": "npm run data && remotion render src/index.ts NinetyDays out/ninety-days.mp4",
+    "render:all": "npm run data && node render-all.mjs",
     "still": "npm run data && remotion still src/index.ts NinetyDays out/still.png"
   },
   "dependencies": {

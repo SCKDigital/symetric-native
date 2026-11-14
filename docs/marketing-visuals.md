@@ -93,7 +93,16 @@ npm run render    # out/ninety-days.mp4
 but Sensory overwhelm fades → Wednesdays stay lit → weekday bars rise →
 "+1.8" lands → the finding in the app's sentence shape → logo.
 
-The film shows **+1.8, 13 of 13 weeks** (the full 90 days, matching the
+Six more films followed the same day, one per board on the Marketing options
+canvas (`Wednesdays`, `Notes`, `Pairs`, `Month`, `Number`, `Paper`); see
+`scripts/data-film/README.md`. Where a board's claim was not in the sample
+data, the film follows the data: the "Dizziness and Anxiety move together"
+pair is not in the current sample tables, so the films use pairs the
+detector found (Concentration with Energy; Brain fog against Concentration),
+and the month film's "N days missed" headline is whatever the count is (six, after
+missed days were added to the sample data: `MISSED_DAYS` in `aisha-data.ts`).
+
+The films show **+1.8, 13 of 13 weeks** (the full 90 days, matching the
 sample report). The canvases show **+2.1, 4 of 4 weeks** (the app's 30-day
 Insights figure). Both are true for their window; pick one per piece and do
 not mix them inside it.
