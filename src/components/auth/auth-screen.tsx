@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymetricLogo } from '@/components/symetric-logo';
 import { useAuth } from '@/contexts/auth-context';
 import { OFFLINE_TITLE } from '@/components/shared/offline-gate';
+import { clearAuthLinkProblem, useAuthLinkProblem } from '@/lib/auth-deep-link';
 import { isOnline, useIsOnline } from '@/lib/offline/connectivity';
 import { makeAccentStyles } from '@/lib/accent-styles';
 import { useAccent } from '@/contexts/accent-context';
@@ -79,6 +80,14 @@ export function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const { signInWithMagicLink } = useAuth();
   const online = useIsOnline();
+  // Why the last emailed link didn't sign them in, if one didn't. Shown on the
+  // email form, which is where it leaves them: ready to send a new one.
+  const linkProblem = useAuthLinkProblem();
+  const [shownProblem, setShownProblem] = useState<string | null>(null);
+  if (linkProblem !== shownProblem) {
+    setShownProblem(linkProblem);
+    if (linkProblem) setMode('email');
+  }
 
   const handleSubmit = async () => {
     // The link is emailed by the server, so there's nothing to queue.
@@ -86,6 +95,7 @@ export function AuthScreen() {
       setError('Signing in needs a connection. Try again once you’re back online.');
       return;
     }
+    clearAuthLinkProblem();
     setError('');
     setLoading(true);
     try {
@@ -142,9 +152,9 @@ export function AuthScreen() {
                   </View>
                 ) : null}
 
-                {error ? (
+                {error || linkProblem ? (
                   <View style={styles.errorBox}>
-                    <Text style={styles.errorText}>{error}</Text>
+                    <Text style={styles.errorText}>{error || linkProblem}</Text>
                   </View>
                 ) : null}
 
