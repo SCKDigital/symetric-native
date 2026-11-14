@@ -10,18 +10,20 @@
 // from this folder.
 import { readFileSync, writeFileSync } from 'node:fs';
 
-// -- Porcelain, the default accent (src/constants/accents.ts) ----------------
+// -- Slate, the default accent (src/constants/accents.ts) --------------------
 // Screenshots wear the default because that is what a new install looks like.
-const FILL = '#E7E2D9';      // primary button
-const ON_FILL = '#0A0C12';   // label on FILL -- porcelain is the one accent that inverts
-const FILL_ALT = '#CFC7B6';  // secondary fills, switch track, slider value
-const ACCENT = '#C8B79A';    // accent text: links, active tab, eyebrows
-const SOFT = '#DACEB8';      // larger / lower-emphasis accent text
-const FLAT = '#B5A386';      // settings icons and pills
-const A_BORDER = '#3A3229';  // accent card borders
-const SURFACE = '#14120E';   // accent card background
-const TILE = '#2A251C';      // the logo tile
-const QUIET = { fill: '#BDB4A5', onFill: '#0A0C12', text: '#A99C86', border: '#2E2921' };
+// Slate replaced porcelain as the default on 2026-11-14; the porcelain values
+// were FILL #E7E2D9 / ON_FILL #0A0C12 / ACCENT #C8B79A, should they come back.
+const FILL = '#334155';      // primary button
+const ON_FILL = '#E2E8F0';   // label on FILL
+const FILL_ALT = '#475569';  // secondary fills, switch track, slider value
+const ACCENT = '#A6A8AB';    // accent text: links, active tab, eyebrows
+const SOFT = '#B4B6B9';      // larger / lower-emphasis accent text
+const FLAT = '#96989C';      // settings icons and pills
+const A_BORDER = '#2D3748';  // accent card borders
+const SURFACE = '#10141C';   // accent card background
+const TILE = '#1E293B';      // the logo tile
+const QUIET = { fill: '#28303D', onFill: '#CBD5E1', text: '#8C8E92', border: '#232A36' };
 
 // -- App neutrals (shared across the screens below) ---------------------------
 const GROUND = '#0a0c12';
@@ -38,9 +40,9 @@ const DOMAIN = {
 const BODY_COLOR = '#BC812F';
 
 // The tick inside a checked domain checkbox. onboarding-controls.tsx draws it
-// in a hard-coded '#fff', which was fine on indigo and is close to invisible on
-// porcelain's near-white fill. Reproduced as the app has it; change this to
-// ON_FILL once the app reads accent.onFill there.
+// in a hard-coded '#fff'. That was close to invisible on porcelain's near-white
+// fill; on slate it reads fine. Change this to ON_FILL once the app reads
+// accent.onFill there.
 const CHECKBOX_TICK = '#fff';
 
 // brandTint() from src/constants/brand.ts.
@@ -65,7 +67,7 @@ const FONT = "'Inter', -apple-system, 'SF Pro Text', system-ui, sans-serif";
 // strokes and glare at caption size. So a card gets its colour as one short
 // bar above the caption. Flat grounds, no gradients. Warm brown surfaces go to
 // neutral slate. Everything INSIDE the phone stays the app's own (Inter,
-// porcelain), because that is what an install looks like.
+// slate), because that is what an install looks like.
 const DISPLAY = "'DM Sans', system-ui, sans-serif";
 const SLATE_TILE = '#1B2030';
 const SITE = { card: '#151922', rule: '#252B3B', ink2: '#B0B8C8', mute: '#8892A4' };
@@ -904,7 +906,7 @@ boards['Main.dc.html'] = dcPage(`<div style="width: 1290px; height: 2796px; box-
 // === Closing card ===========================================================
 // Not an app screen: the pricing and scope claims come from
 // .agents/product-marketing.md and marketing/who-this-is-for.md. The one card
-// on a porcelain ground, so the set visibly ends; the mark sits on it large
+// on the accent's fill (slate) as its ground, so the set visibly ends; the mark sits on it large
 // because by the last card it has earned the space.
 const priceRow = (label, value) => `<div style="background: ${CARD}; border: 1px solid ${BORDER}; border-radius: 28px; padding: 40px 48px; display: flex; align-items: center; justify-content: space-between;">
       <span style="font-size: 36px; color: #b0b8c8;">${label}</span>

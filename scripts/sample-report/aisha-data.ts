@@ -296,7 +296,7 @@ export function buildAishaRows() {
     display_name: 'Aisha', report_display_name: 'Aisha',
     body_tracking_enabled: true, body_domains_active: [...BODY],
     body_morning_enabled: true, body_morning_domains: [...MORNING],
-    cycle_tracking_enabled: true, accent: 'porcelain',
+    cycle_tracking_enabled: true, accent: 'slate',
   };
   const settings = {
     user_id: USER_ID, active_domains: [...MIND], check_ins_per_day: 3,
