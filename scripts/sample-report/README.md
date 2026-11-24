@@ -22,7 +22,9 @@ Run the basic one first, so the comprehensive run leaves its HTML in
 After a rebuild, check the three findings quoted on the homepage
 (`symetric-marketing/src/content/home/home.md`, `insights`), the page count in
 its `report` section, and the thumbnails in `public/report/` (pages 1, 6 and
-17 of the comprehensive report, 960x742 webp).
+17 of the comprehensive report, 960x742 webp). Then run
+`node scripts/first-six-weeks.mjs` in `symetric-marketing` and commit the JSON
+it writes: the homepage's six-weeks chart is drawn from the same tables.
 
 Every run also writes `src/lib/demo/aisha-tables.json`, the website demo's
 starting data: Aisha's rows plus everything detection stored from them. This
